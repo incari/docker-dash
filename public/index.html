@@ -1,97 +1,208 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Docker Dashboard</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-  <style>
-    .modal { display: none; }
-    .modal.active { display: flex; }
-  </style>
-</head>
-<body class="bg-gray-900 text-white min-h-screen">
-  <!-- Header -->
-  <header class="bg-gray-800 border-b border-gray-700 p-4">
-    <div class="container mx-auto flex justify-between items-center">
-      <h1 class="text-2xl font-bold flex items-center gap-2">
-        <i class="fab fa-docker text-blue-400"></i> Docker Dashboard
-      </h1>
-      <button onclick="openModal()" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg flex items-center gap-2">
-        <i class="fas fa-plus"></i> Add Shortcut
-      </button>
-    </div>
-  </header>
-
-  <!-- Main Content -->
-  <main class="container mx-auto p-4">
-    <!-- Shortcuts Grid -->
-    <section class="mb-8">
-      <h2 class="text-xl font-semibold mb-4 flex items-center gap-2">
-        <i class="fas fa-bookmark text-yellow-400"></i> My Shortcuts
-      </h2>
-      <div id="shortcuts-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-        <!-- Shortcuts will be loaded here -->
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0"
+    />
+    <title>Docker Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+    />
+    <style>
+      .modal {
+        display: none;
+      }
+      .modal.active {
+        display: flex;
+      }
+      /* Custom Scrollbar */
+      .custom-scrollbar::-webkit-scrollbar {
+        width: 6px;
+      }
+      .custom-scrollbar::-webkit-scrollbar-track {
+        background: #1f2937; 
+        border-radius: 4px;
+      }
+      .custom-scrollbar::-webkit-scrollbar-thumb {
+        background: #4b5563; 
+        border-radius: 4px;
+      }
+      .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+        background: #6b7280; 
+      }
+      .animate-fade-in {
+        animation: fadeIn 0.3s ease-in-out;
+      }
+      @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+    </style>
+  </head>
+  <body class="bg-gray-900 text-white min-h-screen">
+    <!-- Header -->
+    <header class="bg-gray-800 border-b border-gray-700 p-4">
+      <div class="container mx-auto flex justify-between items-center">
+        <h1 class="text-2xl font-bold flex items-center gap-2">
+          <i class="fab fa-docker text-blue-400"></i> Docker Dashboard
+        </h1>
       </div>
-      <p id="no-shortcuts" class="text-gray-500 hidden">No shortcuts yet. Add one to get started!</p>
-    </section>
+    </header>
 
-    <!-- Running Containers -->
-    <section>
-      <h2 class="text-xl font-semibold mb-4 flex items-center gap-2">
-        <i class="fas fa-server text-green-400"></i> Running Containers
-      </h2>
-      <div id="containers-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-        <!-- Containers will be loaded here -->
+    <!-- Main Content -->
+    <main class="container mx-auto p-4">
+      
+      <!-- View: Dashboard -->
+      <div id="view-dashboard" class="animate-fade-in">
+        <div class="flex justify-between items-center mb-6">
+          <h2 class="text-xl font-semibold flex items-center gap-2">
+            <i class="fas fa-bookmark text-yellow-400"></i> My Shortcuts
+          </h2>
+          <button
+            onclick="switchView('add')"
+            class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg flex items-center gap-2 transition-colors font-medium text-sm shadow-lg shadow-blue-500/20"
+          >
+            <i class="fas fa-plus"></i> Add New
+          </button>
+        </div>
+
+        <div
+          id="shortcuts-grid"
+          class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4"
+        >
+          <!-- Shortcuts will be loaded here -->
+        </div>
+
+        <!-- Empty State (Hidden by default, shown via JS if 0 shortcuts) -->
+        <div id="dashboard-empty" class="hidden text-center py-12">
+           <p class="text-gray-400 mb-4">You don't have any shortcuts yet.</p>
+           <button onclick="switchView('add')" class="text-blue-400 hover:text-blue-300 underline">Add one now</button>
+        </div>
       </div>
-    </section>
-  </main>
 
-  <!-- Modal -->
-  <div id="modal" class="modal fixed inset-0 bg-black/50 items-center justify-center z-50 p-4">
-    <div class="bg-gray-800 rounded-xl p-6 w-full max-w-md">
-      <h3 id="modal-title" class="text-xl font-bold mb-4">Add Shortcut</h3>
-      <form id="shortcut-form" class="space-y-4">
-        <input type="hidden" id="shortcut-id">
-        <div>
-          <label class="block text-sm text-gray-400 mb-1">Name *</label>
-          <input type="text" id="shortcut-name" required class="w-full bg-gray-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 outline-none">
-        </div>
-        <div>
-          <label class="block text-sm text-gray-400 mb-1">Description</label>
-          <textarea id="shortcut-desc" rows="2" class="w-full bg-gray-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 outline-none"></textarea>
-        </div>
-        <div class="grid grid-cols-2 gap-4">
-          <div>
-            <label class="block text-sm text-gray-400 mb-1">Icon</label>
-            <select id="shortcut-icon" class="w-full bg-gray-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 outline-none">
-              <option value="cube">📦 Cube</option>
-              <option value="server">🖥️ Server</option>
-              <option value="database">💾 Database</option>
-              <option value="cloud">☁️ Cloud</option>
-              <option value="code">💻 Code</option>
-              <option value="film">🎬 Media</option>
-              <option value="download">📥 Download</option>
-              <option value="home">🏠 Home</option>
-              <option value="shield">🛡️ Security</option>
-              <option value="chart">📊 Analytics</option>
-            </select>
-          </div>
-          <div>
-            <label class="block text-sm text-gray-400 mb-1">Port *</label>
-            <input type="number" id="shortcut-port" required class="w-full bg-gray-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 outline-none">
+      <!-- View: Add / Select Container -->
+      <div id="view-add" class="hidden animate-fade-in">
+        <div class="flex justify-between items-center mb-6">
+          <h2 class="text-xl font-semibold flex items-center gap-2">
+            <i class="fas fa-server text-green-400"></i> Select Container
+          </h2>
+          <div class="flex gap-3">
+             <button
+              onclick="switchView('dashboard')"
+              class="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg flex items-center gap-2 transition-colors font-medium text-sm"
+            >
+              <i class="fas fa-arrow-left"></i> Back
+            </button>
+            <button
+              onclick="openModal()"
+              class="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg flex items-center gap-2 transition-colors font-medium text-sm border border-gray-600"
+            >
+              <i class="fas fa-pen"></i> Add Manually
+            </button>
           </div>
         </div>
-        <div class="flex gap-2 pt-4">
-          <button type="submit" class="flex-1 bg-blue-600 hover:bg-blue-700 py-2 rounded-lg font-semibold">Save</button>
-          <button type="button" onclick="closeModal()" class="flex-1 bg-gray-600 hover:bg-gray-700 py-2 rounded-lg font-semibold">Cancel</button>
+
+        <p class="text-gray-400 mb-6">
+          Select a running container below to add it as a shortcut, or click "Add Manually".
+        </p>
+
+        <div
+          id="containers-grid"
+          class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
+        >
+          <!-- Containers loaded here -->
         </div>
-      </form>
+      </div>
+
+    </main>
+
+    <!-- Modal -->
+    <div id="modal" class="modal fixed inset-0 bg-black/50 z-50 items-center justify-center backdrop-blur-sm hidden">
+      <div class="bg-gray-800 p-6 rounded-xl w-full max-w-md border border-gray-700 shadow-2xl transform transition-all">
+        <div class="flex justify-between items-center mb-6">
+          <h2 id="modal-title" class="text-xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">Add Shortcut</h2>
+          <button onclick="closeModal()" class="text-gray-400 hover:text-white transition-colors"><i class="fas fa-times"></i></button>
+        </div>
+        <form id="shortcut-form" onsubmit="saveShortcut(event)">
+          <input type="hidden" id="shortcut-id">
+          
+          <div class="space-y-4">
+            <div id="container-select-wrapper">
+              <label class="block text-sm font-medium mb-1 text-gray-300">Import from Container <span class="text-xs text-gray-500">(Optional)</span></label>
+              <select id="container-select" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all text-gray-300">
+                <option value="">-- Select a container --</option>
+                <!-- Options populated by JS -->
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium mb-1 text-gray-300">Name</label>
+              <input type="text" id="shortcut-name" required class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all placeholder-gray-600" placeholder="e.g., My App">
+            </div>
+            
+            <div>
+              <label class="block text-sm font-medium mb-1 text-gray-300">Description</label>
+              <textarea id="shortcut-desc" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all h-20 placeholder-gray-600" placeholder="Optional description..."></textarea>
+            </div>
+
+            <div>
+               <label class="block text-sm font-medium mb-2 text-gray-300">Icon / Image</label>
+               
+               <!-- Tabs -->
+               <div class="flex mb-3 bg-gray-900 rounded-lg p-1 border border-gray-700">
+                 <button type="button" onclick="switchTab('icon')" id="tab-icon" class="flex-1 py-1.5 rounded text-sm font-medium transition-colors bg-gray-700 text-white shadow-sm">Icon</button>
+                 <button type="button" onclick="switchTab('url')" id="tab-url" class="flex-1 py-1.5 rounded text-sm font-medium text-gray-400 hover:text-white transition-colors">URL</button>
+                 <button type="button" onclick="switchTab('upload')" id="tab-upload" class="flex-1 py-1.5 rounded text-sm font-medium text-gray-400 hover:text-white transition-colors">Upload</button>
+               </div>
+
+               <!-- Content: Icon Selection -->
+               <div id="content-icon" class="grid grid-cols-5 gap-2 max-h-40 overflow-y-auto p-2 bg-gray-900 rounded-lg border border-gray-700 custom-scrollbar">
+                 <!-- Icons injected by JS -->
+               </div>
+
+               <!-- Content: URL Input -->
+               <div id="content-url" class="hidden">
+                 <input type="url" id="shortcut-image-url" placeholder="https://example.com/logo.png" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 outline-none transition-all">
+                 <p class="text-xs text-gray-500 mt-1 pl-1">Paste a direct link to an image.</p>
+               </div>
+
+               <!-- Content: File Upload -->
+               <div id="content-upload" class="hidden">
+                 <label class="block w-full cursor-pointer bg-gray-900 border border-dashed border-gray-600 rounded-lg hover:bg-gray-800 transition-colors p-4 text-center group">
+                   <div class="flex flex-col items-center gap-2">
+                     <i class="fas fa-cloud-upload-alt text-gray-400 group-hover:text-blue-400 transition-colors text-2xl"></i>
+                     <span class="text-sm text-gray-400 group-hover:text-gray-300">Click to upload image</span>
+                   </div>
+                   <input type="file" id="shortcut-image-file" accept="image/*" class="hidden" onchange="previewUpload(this)">
+                 </label>
+                 <div id="upload-preview" class="mt-2 hidden text-sm text-blue-400 flex items-center gap-2">
+                   <i class="fas fa-check-circle"></i> <span id="upload-filename"></span>
+                 </div>
+               </div>
+
+               <input type="hidden" id="selected-icon-value" value="cube">
+               <input type="hidden" id="current-tab" value="icon">
+               <input type="hidden" id="original-icon" value="cube">
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium mb-1 text-gray-300">Port</label>
+              <input type="number" id="shortcut-port" required class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all" placeholder="8080">
+            </div>
+          </div>
+
+          <div class="mt-8 flex justify-end gap-3">
+            <button type="button" onclick="closeModal()" class="px-4 py-2.5 bg-gray-700 text-gray-300 rounded-lg hover:bg-gray-600 hover:text-white transition-colors font-medium text-sm">Cancel</button>
+            <button type="submit" class="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 rounded-lg text-white shadow-lg shadow-blue-500/20 font-medium text-sm transition-all transform hover:scale-[1.02]">Save Shortcut</button>
+          </div>
+        </form>
+      </div>
     </div>
-  </div>
 
-  <script src="app.js"></script>
-</body>
+    <script src="app.js"></script>
+  </body>
 </html>
-

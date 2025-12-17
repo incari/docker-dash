@@ -8,13 +8,13 @@
     "dev": "node --watch src/server.js"
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "dockerode": "^4.0.2",
     "better-sqlite3": "^9.4.3",
-    "cors": "^2.8.5"
+    "cors": "^2.8.5",
+    "dockerode": "^4.0.2",
+    "express": "^4.18.2",
+    "multer": "^2.0.2"
   },
   "engines": {
     "node": ">=18.0.0"
   }
 }
-

@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   docker-dashboard:
     build:
@@ -19,6 +17,7 @@ services:
       - NODE_ENV=production
       - PORT=3000
       - DB_PATH=/app/data/dashboard.db
+      - UPLOAD_DIR=/app/data/images
     networks:
       - docker-dashboard-net
 

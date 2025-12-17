@@ -3,6 +3,8 @@ const cors = require('cors');
 const Docker = require('dockerode');
 const Database = require('better-sqlite3');
 const path = require('path');
+const multer = require('multer');
+const fs = require('fs');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -28,9 +30,37 @@ db.exec(`
   )
 `);
 
+// Multer setup for uploads
+// Multer setup for uploads
+// Store images in the persistent data directory (mapped volume)
+const uploadDir = process.env.UPLOAD_DIR || path.join(__dirname, '../data/images');
+
+if (!fs.existsSync(uploadDir)) {
+  try {
+    fs.mkdirSync(uploadDir, { recursive: true });
+  } catch (error) {
+    console.error('Failed to create upload directory:', error);
+  }
+}
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({ storage: storage });
+
 app.use(cors());
 app.use(express.json());
+// Serve the public directory
 app.use(express.static(path.join(__dirname, '../public')));
+// Serve the uploads directory at /uploads
+app.use('/uploads', express.static(uploadDir));
 
 // Get all Docker containers with their ports
 app.get('/api/containers', async (req, res) => {
@@ -66,33 +96,68 @@ app.get('/api/shortcuts', (req, res) => {
 });
 
 // Create a shortcut
-app.post('/api/shortcuts', (req, res) => {
+app.post('/api/shortcuts', upload.single('image'), (req, res) => {
   const { name, description, icon, port, container_id } = req.body;
+
   if (!name || !port) {
     return res.status(400).json({ error: 'Name and port are required' });
   }
+
+  // Determine the icon value: uploaded file path, or provided icon/url string, or default
+  let iconValue = icon || 'cube';
+  if (req.file) {
+    iconValue = 'uploads/' + req.file.filename;
+  }
+
   try {
     const stmt = db.prepare(
       'INSERT INTO shortcuts (name, description, icon, port, container_id) VALUES (?, ?, ?, ?, ?)'
     );
-    const result = stmt.run(name, description || '', icon || 'cube', port, container_id || null);
-    res.json({ id: result.lastInsertRowid, name, description, icon, port, container_id });
+    const result = stmt.run(name, description || '', iconValue, port, container_id || null);
+    res.json({ id: result.lastInsertRowid, name, description, icon: iconValue, port, container_id });
   } catch (error) {
+    console.error(error);
     res.status(500).json({ error: 'Failed to create shortcut' });
   }
 });
 
 // Update a shortcut
-app.put('/api/shortcuts/:id', (req, res) => {
+app.put('/api/shortcuts/:id', upload.single('image'), (req, res) => {
   const { id } = req.params;
   const { name, description, icon, port, container_id } = req.body;
+
+  let iconValue = icon;
+  if (req.file) {
+    iconValue = 'uploads/' + req.file.filename;
+  }
+
   try {
+    // If no new icon/image is provided, we might want to keep the old one. 
+    // However, the frontend should send the current value if it's not changing, or we can fetch and check.
+    // For simplicity, if iconValue is undefined/null and no file, we assume the user intends to keep it or it's handled by frontend sending old value.
+    // But if we want to support partial updates, we'd need dynamic SQL.
+    // Here we assume the frontend sends the existing icon string if no new file is uploaded.
+
+    // Check if we need to fetch the existing record first?
+    // Let's assume frontend sends all fields.
+
+    // BUT: "icon" field in form data might be empty if user is uploading a file OR if they didn't touch it.
+    // Ideally frontend logic:
+    // - If uploading file: send file.
+    // - If selecting icon: send icon string.
+    // - If pasting URL: send URL string.
+    // - If keeping previous: send previous string.
+
+    // If iconValue is missing (e.g. only name update), we should probably fetch previous.
+    // But standard REST PUT replaces the resource.
+
     const stmt = db.prepare(
       'UPDATE shortcuts SET name=?, description=?, icon=?, port=?, container_id=?, updated_at=CURRENT_TIMESTAMP WHERE id=?'
     );
-    stmt.run(name, description, icon, port, container_id, id);
-    res.json({ id, name, description, icon, port, container_id });
+    stmt.run(name, description, iconValue, port, container_id, id);
+    res.json({ id, name, description, icon: iconValue, port, container_id });
   } catch (error) {
+    console.error(error);
     res.status(500).json({ error: 'Failed to update shortcut' });
   }
 });
