@@ -5,6 +5,10 @@ const Database = require('better-sqlite3');
 const path = require('path');
 const multer = require('multer');
 const fs = require('fs');
+const { exec } = require('child_process');
+const { promisify } = require('util');
+
+const execAsync = promisify(exec);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -56,6 +60,14 @@ if (!tableInfo.find(c => c.name === 'is_favorite')) {
   try {
     db.exec('ALTER TABLE shortcuts ADD COLUMN is_favorite INTEGER DEFAULT 1');
     console.log("Migrated: Added is_favorite column");
+  } catch (err) { console.error(err); }
+}
+
+// 4. Check for 'use_tailscale' column
+if (!tableInfo.find(c => c.name === 'use_tailscale')) {
+  try {
+    db.exec('ALTER TABLE shortcuts ADD COLUMN use_tailscale INTEGER DEFAULT 0');
+    console.log("Migrated: Added use_tailscale column");
   } catch (err) { console.error(err); }
 }
 
@@ -131,6 +143,47 @@ app.use('/uploads', express.static(uploadDir));
 
 // Health check for Docker
 app.get('/health', (req, res) => res.status(200).send('OK'));
+
+// Helper function to detect Tailscale IP
+async function getTailscaleIP() {
+  try {
+    // Try to get Tailscale IP using 'tailscale ip' command
+    const { stdout } = await execAsync('tailscale ip -4 2>/dev/null');
+    const ip = stdout.trim();
+    if (ip && /^100\.\d+\.\d+\.\d+$/.test(ip)) {
+      return ip;
+    }
+  } catch (err) {
+    // Tailscale command not found or not running
+  }
+
+  try {
+    // Fallback: Check network interfaces for Tailscale IP (100.x.x.x range)
+    const { stdout } = await execAsync('ip addr show 2>/dev/null || ifconfig 2>/dev/null');
+    const match = stdout.match(/inet (100\.\d+\.\d+\.\d+)/);
+    if (match) {
+      return match[1];
+    }
+  } catch (err) {
+    // Network command failed
+  }
+
+  return null;
+}
+
+// API endpoint to get Tailscale status
+app.get('/api/tailscale', async (req, res) => {
+  try {
+    const tailscaleIP = await getTailscaleIP();
+    res.json({
+      available: !!tailscaleIP,
+      ip: tailscaleIP
+    });
+  } catch (error) {
+    console.error('Error checking Tailscale:', error);
+    res.json({ available: false, ip: null });
+  }
+});
 
 // API Routes
 // Get all Docker containers with their ports
@@ -208,7 +261,7 @@ app.get('/api/shortcuts', (req, res) => {
 
 // Create a shortcut
 app.post('/api/shortcuts', upload.single('image'), (req, res) => {
-  const { name, description, icon, port, url, container_id, is_favorite } = req.body;
+  const { name, description, icon, port, url, container_id, is_favorite, use_tailscale } = req.body;
 
   if (!name || (!port && !url)) {
     return res.status(400).json({ error: 'Name and either Port or URL are required' });
@@ -223,13 +276,14 @@ app.post('/api/shortcuts', upload.single('image'), (req, res) => {
   const finalPort = port ? parseInt(port) : null;
   const finalUrl = url || null;
   const finalFavorite = is_favorite === undefined ? 1 : (is_favorite === 'true' || is_favorite === true || is_favorite === 1 ? 1 : 0);
+  const finalUseTailscale = use_tailscale === 'true' || use_tailscale === true || use_tailscale === 1 ? 1 : 0;
 
   try {
     const stmt = db.prepare(
-      'INSERT INTO shortcuts (name, description, icon, port, url, container_id, is_favorite) VALUES (?, ?, ?, ?, ?, ?, ?)'
+      'INSERT INTO shortcuts (name, description, icon, port, url, container_id, is_favorite, use_tailscale) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
     );
-    const result = stmt.run(name, description || '', iconValue, finalPort, finalUrl, container_id || null, finalFavorite);
-    res.json({ id: result.lastInsertRowid, name, description, icon: iconValue, port: finalPort, url: finalUrl, container_id, is_favorite: finalFavorite });
+    const result = stmt.run(name, description || '', iconValue, finalPort, finalUrl, container_id || null, finalFavorite, finalUseTailscale);
+    res.json({ id: result.lastInsertRowid, name, description, icon: iconValue, port: finalPort, url: finalUrl, container_id, is_favorite: finalFavorite, use_tailscale: finalUseTailscale });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to create shortcut' });
@@ -239,7 +293,7 @@ app.post('/api/shortcuts', upload.single('image'), (req, res) => {
 // Update a shortcut
 app.put('/api/shortcuts/:id', upload.single('image'), (req, res) => {
   const { id } = req.params;
-  const { name, description, icon, port, url, container_id, is_favorite } = req.body;
+  const { name, description, icon, port, url, container_id, is_favorite, use_tailscale } = req.body;
 
   let iconValue = icon;
   if (req.file) {
@@ -249,6 +303,7 @@ app.put('/api/shortcuts/:id', upload.single('image'), (req, res) => {
   const finalPort = port ? parseInt(port) : null;
   const finalUrl = url || null;
   const finalFavorite = is_favorite === undefined ? undefined : (is_favorite === 'true' || is_favorite === true || is_favorite === 1 ? 1 : 0);
+  const finalUseTailscale = use_tailscale === undefined ? undefined : (use_tailscale === 'true' || use_tailscale === true || use_tailscale === 1 ? 1 : 0);
 
   try {
     let sql = 'UPDATE shortcuts SET name=?, description=?, icon=?, port=?, url=?, container_id=?, updated_at=CURRENT_TIMESTAMP';
@@ -259,12 +314,17 @@ app.put('/api/shortcuts/:id', upload.single('image'), (req, res) => {
       params.push(finalFavorite);
     }
 
+    if (finalUseTailscale !== undefined) {
+      sql += ', use_tailscale=?';
+      params.push(finalUseTailscale);
+    }
+
     sql += ' WHERE id=?';
     params.push(id);
 
     const stmt = db.prepare(sql);
     stmt.run(...params);
-    res.json({ id, name, description, icon: iconValue, port: finalPort, url: finalUrl, container_id, is_favorite: finalFavorite });
+    res.json({ id, name, description, icon: iconValue, port: finalPort, url: finalUrl, container_id, is_favorite: finalFavorite, use_tailscale: finalUseTailscale });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to update shortcut' });
