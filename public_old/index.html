@@ -41,6 +41,12 @@
         from { opacity: 0; transform: translateY(10px); }
         to { opacity: 1; transform: translateY(0); }
       }
+      /* Touch optimization */
+      @media (hover: none) {
+        .group-hover\:opacity-100 {
+           opacity: 1 !important;
+        }
+      }
     </style>
   </head>
   <body class="bg-gray-900 text-white min-h-screen">
@@ -189,10 +195,28 @@
                <input type="hidden" id="original-icon" value="cube">
             </div>
 
+            <!-- Connection Type Toggle -->
             <div>
-              <label class="block text-sm font-medium mb-1 text-gray-300">Port</label>
-              <input type="number" id="shortcut-port" required class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all" placeholder="8080">
+               <label class="block text-sm font-medium mb-2 text-gray-300">Connection Type</label>
+               <div class="flex bg-gray-900 rounded-lg p-1 border border-gray-700 mb-3">
+                 <button type="button" onclick="switchConnectionType('port')" id="type-port" class="flex-1 py-1.5 rounded text-sm font-medium transition-colors bg-gray-700 text-white shadow-sm">Port</button>
+                 <button type="button" onclick="switchConnectionType('url')" id="type-url" class="flex-1 py-1.5 rounded text-sm font-medium text-gray-400 hover:text-white transition-colors">Custom URL</button>
+               </div>
+               
+               <div id="input-port-wrapper">
+                 <label class="block text-sm font-medium mb-1 text-gray-300">Port</label>
+                 <input type="number" id="shortcut-port" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all" placeholder="8080">
+               </div>
+
+               <div id="input-url-wrapper" class="hidden">
+                 <label class="block text-sm font-medium mb-1 text-gray-300">Target URL</label>
+                 <input type="url" id="shortcut-url" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all" placeholder="http://192.168.1.50:9000">
+               </div>
+               
+               <input type="hidden" id="connection-type" value="port">
             </div>
+
+            <div>
           </div>
 
           <div class="mt-8 flex justify-end gap-3">

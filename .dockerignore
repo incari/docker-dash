@@ -1,6 +1,10 @@
 node_modules
+frontend/node_modules
+frontend/dist
 data
 *.md
 .git
 .gitignore
-
+.agent
+.gemini
+npm-debug.log
