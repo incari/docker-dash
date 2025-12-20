@@ -1,7 +1,7 @@
 # Multi-stage build for Docker Dashboard using pnpm and Corepack
 
 # Stage 1: Build the React frontend
-FROM node:20-alpine AS frontend-builder
+FROM node:24-alpine AS frontend-builder
 
 # Enable corepack to use pnpm without using npm to install it
 RUN corepack enable && corepack prepare pnpm@latest --activate
@@ -14,7 +14,7 @@ RUN pnpm build
 
 # Stage 2: Final production image
 # Using node:22-alpine as it's the current stable major version (24 is not yet released)
-FROM node:22-alpine
+FROM node:24-alpine
 
 # Install build-base for native module compilation
 RUN apk add --no-cache build-base python3
