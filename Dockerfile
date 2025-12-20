@@ -37,9 +37,6 @@ COPY src ./src
 # Copy built frontend from Stage 1
 COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
 
-# Copy Tailscale test script for debugging
-COPY test-tailscale.sh ./test-tailscale.sh
-RUN chmod +x ./test-tailscale.sh
 
 # Create data directory
 RUN mkdir -p /app/data
