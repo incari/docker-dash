@@ -15,6 +15,11 @@ RUN pnpm build
 # IMPORTANT: Use Node 22 (LTS). Node 24 is unstable for native modules like better-sqlite3.
 FROM node:22-alpine
 
+# Labels for GitHub Container Registry
+LABEL org.opencontainers.image.source=https://github.com/incari/docker-dashboard
+LABEL org.opencontainers.image.description="Docker Dashboard - A web UI for managing Docker containers"
+LABEL org.opencontainers.image.licenses=MIT
+
 # Install build-base for native module compilation
 RUN apk add --no-cache build-base python3
 RUN corepack enable && corepack prepare pnpm@latest --activate

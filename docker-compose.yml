@@ -1,9 +1,6 @@
 services:
   docker-dashboard:
-    build:
-      context: https://github.com/incari/docker-dashboard.git
-      dockerfile: Dockerfile
-    image: local/docker-dashboard:latest
+    image: ghcr.io/incari/docker-dashboard:latest
     container_name: docker-dashboard
     restart: unless-stopped
 
