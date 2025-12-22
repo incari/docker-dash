@@ -7,10 +7,6 @@ import {
   Link as LinkIcon,
   GripVertical,
   Edit3,
-  ChevronDown,
-  ChevronUp,
-  Edit,
-  Trash2,
   LayoutDashboard,
   Layers,
   Download,
@@ -35,11 +31,13 @@ import {
   SortableContext,
   sortableKeyboardCoordinates,
   rectSortingStrategy,
+  verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 
 import {
   ShortcutCard,
   SortableShortcutCard,
+  SortableSection,
   DroppableSection,
   SectionDropZone,
   ConfirmModal,
@@ -363,83 +361,51 @@ function DashboardView({
               )}
 
               {/* Sectioned Shortcuts */}
-              {sections.map((section) => {
-                const sectionShortcuts = shortcutsBySection[section.id] || [];
-                if (sectionShortcuts.length === 0 && !isEditMode) return null;
+              <SortableContext
+                items={sections.map((s) => `section-sort-${s.id}`)}
+                strategy={verticalListSortingStrategy}
+              >
+                {sections.map((section) => {
+                  const sectionShortcuts = shortcutsBySection[section.id] || [];
+                  if (sectionShortcuts.length === 0 && !isEditMode) return null;
 
-                return (
-                  <div
-                    key={section.id}
-                    className="space-y-4"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <button
-                          onClick={() =>
-                            handleToggleSection(
-                              section.id,
-                              section.is_collapsed
-                            )
-                          }
-                          className="text-slate-400 hover:text-white transition-colors"
+                  return (
+                    <SortableSection
+                      key={section.id}
+                      section={section}
+                      shortcutCount={sectionShortcuts.length}
+                      isEditMode={isEditMode}
+                      onToggle={() =>
+                        handleToggleSection(section.id, section.is_collapsed)
+                      }
+                      onEdit={() => handleEditSection(section)}
+                      onDelete={() =>
+                        handleDeleteSection(section.id, section.name)
+                      }
+                    >
+                      {!section.is_collapsed && (
+                        <DroppableSection
+                          sectionId={section.id}
+                          isActive={isEditMode && !!activeId}
                         >
-                          {section.is_collapsed ? (
-                            <ChevronDown className="w-5 h-5" />
+                          {sectionShortcuts.length > 0 ? (
+                            <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                              {sectionShortcuts.map((s) =>
+                                renderShortcutCard(s, isEditMode)
+                              )}
+                            </div>
                           ) : (
-                            <ChevronUp className="w-5 h-5" />
+                            <SectionDropZone
+                              sectionId={section.id}
+                              isActive={!!activeId}
+                            />
                           )}
-                        </button>
-                        <h2 className="text-lg font-semibold text-white">
-                          {section.name}
-                        </h2>
-                        <span className="text-sm text-slate-500">
-                          ({sectionShortcuts.length})
-                        </span>
-                      </div>
-                      {isEditMode && (
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => handleEditSection(section)}
-                            className="p-2 text-slate-400 hover:text-blue-400 hover:bg-blue-500/10 rounded-lg transition-colors"
-                            title="Edit section"
-                          >
-                            <Edit className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() =>
-                              handleDeleteSection(section.id, section.name)
-                            }
-                            className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
-                            title="Delete section"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
+                        </DroppableSection>
                       )}
-                    </div>
-
-                    {!section.is_collapsed && (
-                      <DroppableSection
-                        sectionId={section.id}
-                        isActive={isEditMode && !!activeId}
-                      >
-                        {sectionShortcuts.length > 0 ? (
-                          <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                            {sectionShortcuts.map((s) =>
-                              renderShortcutCard(s, isEditMode)
-                            )}
-                          </div>
-                        ) : (
-                          <SectionDropZone
-                            sectionId={section.id}
-                            isActive={!!activeId}
-                          />
-                        )}
-                      </DroppableSection>
-                    )}
-                  </div>
-                );
-              })}
+                    </SortableSection>
+                  );
+                })}
+              </SortableContext>
             </div>
           </SortableContext>
 
@@ -480,6 +446,7 @@ function DashboardView({
 interface ManagementViewProps {
   containers: DockerContainer[];
   shortcuts: Shortcut[];
+  tailscaleInfo: { available: boolean; ip: string | null };
   setView: (view: "dashboard" | "add") => void;
   setEditingShortcut: (shortcut: Shortcut | null) => void;
   setIsModalOpen: (open: boolean) => void;
@@ -494,6 +461,7 @@ interface ManagementViewProps {
 function ManagementView({
   containers,
   shortcuts,
+  tailscaleInfo,
   setView,
   setEditingShortcut,
   setIsModalOpen,
@@ -554,55 +522,19 @@ function ManagementView({
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {customShortcuts.map((s) => (
-              <div
+              <ShortcutCard
                 key={s.id}
-                className="bg-slate-800/50 border border-white/5 rounded-xl p-4 flex items-center justify-between group hover:border-white/10 transition-colors"
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-10 h-10 rounded-lg bg-slate-700 flex items-center justify-center flex-shrink-0">
-                    <LinkIcon className="w-5 h-5 text-slate-400" />
-                  </div>
-                  <div className="min-w-0">
-                    <h3 className="font-medium text-white truncate">
-                      {s.name}
-                    </h3>
-                    <p className="text-xs text-slate-500 truncate">{s.url}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => handleToggleFavorite(s.id, s.is_favorite)}
-                    className={`p-2 rounded-lg transition-colors ${
-                      s.is_favorite
-                        ? "text-yellow-400 bg-yellow-500/10"
-                        : "text-slate-400 hover:text-yellow-400 hover:bg-yellow-500/10"
-                    }`}
-                    title={
-                      s.is_favorite
-                        ? "Remove from favorites"
-                        : "Add to favorites"
-                    }
-                  >
-                    <Bookmark className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => openEditModal(s)}
-                    className="p-2 text-slate-400 hover:text-blue-400 hover:bg-blue-500/10 rounded-lg transition-colors"
-                    title="Edit"
-                  >
-                    <Edit className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(s.id)}
-                    className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
-                    title="Delete"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
+                shortcut={s}
+                container={null}
+                tailscaleIP={tailscaleInfo.ip}
+                onEdit={() => openEditModal(s)}
+                onDelete={() => handleDelete(s.id)}
+                onToggleFavorite={() =>
+                  handleToggleFavorite(s.id, s.is_favorite)
+                }
+              />
             ))}
           </div>
         )}
@@ -696,6 +628,7 @@ function App() {
   const [showInstallPrompt, setShowInstallPrompt] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [activeId, setActiveId] = useState<number | null>(null);
+  const [_activeSectionId, setActiveSectionId] = useState<number | null>(null);
   const [sectionModal, setSectionModal] = useState<SectionModalState>({
     isOpen: false,
     section: null,
@@ -711,15 +644,44 @@ function App() {
 
   // Custom collision detection
   const customCollisionDetection = useCallback((args: any) => {
+    // First check for direct pointer collisions
     const pointerCollisions = pointerWithin(args);
-    const sectionCollisions = pointerCollisions.filter(({ id }: { id: any }) =>
-      String(id).startsWith("section-")
+
+    // If we're dragging a section, only allow section-sort collisions
+    const activeData = args.active?.data?.current;
+    if (activeData?.type === "section-sort") {
+      const sectionSortCollisions = pointerCollisions.filter(
+        ({ id }: { id: any }) => String(id).startsWith("section-sort-")
+      );
+      if (sectionSortCollisions.length > 0) {
+        return sectionSortCollisions;
+      }
+      return closestCenter(args);
+    }
+
+    // For shortcut dragging, check for shortcut collisions first (for reordering within same section)
+    const shortcutCollisions = pointerCollisions.filter(
+      ({ id }: { id: any }) =>
+        !String(id).startsWith("section-") &&
+        !String(id).startsWith("section-sort-")
+    );
+
+    if (shortcutCollisions.length > 0) {
+      return shortcutCollisions;
+    }
+
+    // Then check for section droppable collisions (for moving between sections)
+    const sectionCollisions = pointerCollisions.filter(
+      ({ id }: { id: any }) =>
+        String(id).startsWith("section-") &&
+        !String(id).startsWith("section-sort-")
     );
 
     if (sectionCollisions.length > 0) {
       return sectionCollisions;
     }
 
+    // Fallback to closest center for any remaining cases
     return closestCenter(args);
   }, []);
 
@@ -838,36 +800,89 @@ function App() {
   };
 
   const handleDragStart = (event: DragStartEvent) => {
-    setActiveId(event.active.id as number);
+    const activeData = (event.active as any).data?.current;
+    if (activeData?.type === "section-sort") {
+      setActiveSectionId(activeData.sectionId);
+      setActiveId(null);
+    } else {
+      setActiveId(event.active.id as number);
+      setActiveSectionId(null);
+    }
   };
 
   const handleDragOver = (event: DragOverEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
+    // Skip if dragging a section
+    const activeData = (active as any).data?.current;
+    if (activeData?.type === "section-sort") {
+      // Handle section reorder preview
+      const overData = (over as any).data?.current;
+      if (overData?.type === "section-sort") {
+        const oldIndex = sections.findIndex(
+          (s) => s.id === activeData.sectionId
+        );
+        const newIndex = sections.findIndex((s) => s.id === overData.sectionId);
+        if (oldIndex !== newIndex) {
+          setSections(arrayMove(sections, oldIndex, newIndex));
+        }
+      }
+      return;
+    }
+
     const activeShortcut = shortcuts.find((s) => s.id === active.id);
     if (!activeShortcut) return;
 
+    // Check if dragging over a section droppable
+    const overData = (over as any).data?.current;
+    if (overData?.type === "section") {
+      // Dragging over an empty section area - no preview needed, handled in dragEnd
+      return;
+    }
+
     const overShortcut = shortcuts.find((s) => s.id === over.id);
     if (overShortcut) {
-      const activeSectionId = activeShortcut.section_id;
+      const activeSectionIdVal = activeShortcut.section_id;
       const overSectionId = overShortcut.section_id;
       const isSameSection =
-        (activeSectionId === null && overSectionId === null) ||
-        activeSectionId === overSectionId;
+        (activeSectionIdVal === null && overSectionId === null) ||
+        activeSectionIdVal === overSectionId;
 
       if (isSameSection) {
+        // Same section - reorder within section
         const oldIndex = shortcuts.findIndex((s) => s.id === active.id);
         const newIndex = shortcuts.findIndex((s) => s.id === over.id);
         setShortcuts(arrayMove(shortcuts, oldIndex, newIndex));
       }
+      // Different section - don't do live preview, just handle in dragEnd
     }
   };
 
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
     setActiveId(null);
+    setActiveSectionId(null);
     if (!over) return;
+
+    // Handle section drag end
+    const activeData = (active as any).data?.current;
+    if (activeData?.type === "section-sort") {
+      // Always save the current section order when a section drag ends
+      try {
+        const reorderedSections = sections.map((s, index) => ({
+          id: s.id,
+          position: index,
+        }));
+        await axios.put(`${API_BASE}/sections/reorder`, {
+          sections: reorderedSections,
+        });
+      } catch (err) {
+        console.error("Failed to reorder sections:", err);
+        fetchData();
+      }
+      return;
+    }
 
     const activeShortcut = shortcuts.find((s) => s.id === active.id);
     if (!activeShortcut) return;
@@ -881,10 +896,15 @@ function App() {
           currentSectionId === targetSectionId;
 
         if (!isSameSection) {
+          // Update local state first
+          setShortcuts((prev) =>
+            prev.map((s) =>
+              s.id === active.id ? { ...s, section_id: targetSectionId } : s
+            )
+          );
           await axios.put(`${API_BASE}/shortcuts/${active.id}/section`, {
             section_id: targetSectionId,
           });
-          fetchData();
         }
       } else if (active.id !== over.id) {
         const overShortcut = shortcuts.find((s) => s.id === over.id);
@@ -897,14 +917,22 @@ function App() {
           currentSectionId === targetSectionId;
 
         if (!isSameSection) {
+          // Update local state first
+          setShortcuts((prev) =>
+            prev.map((s) =>
+              s.id === active.id
+                ? { ...s, section_id: overShortcut.section_id }
+                : s
+            )
+          );
           await axios.put(`${API_BASE}/shortcuts/${active.id}/section`, {
             section_id: overShortcut.section_id,
           });
-          fetchData();
         } else {
           const oldIndex = shortcuts.findIndex((s) => s.id === active.id);
           const newIndex = shortcuts.findIndex((s) => s.id === over.id);
           const reordered = arrayMove(shortcuts, oldIndex, newIndex);
+          setShortcuts(reordered);
           const reorderedShortcuts = reordered.map((s, index) => ({
             id: s.id,
             position: index,
@@ -912,7 +940,6 @@ function App() {
           await axios.put(`${API_BASE}/shortcuts/reorder`, {
             shortcuts: reorderedShortcuts,
           });
-          fetchData();
         }
       }
     } catch (err) {
@@ -923,6 +950,7 @@ function App() {
 
   const handleDragCancel = () => {
     setActiveId(null);
+    setActiveSectionId(null);
     fetchData();
   };
 
@@ -1118,6 +1146,7 @@ function App() {
             <ManagementView
               containers={containers}
               shortcuts={shortcuts}
+              tailscaleInfo={tailscaleInfo}
               setView={setView}
               setEditingShortcut={setEditingShortcut}
               setIsModalOpen={setIsModalOpen}

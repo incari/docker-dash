@@ -594,6 +594,30 @@ app.post('/api/sections', (req, res) => {
   }
 });
 
+// Reorder sections (must be before :id route to avoid matching "reorder" as an id)
+app.put('/api/sections/reorder', (req, res) => {
+  const { sections } = req.body;
+
+  if (!Array.isArray(sections)) {
+    return res.status(400).json({ error: 'Invalid request: sections must be an array' });
+  }
+
+  try {
+    const updateStmt = db.prepare('UPDATE sections SET position = ? WHERE id = ?');
+    const transaction = db.transaction((items) => {
+      for (const item of items) {
+        updateStmt.run(item.position, item.id);
+      }
+    });
+
+    transaction(sections);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Failed to reorder sections:', err);
+    res.status(500).json({ error: 'Failed to reorder sections' });
+  }
+});
+
 // Update a section
 app.put('/api/sections/:id', (req, res) => {
   const { id } = req.params;
@@ -623,30 +647,6 @@ app.put('/api/sections/:id', (req, res) => {
   } catch (error) {
     console.error('Failed to update section:', error);
     res.status(500).json({ error: 'Failed to update section' });
-  }
-});
-
-// Reorder sections
-app.put('/api/sections/reorder', (req, res) => {
-  const { sections } = req.body;
-
-  if (!Array.isArray(sections)) {
-    return res.status(400).json({ error: 'Invalid request: sections must be an array' });
-  }
-
-  try {
-    const updateStmt = db.prepare('UPDATE sections SET position = ? WHERE id = ?');
-    const transaction = db.transaction((items) => {
-      for (const item of items) {
-        updateStmt.run(item.position, item.id);
-      }
-    });
-
-    transaction(sections);
-    res.json({ success: true });
-  } catch (err) {
-    console.error('Failed to reorder sections:', err);
-    res.status(500).json({ error: 'Failed to reorder sections' });
   }
 });
 

@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
 import axios from "axios";
 import {
@@ -8,6 +9,7 @@ import {
   Upload,
   Image as ImageIcon,
   CheckCircle,
+  ChevronDown,
 } from "lucide-react";
 import type { ShortcutModalProps } from "../types";
 import { DynamicIcon } from "./DynamicIcon";
@@ -408,41 +410,53 @@ const PortSelector: React.FC<PortSelectorProps> = ({
   containerId,
   onChange,
 }) => {
-  if (availablePorts.length > 1) {
+  const [isCustom, setIsCustom] = useState(false);
+
+  // Check if current port is not in the available ports list
+  const isCurrentPortCustom = port && !availablePorts.includes(Number(port));
+  const showCustomInput =
+    isCustom || isCurrentPortCustom || availablePorts.length === 0;
+
+  if (availablePorts.length > 0 && !showCustomInput) {
     return (
       <div className="space-y-2">
-        <select
-          value={port}
-          onChange={(e) => onChange(e.target.value)}
-          className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-white appearance-none"
-        >
-          <option value="">Select a port...</option>
-          {availablePorts.map((p) => (
-            <option
-              key={p}
-              value={p}
-            >
-              :{p}
-            </option>
-          ))}
-        </select>
+        <div className="flex gap-2">
+          <select
+            value={port}
+            onChange={(e) => {
+              if (e.target.value === "__custom__") {
+                setIsCustom(true);
+                onChange("");
+              } else {
+                onChange(e.target.value);
+              }
+            }}
+            className="flex-1 bg-slate-800 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-white appearance-none"
+          >
+            <option value="">Select a port...</option>
+            {availablePorts.map((p) => (
+              <option
+                key={p}
+                value={p}
+              >
+                {p}
+              </option>
+            ))}
+            <option value="__custom__">Custom port...</option>
+          </select>
+        </div>
         <p className="text-xs text-slate-500 pl-1">
-          Container has {availablePorts.length} ports available
+          {availablePorts.length === 1
+            ? "Container has 1 port available, or enter a custom port"
+            : `Container has ${availablePorts.length} ports available, or enter a custom port`}
         </p>
       </div>
     );
-  } else if (availablePorts.length === 1) {
-    return (
-      <div className="space-y-2">
-        <div className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-3 text-white flex items-center justify-between">
-          <span>:{availablePorts[0]}</span>
-          <span className="text-xs text-slate-500">Only port available</span>
-        </div>
-      </div>
-    );
-  } else {
-    return (
-      <div className="space-y-2">
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex gap-2">
         <input
           type="number"
           min="1"
@@ -450,16 +464,30 @@ const PortSelector: React.FC<PortSelectorProps> = ({
           value={port}
           onChange={(e) => onChange(e.target.value)}
           placeholder="8080 (leave empty if no port)"
-          className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-white"
+          className="flex-1 bg-slate-800 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-white"
         />
-        <p className="text-xs text-slate-500 pl-1">
-          {containerId
-            ? "Container has no exposed ports"
-            : "Leave empty for containers that don't expose ports"}
-        </p>
+        {availablePorts.length > 0 && (
+          <button
+            type="button"
+            onClick={() => {
+              setIsCustom(false);
+              onChange(availablePorts[0]?.toString() || "");
+            }}
+            className="px-4 py-3 bg-slate-700 hover:bg-slate-600 border border-white/10 rounded-xl text-sm text-slate-300 transition-colors whitespace-nowrap"
+          >
+            Use available
+          </button>
+        )}
       </div>
-    );
-  }
+      <p className="text-xs text-slate-500 pl-1">
+        {containerId
+          ? availablePorts.length > 0
+            ? "Enter custom port or use available ports"
+            : "Container has no exposed ports"
+          : "Leave empty for containers that don't expose ports"}
+      </p>
+    </div>
+  );
 };
 
 interface UrlInputProps {
@@ -546,6 +574,146 @@ const TailscaleToggle: React.FC<TailscaleToggleProps> = ({
   </div>
 );
 
+interface IconDropdownProps {
+  icon: string;
+  setIcon: (icon: string) => void;
+}
+
+const IconDropdown: React.FC<IconDropdownProps> = ({ icon, setIcon }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [dropdownPos, setDropdownPos] = useState({
+    top: 0,
+    left: 0,
+    width: 0,
+    openUpward: false,
+  });
+  const buttonRef = React.useRef<HTMLButtonElement>(null);
+  const dropdownRef = React.useRef<HTMLDivElement>(null);
+
+  // Sort icons alphabetically
+  const sortedIcons = Object.keys(AVAILABLE_ICONS).sort((a, b) =>
+    a.toLowerCase().localeCompare(b.toLowerCase())
+  );
+
+  const updatePosition = useCallback(() => {
+    if (buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      const dropdownHeight = 256; // max-h-64 = 16rem = 256px
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const spaceAbove = rect.top;
+
+      // Open upward if not enough space below but enough above
+      const openUpward =
+        spaceBelow < dropdownHeight + 8 && spaceAbove > spaceBelow;
+
+      setDropdownPos({
+        top: openUpward ? rect.top - dropdownHeight - 8 : rect.bottom + 8,
+        left: rect.left,
+        width: rect.width,
+        openUpward,
+      });
+    }
+  }, []);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node) &&
+        buttonRef.current &&
+        !buttonRef.current.contains(event.target as Node)
+      ) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Update position when opening or on scroll/resize
+  useEffect(() => {
+    if (isOpen) {
+      updatePosition();
+      window.addEventListener("scroll", updatePosition, true);
+      window.addEventListener("resize", updatePosition);
+      return () => {
+        window.removeEventListener("scroll", updatePosition, true);
+        window.removeEventListener("resize", updatePosition);
+      };
+    }
+  }, [isOpen, updatePosition]);
+
+  return (
+    <div className="w-full">
+      <button
+        ref={buttonRef}
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-3 flex items-center justify-between hover:border-white/20 transition-colors"
+      >
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-slate-700 flex items-center justify-center">
+            <DynamicIcon
+              name={icon}
+              className="w-5 h-5 text-white"
+            />
+          </div>
+          <span className="text-white">{icon}</span>
+        </div>
+        <ChevronDown
+          className={`w-5 h-5 text-slate-400 transition-transform ${
+            isOpen ? "rotate-180" : ""
+          }`}
+        />
+      </button>
+
+      {isOpen &&
+        createPortal(
+          <div
+            ref={dropdownRef}
+            style={{
+              position: "fixed",
+              top: dropdownPos.top,
+              left: dropdownPos.left,
+              width: dropdownPos.width,
+            }}
+            className="z-[100] bg-slate-800 border border-white/10 rounded-xl shadow-2xl max-h-64 overflow-y-auto custom-scrollbar"
+          >
+            {sortedIcons.map((iconKey) => (
+              <button
+                key={iconKey}
+                type="button"
+                onClick={() => {
+                  setIcon(iconKey);
+                  setIsOpen(false);
+                }}
+                className={`w-full px-4 py-2.5 flex items-center gap-3 hover:bg-slate-700 transition-colors ${
+                  icon === iconKey
+                    ? "bg-blue-600/20 text-blue-400"
+                    : "text-white"
+                }`}
+              >
+                <div
+                  className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                    icon === iconKey ? "bg-blue-600/30" : "bg-slate-700"
+                  }`}
+                >
+                  <DynamicIcon
+                    name={iconKey}
+                    className="w-5 h-5"
+                  />
+                </div>
+                <span className="text-sm">{iconKey}</span>
+              </button>
+            ))}
+          </div>,
+          document.body
+        )}
+    </div>
+  );
+};
+
 interface IconSelectorProps {
   activeTab: "icon" | "url" | "upload";
   setActiveTab: (tab: "icon" | "url" | "upload") => void;
@@ -591,27 +759,12 @@ const IconSelector: React.FC<IconSelectorProps> = ({
       ))}
     </div>
 
-    <div className="bg-slate-950/50 rounded-2xl p-6 border border-white/5 min-h-32 flex items-center justify-center">
+    <div className="bg-slate-950/50 rounded-2xl p-6 border border-white/5 min-h-20 flex items-center justify-center">
       {activeTab === "icon" && (
-        <div className="grid grid-cols-5 sm:grid-cols-6 gap-2 sm:gap-3 w-full">
-          {Object.keys(AVAILABLE_ICONS).map((iconKey) => (
-            <button
-              key={iconKey}
-              type="button"
-              onClick={() => setIcon(iconKey)}
-              className={`aspect-square rounded-xl flex items-center justify-center transition-all ${
-                icon === iconKey
-                  ? "bg-blue-600 text-white shadow-lg shadow-blue-500/20"
-                  : "bg-slate-800 text-slate-500 hover:bg-slate-700 hover:text-white"
-              }`}
-            >
-              <DynamicIcon
-                name={iconKey}
-                className="w-5 h-5 sm:w-6 sm:h-6"
-              />
-            </button>
-          ))}
-        </div>
+        <IconDropdown
+          icon={icon}
+          setIcon={setIcon}
+        />
       )}
 
       {activeTab === "url" && (
@@ -623,9 +776,10 @@ const IconSelector: React.FC<IconSelectorProps> = ({
           >
             <LinkIcon className="w-5 h-5 text-slate-500" />
             <input
+              type="text"
               className="bg-transparent flex-1 focus:outline-none text-white text-sm"
-              placeholder="Paste image link here..."
-              value={icon?.startsWith("http") ? icon : ""}
+              placeholder="Enter or paste image URL..."
+              value={activeTab === "url" ? icon : ""}
               onChange={(e) => {
                 setIcon(e.target.value);
                 setIconUrlError("");

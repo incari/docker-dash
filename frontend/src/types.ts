@@ -70,11 +70,11 @@ export interface ShortcutCardProps {
   tailscaleIP: string | null;
   onEdit: () => void;
   onDelete: () => void;
-  onStart: () => void;
-  onStop: () => void;
-  onRestart: () => void;
+  onStart?: () => void;
+  onStop?: () => void;
+  onRestart?: () => void;
   onToggleFavorite: () => void;
-  isEditMode: boolean;
+  isEditMode?: boolean;
 }
 
 export interface SortableShortcutCardProps extends ShortcutCardProps {}
