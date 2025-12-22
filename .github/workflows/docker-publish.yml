@@ -1,14 +1,12 @@
 name: Build and Push Docker Image
 
-# Uncomment the triggers below to enable automatic builds on push/PR
 on:
-   push:
-   branches: [main]
-   pull_request:
-   branches: [main]
-
-# Manual trigger only (uncomment 'on:' above to enable automatic builds)
-on:
+  # Automatic builds on push/PR to main
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  # Manual trigger
   workflow_dispatch:
 
 env:
