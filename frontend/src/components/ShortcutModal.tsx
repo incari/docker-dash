@@ -249,10 +249,11 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
-              <label className="text-sm font-semibold text-slate-300">
+              <label htmlFor="display-name" className="text-sm font-semibold text-slate-300">
                 Display Name
               </label>
               <input
+                id="display-name"
                 required
                 value={formData.name}
                 onChange={(e) =>
@@ -270,22 +271,20 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setFormData({ ...formData, type: "port" })}
-                  className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
-                    formData.type === "port"
+                  className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${formData.type === "port"
                       ? "bg-slate-800 text-white shadow-lg"
                       : "text-slate-500"
-                  }`}
+                    }`}
                 >
                   LOCAL PORT
                 </button>
                 <button
                   type="button"
                   onClick={() => setFormData({ ...formData, type: "url" })}
-                  className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
-                    formData.type === "url"
+                  className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${formData.type === "url"
                       ? "bg-slate-800 text-white shadow-lg"
                       : "text-slate-500"
-                  }`}
+                    }`}
                 >
                   WEB URL
                 </button>
@@ -511,11 +510,9 @@ const UrlInput: React.FC<UrlInputProps> = ({
       onChange={(e) => onChange(e.target.value)}
       onBlur={onBlur}
       placeholder="example.com or https://example.com"
-      className={`w-full bg-slate-800 border ${
-        urlError ? "border-red-500" : "border-white/10"
-      } rounded-xl px-4 py-3 focus:outline-none focus:ring-2 ${
-        urlError ? "focus:ring-red-500" : "focus:ring-blue-500"
-      } transition-all text-white`}
+      className={`w-full bg-slate-800 border ${urlError ? "border-red-500" : "border-white/10"
+        } rounded-xl px-4 py-3 focus:outline-none focus:ring-2 ${urlError ? "focus:ring-red-500" : "focus:ring-blue-500"
+        } transition-all text-white`}
     />
     {!urlError && (
       <p className="text-xs text-slate-500 pl-1">
@@ -560,14 +557,12 @@ const TailscaleToggle: React.FC<TailscaleToggleProps> = ({
       <button
         type="button"
         onClick={onToggle}
-        className={`relative w-14 h-7 rounded-full transition-colors ${
-          enabled ? "bg-blue-600" : "bg-slate-700"
-        }`}
+        className={`relative w-14 h-7 rounded-full transition-colors ${enabled ? "bg-blue-600" : "bg-slate-700"
+          }`}
       >
         <div
-          className={`absolute top-1 left-1 w-5 h-5 bg-white rounded-full transition-transform ${
-            enabled ? "translate-x-7" : "translate-x-0"
-          }`}
+          className={`absolute top-1 left-1 w-5 h-5 bg-white rounded-full transition-transform ${enabled ? "translate-x-7" : "translate-x-0"
+            }`}
         />
       </button>
     </div>
@@ -662,9 +657,8 @@ const IconDropdown: React.FC<IconDropdownProps> = ({ icon, setIcon }) => {
           <span className="text-white">{icon}</span>
         </div>
         <ChevronDown
-          className={`w-5 h-5 text-slate-400 transition-transform ${
-            isOpen ? "rotate-180" : ""
-          }`}
+          className={`w-5 h-5 text-slate-400 transition-transform ${isOpen ? "rotate-180" : ""
+            }`}
         />
       </button>
 
@@ -688,16 +682,14 @@ const IconDropdown: React.FC<IconDropdownProps> = ({ icon, setIcon }) => {
                   setIcon(iconKey);
                   setIsOpen(false);
                 }}
-                className={`w-full px-4 py-2.5 flex items-center gap-3 hover:bg-slate-700 transition-colors ${
-                  icon === iconKey
+                className={`w-full px-4 py-2.5 flex items-center gap-3 hover:bg-slate-700 transition-colors ${icon === iconKey
                     ? "bg-blue-600/20 text-blue-400"
                     : "text-white"
-                }`}
+                  }`}
               >
                 <div
-                  className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                    icon === iconKey ? "bg-blue-600/30" : "bg-slate-700"
-                  }`}
+                  className={`w-8 h-8 rounded-lg flex items-center justify-center ${icon === iconKey ? "bg-blue-600/30" : "bg-slate-700"
+                    }`}
                 >
                   <DynamicIcon
                     name={iconKey}
@@ -745,11 +737,10 @@ const IconSelector: React.FC<IconSelectorProps> = ({
           key={t}
           type="button"
           onClick={() => setActiveTab(t)}
-          className={`flex-1 py-2.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${
-            activeTab === t
+          className={`flex-1 py-2.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${activeTab === t
               ? "bg-slate-800 text-white"
               : "text-slate-500 hover:text-slate-300"
-          }`}
+            }`}
         >
           {t === "icon" && <Bookmark className="w-3 h-3" />}
           {t === "url" && <LinkIcon className="w-3 h-3" />}
@@ -770,9 +761,8 @@ const IconSelector: React.FC<IconSelectorProps> = ({
       {activeTab === "url" && (
         <div className="w-full space-y-3">
           <div
-            className={`flex items-center gap-3 bg-slate-800 border ${
-              iconUrlError ? "border-red-500" : "border-white/10"
-            } rounded-xl px-4 py-3`}
+            className={`flex items-center gap-3 bg-slate-800 border ${iconUrlError ? "border-red-500" : "border-white/10"
+              } rounded-xl px-4 py-3`}
           >
             <LinkIcon className="w-5 h-5 text-slate-500" />
             <input
