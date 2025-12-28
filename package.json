@@ -8,8 +8,8 @@
     "dev:backend": "node --watch src/server.js",
     "dev:frontend": "pnpm --dir frontend dev",
     "dev": "concurrently \"pnpm dev:backend\" \"pnpm dev:frontend\"",
-    "docker:build": "docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/incari/docker-dashboard:latest .",
-    "docker:push": "docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/incari/docker-dashboard:latest --push .",
+    "docker:build": "docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/incari/docker-dashboard:main .",
+    "docker:push": "docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/incari/docker-dashboard:main --push .",
     "docker:login": "gh auth token | docker login ghcr.io -u incari --password-stdin"
   },
   "dependencies": {
