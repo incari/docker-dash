@@ -42,7 +42,11 @@ export const ShortcutCard: React.FC<ExtendedShortcutCardProps> = ({
 
   if (shortcut.url) {
     link = shortcut.url;
-    subtitle = "Custom URL";
+    // Display the URL with ellipsis if too long
+    const maxLength = 40;
+    subtitle = shortcut.url.length > maxLength
+      ? shortcut.url.substring(0, maxLength) + "..."
+      : shortcut.url;
   } else if (shortcut.port) {
     if ((shortcut as any).use_tailscale && tailscaleIP) {
       link = `http://${tailscaleIP}:${shortcut.port}`;
@@ -233,7 +237,7 @@ export const ShortcutCard: React.FC<ExtendedShortcutCardProps> = ({
 
       {/* Description - Below image on mobile, in card on desktop */}
       {shortcut.description && (
-        <p className="text-slate-400 text-xs sm:text-sm leading-relaxed line-clamp-2 sm:line-clamp-3 px-4 sm:px-0 sm:mx-5 md:mx-6 my-4 sm:mb-4 md:mb-6 flex-1">
+        <p className="text-slate-400 text-xs sm:text-sm leading-relaxed line-clamp-2 sm:line-clamp-3 px-4 sm:px-0 sm:mx-5 md:mx-6 mb-3 sm:mb-3 flex-1">
           {shortcut.description}
         </p>
       )}

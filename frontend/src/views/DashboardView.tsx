@@ -19,6 +19,9 @@ import {
 
 import {
     ShortcutCard,
+    ShortcutCardCompact,
+    ShortcutCardIcon,
+    ShortcutCardList,
     SortableShortcutCard,
     SortableSection,
     DroppableSection,
@@ -29,6 +32,8 @@ import type {
     Shortcut,
     Section,
     TailscaleInfo,
+    ViewMode,
+    MobileColumns,
 } from "../types";
 
 interface TailscaleInfoExtended extends TailscaleInfo {
@@ -63,6 +68,8 @@ interface DashboardViewProps {
     handleRestart: (id: string) => void;
     handleToggleFavorite: (id: number, currentStatus: boolean | number) => void;
     setView: (view: "dashboard" | "add") => void;
+    viewMode: ViewMode;
+    mobileColumns: MobileColumns;
 }
 
 export function DashboardView({
@@ -93,14 +100,32 @@ export function DashboardView({
     handleRestart,
     handleToggleFavorite,
     setView,
+    viewMode,
+    mobileColumns,
 }: DashboardViewProps) {
+    // Get the appropriate card component based on view mode
+    const getCardComponent = () => {
+        switch (viewMode) {
+            case "compact":
+                return ShortcutCardCompact;
+            case "icon":
+                return ShortcutCardIcon;
+            case "list":
+                return ShortcutCardList;
+            default:
+                return ShortcutCard;
+        }
+    };
+
     const renderShortcutCard = (s: Shortcut, isEditModeActive: boolean) => {
         const container = s.container_id
             ? containers.find((c) => c.id === s.container_id)
             : null;
+
+        const BaseCardComponent = getCardComponent();
         const CardComponent = isEditModeActive
             ? SortableShortcutCard
-            : ShortcutCard;
+            : BaseCardComponent;
 
         return (
             <CardComponent
@@ -124,6 +149,22 @@ export function DashboardView({
         // Filter out the currently dragged item
         const visibleShortcuts = shortcuts.filter(s => s.id !== activeId);
         return visibleShortcuts.length === 0;
+    };
+
+    // Get grid classes based on view mode and mobile columns
+    const getGridClasses = () => {
+        const mobileClass = mobileColumns === 1 ? "grid-cols-1" : "grid-cols-2";
+
+        switch (viewMode) {
+            case "compact":
+                return `grid ${mobileClass} md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4`;
+            case "icon":
+                return `grid ${mobileClass} md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4`;
+            case "list":
+                return `grid grid-cols-1 gap-3`;
+            default:
+                return `grid ${mobileClass} md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6`;
+        }
     };
 
     return (
@@ -214,7 +255,7 @@ export function DashboardView({
                                                     isActive={!!activeId}
                                                 />
                                             ) : (
-                                                <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                                                <div className={getGridClasses()}>
                                                     {unsectionedShortcuts
                                                         .filter(s => s.id !== activeId)
                                                         .map((s) => renderShortcutCard(s, isEditMode))
@@ -227,7 +268,7 @@ export function DashboardView({
 
                             {/* Unsectioned without header if no sections */}
                             {unsectionedShortcuts.length > 0 && sections.length === 0 && (
-                                <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                                <div className={getGridClasses()}>
                                     {unsectionedShortcuts.map((s) =>
                                         renderShortcutCard(s, isEditMode)
                                     )}
@@ -268,7 +309,7 @@ export function DashboardView({
                                                             isActive={!!activeId}
                                                         />
                                                     ) : (
-                                                        <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                                                        <div className={getGridClasses()}>
                                                             {sectionShortcuts
                                                                 .filter(s => s.id !== activeId)
                                                                 .map((s) => renderShortcutCard(s, isEditMode))

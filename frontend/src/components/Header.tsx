@@ -1,4 +1,6 @@
 import { Download, LayoutDashboard, Layers, Edit3 } from "lucide-react";
+import { ViewSelector } from "./ViewSelector";
+import type { ViewMode, MobileColumns } from "../types";
 
 interface HeaderProps {
     view: "dashboard" | "add";
@@ -7,6 +9,10 @@ interface HeaderProps {
     handleInstallClick: () => void;
     isEditMode: boolean;
     setIsEditMode: (mode: boolean) => void;
+    viewMode: ViewMode;
+    mobileColumns: MobileColumns;
+    onViewModeChange: (mode: ViewMode) => void;
+    onMobileColumnsChange: (columns: MobileColumns) => void;
 }
 
 export function Header({
@@ -16,6 +22,10 @@ export function Header({
     handleInstallClick,
     isEditMode,
     setIsEditMode,
+    viewMode,
+    mobileColumns,
+    onViewModeChange,
+    onMobileColumnsChange,
 }: HeaderProps) {
     return (
         <header className="bg-slate-900/50 backdrop-blur-md border-b border-white/5 sticky top-0 z-40">
@@ -64,22 +74,30 @@ export function Header({
                             }`}
                     >
                         <Layers className="w-4 h-4" />
-                        <span className="hidden sm:inline">Management</span>
+                        <span className="hidden sm:inline">Shortcuts</span>
                     </button>
                     {view === "dashboard" && (
-                        <button
-                            onClick={() => setIsEditMode(!isEditMode)}
-                            className={`flex items-center gap-1 sm:gap-2 text-xs sm:text-sm font-medium transition-colors px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg ${isEditMode
-                                    ? "text-green-400 bg-green-500/10"
-                                    : "text-slate-400 hover:text-white hover:bg-slate-800"
-                                }`}
-                            title={isEditMode ? "Done Editing" : "Edit Dashboard"}
-                        >
-                            <Edit3 className="w-4 h-4" />
-                            <span className="hidden sm:inline">
-                                {isEditMode ? "Done" : "Edit"}
-                            </span>
-                        </button>
+                        <>
+                            <ViewSelector
+                                viewMode={viewMode}
+                                mobileColumns={mobileColumns}
+                                onViewModeChange={onViewModeChange}
+                                onMobileColumnsChange={onMobileColumnsChange}
+                            />
+                            <button
+                                onClick={() => setIsEditMode(!isEditMode)}
+                                className={`flex items-center gap-1 sm:gap-2 text-xs sm:text-sm font-medium transition-colors px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg ${isEditMode
+                                        ? "text-green-400 bg-green-500/10"
+                                        : "text-slate-400 hover:text-white hover:bg-slate-800"
+                                    }`}
+                                title={isEditMode ? "Done Reordering" : "Reorder Dashboard"}
+                            >
+                                <Edit3 className="w-4 h-4" />
+                                <span className="hidden sm:inline">
+                                    {isEditMode ? "Done" : "Reorder"}
+                                </span>
+                            </button>
+                        </>
                     )}
                 </div>
             </div>

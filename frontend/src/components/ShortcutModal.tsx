@@ -769,7 +769,7 @@ const IconSelector: React.FC<IconSelectorProps> = ({
               type="text"
               className="bg-transparent flex-1 focus:outline-none text-white text-sm"
               placeholder="Enter or paste image URL..."
-              value={activeTab === "url" ? icon : ""}
+              value={activeTab === "url" && (icon.startsWith("http") || icon.includes("/")) ? icon : ""}
               onChange={(e) => {
                 setIcon(e.target.value);
                 setIconUrlError("");

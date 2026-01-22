@@ -17,6 +17,8 @@ import type {
   DockerContainer,
   Shortcut,
   Section,
+  ViewMode,
+  MobileColumns,
 } from "./types";
 import type {
   ConfirmModalState,
@@ -58,6 +60,8 @@ function App() {
     isOpen: false,
     section: null,
   });
+  const [viewMode, setViewMode] = useState<ViewMode>("default");
+  const [mobileColumns, setMobileColumns] = useState<MobileColumns>(2);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -260,7 +264,8 @@ function App() {
     if (port) formData.append("port", String(port));
     formData.append("container_id", container.id);
     formData.append("icon", "Server");
-    if (container.description?.trim()) {
+    // Description is optional - only add if it exists and is not empty
+    if (container.description && container.description.trim()) {
       formData.append("description", container.description.trim());
     }
 
@@ -323,6 +328,10 @@ function App() {
         handleInstallClick={handleInstallClick}
         isEditMode={isEditMode}
         setIsEditMode={setIsEditMode}
+        viewMode={viewMode}
+        mobileColumns={mobileColumns}
+        onViewModeChange={setViewMode}
+        onMobileColumnsChange={setMobileColumns}
       />
 
       <main className="container mx-auto px-6 py-8">
@@ -356,6 +365,8 @@ function App() {
               handleRestart={handleRestart}
               handleToggleFavorite={handleToggleFavorite}
               setView={setView}
+              viewMode={viewMode}
+              mobileColumns={mobileColumns}
             />
           ) : (
             <ManagementView
