@@ -42,7 +42,10 @@ export function Header({
                         className="flex items-center gap-2 sm:gap-3 hover:opacity-80 transition-opacity cursor-pointer"
                     >
                         <div
-                            className="p-1.5 sm:p-2 rounded-lg bg-blue-600"
+                            className="p-1.5 sm:p-2 rounded-lg"
+                            style={{
+                                backgroundColor: "var(--color-primary)"
+                            }}
                         >
                             <img
                                 src="/dockericon.png"
@@ -86,10 +89,7 @@ export function Header({
                     </button>
                 </div>
                 <div className="flex items-center gap-1 sm:gap-2 md:gap-4">
-                    <ThemeSelector
-                        currentTheme={currentTheme}
-                        onThemeChange={onThemeChange}
-                    />
+                   
                     {showInstallPrompt && (
                         <button
                             onClick={handleInstallClick}
@@ -123,6 +123,10 @@ export function Header({
                             </button>
                         </>
                     )}
+                     <ThemeSelector
+                        currentTheme={currentTheme}
+                        onThemeChange={onThemeChange}
+                    />
                 </div>
             </div>
         </header>

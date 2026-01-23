@@ -1,5 +1,5 @@
 import React from "react";
-import { Settings, Trash2, Star, GripVertical } from "lucide-react";
+import { Settings, Trash2, Star, GripVertical, Play, Square, RefreshCw } from "lucide-react";
 import type { ShortcutCardProps } from "../types";
 import { DynamicIcon } from "./DynamicIcon";
 
@@ -18,6 +18,9 @@ export const ShortcutCardIcon: React.FC<ExtendedShortcutCardProps> = ({
   tailscaleIP,
   onEdit,
   onDelete,
+  onStart,
+  onStop,
+  onRestart,
   onToggleFavorite,
   dragHandleProps,
   isEditMode,
@@ -105,25 +108,27 @@ export const ShortcutCardIcon: React.FC<ExtendedShortcutCardProps> = ({
           <div className={`absolute top-2 right-2 w-2 h-2 rounded-full ${isRunning ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]" : "bg-red-500"}`} />
         )}
 
-        {/* Star button */}
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggleFavorite();
-          }}
-          className="absolute bottom-2 right-2 p-1.5 rounded-lg bg-slate-900/80 backdrop-blur-sm transition-colors"
-          style={{
-            color: shortcut.is_favorite ? "var(--color-primary)" : "rgb(148, 163, 184)"
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.color = "var(--color-primary)";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.color = shortcut.is_favorite ? "var(--color-primary)" : "rgb(148, 163, 184)";
-          }}
-        >
-          <Star className={`w-4 h-4 ${shortcut.is_favorite ? "fill-current" : ""}`} />
-        </button>
+        {/* Star button - Only visible in edit/reorder mode */}
+        {isEditMode && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleFavorite();
+            }}
+            className="absolute bottom-2 right-2 p-1.5 rounded-lg bg-slate-900/80 backdrop-blur-sm transition-colors"
+            style={{
+              color: shortcut.is_favorite ? "var(--color-primary)" : "rgb(148, 163, 184)"
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.color = "var(--color-primary)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.color = shortcut.is_favorite ? "var(--color-primary)" : "rgb(148, 163, 184)";
+            }}
+          >
+            <Star className={`w-4 h-4 ${shortcut.is_favorite ? "fill-current" : ""}`} />
+          </button>
+        )}
       </div>
 
       {/* Name */}
@@ -138,13 +143,57 @@ export const ShortcutCardIcon: React.FC<ExtendedShortcutCardProps> = ({
 
       {/* Action Buttons - Hidden in edit mode */}
       {!isEditMode && (
-        <div className="absolute inset-0 bg-slate-950/95 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
-          <button onClick={(e) => { e.stopPropagation(); onEdit(); }} className="p-3 rounded-full bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition-all" title="Edit">
-            <Settings className="w-5 h-5" />
-          </button>
-          <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="p-3 rounded-full bg-slate-800 text-slate-400 hover:text-red-400 hover:bg-slate-700 transition-all" title="Delete">
-            <Trash2 className="w-5 h-5" />
-          </button>
+        <div className="absolute inset-0 bg-slate-950/95 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-3">
+          {/* Container controls */}
+          {container && (
+            <div className="flex gap-3">
+              {isRunning ? (
+                <>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onStop();
+                    }}
+                    className="p-3 rounded-full bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white transition-all border border-red-500/20"
+                    title="Stop Container"
+                  >
+                    <Square className="w-5 h-5" fill="currentColor" />
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onRestart();
+                    }}
+                    className="p-3 rounded-full bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500 hover:text-white transition-all border border-yellow-500/20"
+                    title="Restart Container"
+                  >
+                    <RefreshCw className="w-5 h-5" />
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onStart();
+                  }}
+                  className="p-3 rounded-full bg-green-500/10 text-green-400 hover:bg-green-500 hover:text-white transition-all border border-green-500/20"
+                  title="Start Container"
+                >
+                  <Play className="w-5 h-5" fill="currentColor" />
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Edit and Delete */}
+          <div className="flex gap-3">
+            <button onClick={(e) => { e.stopPropagation(); onEdit(); }} className="p-3 rounded-full bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition-all" title="Edit">
+              <Settings className="w-5 h-5" />
+            </button>
+            <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="p-3 rounded-full bg-slate-800 text-slate-400 hover:text-red-400 hover:bg-slate-700 transition-all" title="Delete">
+              <Trash2 className="w-5 h-5" />
+            </button>
+          </div>
         </div>
       )}
     </div>

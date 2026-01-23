@@ -38,10 +38,10 @@ export const ShortcutCardList: React.FC<ExtendedShortcutCardProps> = ({
   } else if (shortcut.port) {
     if ((shortcut as any).use_tailscale && tailscaleIP) {
       link = `http://${tailscaleIP}:${shortcut.port}`;
-      subtitle = `Tailscale :${shortcut.port}`;
+      subtitle = `Tailscale 📎 ${shortcut.port}`;
     } else {
       link = `http://${window.location.hostname}:${shortcut.port}`;
-      subtitle = `Port :${shortcut.port}`;
+      subtitle = `📎 ${shortcut.port}`;
     }
   } else if (container) {
     subtitle = "Container Only";
@@ -114,23 +114,25 @@ export const ShortcutCardList: React.FC<ExtendedShortcutCardProps> = ({
 
         {/* Content */}
         <div className="min-w-0 flex-1">
-          <h3
-            className="font-bold text-base leading-tight truncate"
-            style={{ color: "var(--color-background-contrast)" }}
-          >
-            {shortcut.name}
-          </h3>
+          <div className="flex items-center gap-1.5">
+            {container && (
+              <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${isRunning ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]" : "bg-red-500"}`} />
+            )}
+            <h3
+              className="font-bold text-base leading-tight truncate"
+              style={{ color: "var(--color-background-contrast)" }}
+            >
+              {shortcut.name}
+            </h3>
+          </div>
           <div className="flex items-center gap-2 mt-1">
             <span
               className="text-xs font-mono truncate"
               style={{ color: "rgba(var(--color-background-contrast), 0.6)" }}
-              title={shortcut.url && shortcut.url.length > 60 ? shortcut.url : undefined}
+              title={link || undefined}
             >
               {subtitle}
             </span>
-            {container && (
-              <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${isRunning ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]" : "bg-red-500"}`} />
-            )}
           </div>
           {shortcut.description && (
             <p className="text-slate-500 text-xs mt-1 line-clamp-1">{shortcut.description}</p>
@@ -139,25 +141,27 @@ export const ShortcutCardList: React.FC<ExtendedShortcutCardProps> = ({
 
         {/* Actions */}
         <div className="flex items-center gap-2 shrink-0">
-          {/* Star */}
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggleFavorite();
-            }}
-            className="p-2 transition-colors"
-            style={{
-              color: shortcut.is_favorite ? "var(--color-primary)" : "rgb(100, 116, 139)"
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.color = "var(--color-primary)";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.color = shortcut.is_favorite ? "var(--color-primary)" : "rgb(100, 116, 139)";
-            }}
-          >
-            <Star className={`w-5 h-5 ${shortcut.is_favorite ? "fill-current" : ""}`} />
-          </button>
+          {/* Star - Only visible in edit/reorder mode */}
+          {isEditMode && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleFavorite();
+              }}
+              className="p-2 transition-colors"
+              style={{
+                color: shortcut.is_favorite ? "var(--color-primary)" : "rgb(100, 116, 139)"
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.color = "var(--color-primary)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = shortcut.is_favorite ? "var(--color-primary)" : "rgb(100, 116, 139)";
+              }}
+            >
+              <Star className={`w-5 h-5 ${shortcut.is_favorite ? "fill-current" : ""}`} />
+            </button>
+          )}
 
           {/* Container controls */}
           {!isEditMode && container && (

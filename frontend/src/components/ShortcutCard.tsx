@@ -50,10 +50,10 @@ export const ShortcutCard: React.FC<ExtendedShortcutCardProps> = ({
   } else if (shortcut.port) {
     if ((shortcut as any).use_tailscale && tailscaleIP) {
       link = `http://${tailscaleIP}:${shortcut.port}`;
-      subtitle = `Tailscale :${shortcut.port}`;
+      subtitle = `Tailscale 📎 ${shortcut.port}`;
     } else {
       link = `http://${window.location.hostname}:${shortcut.port}`;
-      subtitle = `Port :${shortcut.port}`;
+      subtitle = `📎 ${shortcut.port}`;
     }
   } else if (container) {
     subtitle = "Container Only";
@@ -146,55 +146,62 @@ export const ShortcutCard: React.FC<ExtendedShortcutCardProps> = ({
 
         {/* Overlay: Title, Subtitle, and Star */}
         <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/60 to-transparent flex flex-col justify-between p-4">
-          {/* Star in top-right */}
-          <div className="flex justify-end">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onToggleFavorite();
-              }}
-              className="p-2 rounded-lg bg-slate-900/80 backdrop-blur-sm transition-colors"
-              style={{
-                color: shortcut.is_favorite ? "var(--color-primary)" : "rgb(148, 163, 184)"
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.color = "var(--color-primary)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.color = shortcut.is_favorite ? "var(--color-primary)" : "rgb(148, 163, 184)";
-              }}
-              title={
-                shortcut.is_favorite
-                  ? "Remove from Favorites"
-                  : "Add to Favorites"
-              }
-            >
-              <Star
-                className={`w-5 h-5 ${
-                  shortcut.is_favorite ? "fill-current" : ""
-                }`}
-              />
-            </button>
-          </div>
+          {/* Star in top-right - Only visible in edit/reorder mode */}
+          {isEditMode && (
+            <div className="flex justify-end">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleFavorite();
+                }}
+                className="p-2 rounded-lg bg-slate-900/80 backdrop-blur-sm transition-colors"
+                style={{
+                  color: shortcut.is_favorite ? "var(--color-primary)" : "rgb(148, 163, 184)"
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.color = "var(--color-primary)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.color = shortcut.is_favorite ? "var(--color-primary)" : "rgb(148, 163, 184)";
+                }}
+                title={
+                  shortcut.is_favorite
+                    ? "Remove from Favorites"
+                    : "Add to Favorites"
+                }
+              >
+                <Star
+                  className={`w-5 h-5 ${
+                    shortcut.is_favorite ? "fill-current" : ""
+                  }`}
+                />
+              </button>
+            </div>
+          )}
 
           {/* Title and Subtitle at bottom */}
           <div>
-            <h3 className="text-white font-bold text-base leading-tight uppercase truncate mb-1.5">
-              {shortcut.name}
-            </h3>
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-mono text-slate-300 bg-slate-950/80 backdrop-blur-sm px-2 py-1 rounded border border-white/10 tracking-wider uppercase truncate">
-                {subtitle}
-              </span>
+            <div className="flex items-center gap-1.5 mb-1.5">
               {container && (
                 <div
-                  className={`w-2 h-2 rounded-full ${
+                  className={`w-2 h-2 rounded-full shrink-0 ${
                     isRunning
                       ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]"
                       : "bg-red-500"
                   }`}
                 />
               )}
+              <h3 className="text-white font-bold text-base leading-tight uppercase truncate">
+                {shortcut.name}
+              </h3>
+            </div>
+            <div className="flex items-center gap-2">
+              <span
+                className="text-[10px] font-mono text-slate-300 bg-slate-950/80 backdrop-blur-sm px-2 py-1 rounded border border-white/10 tracking-wider uppercase truncate"
+                title={link || undefined}
+              >
+                {subtitle}
+              </span>
             </div>
           </div>
         </div>
@@ -214,16 +221,27 @@ export const ShortcutCard: React.FC<ExtendedShortcutCardProps> = ({
 
         {/* Title and Subtitle */}
         <div className="min-w-0 flex-1">
-          <h3
-            className="font-bold text-sm sm:text-base md:text-lg leading-tight transition-colors uppercase truncate"
-            style={{
-              color: "var(--color-background-contrast)"
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.color = "var(--color-primary)"}
-            onMouseLeave={(e) => e.currentTarget.style.color = "var(--color-background-contrast)"}
-          >
-            {shortcut.name}
-          </h3>
+          <div className="flex items-center gap-1.5">
+            {container && (
+              <div
+                className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                  isRunning
+                    ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]"
+                    : "bg-red-500"
+                }`}
+              />
+            )}
+            <h3
+              className="font-bold text-sm sm:text-base md:text-lg leading-tight transition-colors uppercase truncate"
+              style={{
+                color: "var(--color-background-contrast)"
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.color = "var(--color-primary)"}
+              onMouseLeave={(e) => e.currentTarget.style.color = "var(--color-background-contrast)"}
+            >
+              {shortcut.name}
+            </h3>
+          </div>
           <div className="flex items-center gap-1.5 sm:gap-2 mt-1 sm:mt-1.5">
             <span
               className="text-[10px] sm:text-xs font-mono px-2 sm:px-2.5 py-0.5 sm:py-1 rounded border border-white/5 tracking-wider uppercase truncate"
@@ -231,46 +249,39 @@ export const ShortcutCard: React.FC<ExtendedShortcutCardProps> = ({
                 color: "rgba(var(--color-background-contrast), 0.6)",
                 backgroundColor: "rgba(0, 0, 0, 0.3)"
               }}
-              title={shortcut.url && shortcut.url.length > 40 ? shortcut.url : undefined}
+              title={link || undefined}
             >
               {subtitle}
             </span>
-            {container && (
-              <div
-                className={`w-1.5 h-1.5 rounded-full ${
-                  isRunning
-                    ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]"
-                    : "bg-red-500"
-                }`}
-              />
-            )}
           </div>
         </div>
 
-        {/* Favorite Star */}
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggleFavorite();
-          }}
-          className="p-1.5 sm:p-2 transition-colors shrink-0"
-          style={{
-            color: shortcut.is_favorite ? "var(--color-primary)" : "rgb(100, 116, 139)"
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.color = "var(--color-primary)";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.color = shortcut.is_favorite ? "var(--color-primary)" : "rgb(100, 116, 139)";
-          }}
-          title={
-            shortcut.is_favorite ? "Remove from Favorites" : "Add to Favorites"
-          }
-        >
-          <Star
-            className={`w-5 h-5 ${shortcut.is_favorite ? "fill-current" : ""}`}
-          />
-        </button>
+        {/* Favorite Star - Only visible in edit/reorder mode */}
+        {isEditMode && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleFavorite();
+            }}
+            className="p-1.5 sm:p-2 transition-colors shrink-0"
+            style={{
+              color: shortcut.is_favorite ? "var(--color-primary)" : "rgb(100, 116, 139)"
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.color = "var(--color-primary)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.color = shortcut.is_favorite ? "var(--color-primary)" : "rgb(100, 116, 139)";
+            }}
+            title={
+              shortcut.is_favorite ? "Remove from Favorites" : "Add to Favorites"
+            }
+          >
+            <Star
+              className={`w-5 h-5 ${shortcut.is_favorite ? "fill-current" : ""}`}
+            />
+          </button>
+        )}
       </div>
 
       {/* Description - Below image on mobile, in card on desktop */}
