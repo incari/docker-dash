@@ -4,8 +4,8 @@
   "description": "Minimal Docker Dashboard for managing containers and shortcuts",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0f172a",
-  "theme_color": "#3b82f6",
+  "background_color": "#2563eb",
+  "theme_color": "#2563eb",
   "orientation": "any",
   "icons": [
     {

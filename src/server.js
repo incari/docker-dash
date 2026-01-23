@@ -85,6 +85,17 @@ db.exec(`
   )
 `);
 
+db.exec(`
+  CREATE TABLE IF NOT EXISTS settings (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    theme_primary TEXT DEFAULT '#3b82f6',
+    theme_background TEXT DEFAULT '#0f172a',
+    view_mode TEXT DEFAULT 'default',
+    mobile_columns INTEGER DEFAULT 2,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )
+`);
+
 // Robust Migration Check
 const tableInfo = db.pragma('table_info(shortcuts)');
 
@@ -676,6 +687,85 @@ app.put('/api/shortcuts/:id/section', (req, res) => {
   } catch (error) {
     console.error('Failed to update shortcut section:', error);
     res.status(500).json({ error: 'Failed to update shortcut section' });
+  }
+});
+
+// ===== SETTINGS API =====
+
+// Get user settings
+app.get('/api/settings', (req, res) => {
+  try {
+    let settings = db.prepare('SELECT * FROM settings WHERE id = 1').get();
+
+    // If no settings exist, create default settings
+    if (!settings) {
+      db.prepare(`
+        INSERT INTO settings (id, theme_primary, theme_background, view_mode, mobile_columns)
+        VALUES (1, '#3b82f6', '#0f172a', 'default', 2)
+      `).run();
+      settings = db.prepare('SELECT * FROM settings WHERE id = 1').get();
+    }
+
+    res.json(settings);
+  } catch (error) {
+    console.error('Failed to fetch settings:', error);
+    res.status(500).json({ error: 'Failed to fetch settings' });
+  }
+});
+
+// Update user settings
+app.put('/api/settings', (req, res) => {
+  const { theme_primary, theme_background, view_mode, mobile_columns } = req.body;
+
+  try {
+    // Ensure settings row exists
+    const existing = db.prepare('SELECT id FROM settings WHERE id = 1').get();
+
+    if (!existing) {
+      db.prepare(`
+        INSERT INTO settings (id, theme_primary, theme_background, view_mode, mobile_columns)
+        VALUES (1, ?, ?, ?, ?)
+      `).run(
+        theme_primary || '#3b82f6',
+        theme_background || '#0f172a',
+        view_mode || 'default',
+        mobile_columns || 2
+      );
+    } else {
+      const updates = [];
+      const values = [];
+
+      if (theme_primary !== undefined) {
+        updates.push('theme_primary = ?');
+        values.push(theme_primary);
+      }
+
+      if (theme_background !== undefined) {
+        updates.push('theme_background = ?');
+        values.push(theme_background);
+      }
+
+      if (view_mode !== undefined) {
+        updates.push('view_mode = ?');
+        values.push(view_mode);
+      }
+
+      if (mobile_columns !== undefined) {
+        updates.push('mobile_columns = ?');
+        values.push(mobile_columns);
+      }
+
+      if (updates.length > 0) {
+        updates.push('updated_at = CURRENT_TIMESTAMP');
+        db.prepare(`UPDATE settings SET ${updates.join(', ')} WHERE id = 1`).run(...values);
+      }
+    }
+
+    const settings = db.prepare('SELECT * FROM settings WHERE id = 1').get();
+    res.json(settings);
+  } catch (error) {
+    console.error('Failed to update settings:', error);
+    res.status(500).json({ error: 'Failed to update settings' });
   }
 });
 

@@ -6,13 +6,40 @@ A modern, responsive dashboard for managing your Docker containers. Create short
 
 ## Features
 
--   **Container Management**: View running containers, Start/Stop/Restart control.
--   **Shortcuts System**: Create favorites linking to specific ports or custom URLs.
--   **Organization**: Group shortcuts into collapsible sections.
--   **Drag & Drop**: Intuitive drag-and-drop interface for reordering shortcuts and sections (optimized for mobile & desktop).
--   **Tailscale Integration**: Optional support for detecting Tailscale IP addresses.
--   **Responsive Design**: Mobile-friendly interface with touch support.
--   **PWA Support**: Installable as a Progressive Web App.
+### Container Management
+-   **Real-time Container Discovery**: Automatically detects and displays all running Docker containers on your server
+-   **Container Controls**: Start, Stop, and Restart containers directly from the dashboard
+-   **Quick Add from Containers**: Star icon on running containers to instantly create shortcuts
+-   **Port Detection**: Automatically detects exposed ports from running containers
+
+### Smart Shortcuts System
+-   **Flexible URL Options**:
+    -   Link to container ports (auto-detects server IP)
+    -   Use custom URLs for external services
+    -   Tailscale IP detection for secure remote access
+-   **Customizable Appearance**:
+    -   Choose from icon library (Lucide React icons)
+    -   Use custom image URLs
+    -   Upload your own images
+    -   Custom names and descriptions
+-   **Organization**: Group shortcuts into collapsible sections with drag-and-drop support
+
+### Advanced Features
+-   **Tailscale Integration**:
+    -   Automatically detects Tailscale IP addresses when using host network mode
+    -   Perfect for secure remote access to your homelab/server
+    -   Works seamlessly with Unraid and other Linux hosts
+-   **Drag & Drop Interface**:
+    -   Reorder shortcuts within sections
+    -   Move shortcuts between sections
+    -   Reorganize sections
+    -   Optimized for both mobile touch and desktop mouse interactions
+-   **Responsive Design**:
+    -   Mobile-first design with touch-friendly controls
+    -   Desktop hover actions for quick access
+    -   Adaptive layouts for all screen sizes
+-   **PWA Support**: Install as a Progressive Web App on mobile devices or desktop
+-   **Persistent Storage**: SQLite database for reliable data persistence across restarts
 
 ## Prerequisites
 
@@ -70,18 +97,80 @@ You can configure the application using environment variables. Create a `.env` f
 
 ## Running with Docker
 
-You can run the entire application using Docker Compose.
+### Using Docker Compose (Recommended)
 
-1.  **Start the container:**
+Create a `docker-compose.yml` file:
 
-    ```bash
-    docker-compose up -d
-    ```
+```yaml
+services:
+  docker-dashboard:
+    image: ghcr.io/incari/docker-dashboard:latest
+    container_name: docker-dashboard
+    restart: unless-stopped
 
-2.  **Access the dashboard:**
-    Open [http://localhost:3080](http://localhost:3080) in your browser.
+    ports:
+      - "3080:3000"
 
-> **Configuration**: Check the `docker-compose.yml` file for volume mappings (data persistence) and network settings (Bridge mode vs Host mode for Tailscale support).
+    volumes:
+      # Mount Docker socket for container access
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Persistent data storage
+      - ./data:/app/data
+
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DB_PATH=/app/data/dashboard.db
+      - UPLOAD_DIR=/app/data/images
+```
+
+Then start the container:
+
+```bash
+docker-compose up -d
+```
+
+Access the dashboard at [http://localhost:3080](http://localhost:3080)
+
+### Using Docker Run
+
+Alternatively, run directly with Docker:
+
+```bash
+docker run -d \
+  --name docker-dashboard \
+  -p 3080:3000 \
+  -v /var/run/docker.sock:/var/run/docker.sock:ro \
+  -v ./data:/app/data \
+  -e NODE_ENV=production \
+  -e PORT=3000 \
+  ghcr.io/incari/docker-dashboard:latest
+```
+
+### Tailscale Support
+
+For Tailscale IP detection (useful on Unraid/Linux hosts), use host network mode:
+
+```yaml
+services:
+  docker-dashboard:
+    image: ghcr.io/incari/docker-dashboard:latest
+    container_name: docker-dashboard
+    restart: unless-stopped
+    network_mode: host  # Use host network for Tailscale detection
+
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./data:/app/data
+
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DB_PATH=/app/data/dashboard.db
+      - UPLOAD_DIR=/app/data/images
+```
+
+> **Note**: With `network_mode: host`, the app will be available at `http://HOST_IP:3000` (not 3080).
 
 ## Tech Stack
 

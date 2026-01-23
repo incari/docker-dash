@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
+import axios from "axios";
 import type { ThemeColors } from "../types/themeTypes";
+import { API_BASE } from "../constants/api";
 
 const DEFAULT_THEME: ThemeColors = {
   primary: "#3b82f6",
@@ -83,14 +85,57 @@ function applyThemeToDOM(theme: ThemeColors) {
 
 export function useTheme() {
   const [theme, setTheme] = useState<ThemeColors>(getInitialTheme);
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  // Fetch theme from database on mount
+  useEffect(() => {
+    const fetchTheme = async () => {
+      try {
+        const response = await axios.get(`${API_BASE}/settings`);
+        const dbTheme: ThemeColors = {
+          primary: response.data.theme_primary,
+          background: response.data.theme_background,
+        };
+        setTheme(dbTheme);
+        applyThemeToDOM(dbTheme);
+        // Also save to localStorage for offline use
+        localStorage.setItem("theme", JSON.stringify(dbTheme));
+      } catch (error) {
+        console.error("Failed to fetch theme from database:", error);
+        // Fallback to localStorage or default
+        const localTheme = getInitialTheme();
+        setTheme(localTheme);
+      } finally {
+        setIsLoaded(true);
+      }
+    };
+
+    fetchTheme();
+  }, []);
 
   useEffect(() => {
+    if (!isLoaded) return;
+
     // Apply theme to DOM
     applyThemeToDOM(theme);
 
-    // Save to localStorage
+    // Save to localStorage for offline use
     localStorage.setItem("theme", JSON.stringify(theme));
-  }, [theme]);
+
+    // Save to database
+    const saveTheme = async () => {
+      try {
+        await axios.put(`${API_BASE}/settings`, {
+          theme_primary: theme.primary,
+          theme_background: theme.background,
+        });
+      } catch (error) {
+        console.error("Failed to save theme to database:", error);
+      }
+    };
+
+    saveTheme();
+  }, [theme, isLoaded]);
 
   const updateTheme = (colors: ThemeColors) => {
     setTheme(colors);
