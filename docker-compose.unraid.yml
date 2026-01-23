@@ -3,9 +3,9 @@ version: '3.8'
 services:
   docker-dashboard:
     build:
-      context: https://github.com/incari/docker-dashboard.git
+      context: https://github.com/incari/docker-dash.git
       dockerfile: Dockerfile
-    image: docker-dashboard:latest
+    image: ghcr.io/incari/docker-dash:latest
     container_name: docker-dashboard
     restart: unless-stopped
     ports:

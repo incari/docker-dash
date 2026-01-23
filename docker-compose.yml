@@ -1,6 +1,6 @@
 services:
   docker-dashboard:
-    image: ghcr.io/incari/docker-dashboard:latest
+    image: ghcr.io/incari/docker-dash:latest
     container_name: docker-dashboard
     restart: unless-stopped
 

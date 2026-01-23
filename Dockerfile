@@ -31,7 +31,7 @@ RUN rm -rf node_modules/better-sqlite3/deps \
 FROM node:22-alpine
 
 # Labels for GitHub Container Registry
-LABEL org.opencontainers.image.source=https://github.com/incari/docker-dashboard
+LABEL org.opencontainers.image.source=https://github.com/incari/docker-dash
 LABEL org.opencontainers.image.description="Docker Dashboard - A web UI for managing Docker containers"
 LABEL org.opencontainers.image.licenses=MIT
 

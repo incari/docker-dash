@@ -2,7 +2,7 @@
 
 A modern, responsive dashboard for managing your Docker containers. Create shortcuts (favorites) for your most used containers, organize them into sections, and access them quickly.
 
-![Docker Dashboard](https://github.com/incari/docker-dashboard/assets/placeholder.png)
+![Docker Dashboard](https://github.com/incari/docker-dash/assets/placeholder.png)
 
 ## Features
 
@@ -52,8 +52,8 @@ A modern, responsive dashboard for managing your Docker containers. Create short
 1.  **Clone the repository:**
 
     ```bash
-    git clone https://github.com/incari/docker-dashboard.git
-    cd docker-dashboard
+    git clone https://github.com/incari/docker-dash.git
+    cd docker-dash
     ```
 
 2.  **Install dependencies:**
@@ -103,9 +103,9 @@ Create a `docker-compose.yml` file:
 
 ```yaml
 services:
-  docker-dashboard:
-    image: ghcr.io/incari/docker-dashboard:latest
-    container_name: docker-dashboard
+  docker-dash:
+    image: ghcr.io/incari/docker-dash:latest
+    container_name: docker-dash
     restart: unless-stopped
 
     ports:
@@ -138,13 +138,13 @@ Alternatively, run directly with Docker:
 
 ```bash
 docker run -d \
-  --name docker-dashboard \
+  --name docker-dash \
   -p 3080:3000 \
   -v /var/run/docker.sock:/var/run/docker.sock:ro \
   -v ./data:/app/data \
   -e NODE_ENV=production \
   -e PORT=3000 \
-  ghcr.io/incari/docker-dashboard:latest
+  ghcr.io/incari/docker-dash:latest
 ```
 
 ### Tailscale Support
@@ -153,9 +153,9 @@ For Tailscale IP detection (useful on Unraid/Linux hosts), use host network mode
 
 ```yaml
 services:
-  docker-dashboard:
-    image: ghcr.io/incari/docker-dashboard:latest
-    container_name: docker-dashboard
+  docker-dash:
+    image: ghcr.io/incari/docker-dash:latest
+    container_name: docker-dash
     restart: unless-stopped
     network_mode: host  # Use host network for Tailscale detection
 
