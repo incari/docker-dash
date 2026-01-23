@@ -50,9 +50,9 @@ export const ShortcutCardList: React.FC<ExtendedShortcutCardProps> = ({
   const renderIcon = () => {
     if (shortcut.icon && (shortcut.icon.startsWith("http") || shortcut.icon.includes("/"))) {
       const src = shortcut.icon.startsWith("http") ? shortcut.icon : `/${shortcut.icon}`;
-      return <img src={src} alt={shortcut.name} className="w-8 h-8 object-cover rounded-lg" />;
+      return <img src={src} alt={shortcut.name} className="w-full h-full object-cover" />;
     }
-    return <DynamicIcon name={shortcut.icon || "Server"} className="w-6 h-6 text-blue-400" />;
+    return <DynamicIcon name={shortcut.icon || "Server"} className="w-full h-full" style={{ color: "var(--color-primary)" }} />;
   };
 
   const handleCardClick = () => {
@@ -65,11 +65,35 @@ export const ShortcutCardList: React.FC<ExtendedShortcutCardProps> = ({
     <div
       {...(isEditMode && dragHandleProps ? dragHandleProps : {})}
       onClick={handleCardClick}
-      className={`group relative bg-slate-900/60 border ${
-        isOver ? "border-blue-500 bg-blue-500/10" : isEditMode ? "border-blue-500/50 hover:border-blue-500" : "border-white/5 hover:border-blue-500/30"
-      } rounded-xl overflow-hidden transition-all duration-300 hover:shadow-lg hover:shadow-blue-500/5 ${
+      className={`group relative border rounded-xl overflow-hidden transition-all duration-300 ${
         isEditMode ? "cursor-grab active:cursor-grabbing" : link ? "cursor-pointer" : "cursor-default"
       }`}
+      style={{
+        backgroundColor: isOver
+          ? "rgba(var(--color-primary-rgb), 0.1)"
+          : "var(--color-card-background)",
+        borderColor: isOver
+          ? "var(--color-primary)"
+          : isEditMode
+          ? "rgba(var(--color-primary-rgb), 0.5)"
+          : "rgba(255, 255, 255, 0.05)",
+        boxShadow: isOver || !isEditMode ? `0 10px 15px -3px rgba(var(--color-primary-rgb), 0.05)` : undefined,
+        color: "var(--color-background-contrast)",
+      }}
+      onMouseEnter={(e) => {
+        if (!isEditMode) {
+          e.currentTarget.style.borderColor = `rgba(var(--color-primary-rgb), 0.3)`;
+        } else {
+          e.currentTarget.style.borderColor = `var(--color-primary)`;
+        }
+      }}
+      onMouseLeave={(e) => {
+        if (!isEditMode) {
+          e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.05)";
+        } else {
+          e.currentTarget.style.borderColor = `rgba(var(--color-primary-rgb), 0.5)`;
+        }
+      }}
     >
       {isEditMode && (
         <div className="absolute top-1/2 -translate-y-1/2 left-2 z-10 p-1.5 rounded-lg bg-slate-900/90 backdrop-blur-sm border border-white/10 pointer-events-none">
@@ -79,15 +103,31 @@ export const ShortcutCardList: React.FC<ExtendedShortcutCardProps> = ({
 
       <div className={`flex items-center gap-4 p-4 ${isEditMode ? "pl-12" : ""}`}>
         {/* Icon */}
-        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center border border-white/5 shrink-0">
+        <div
+          className="w-12 h-12 rounded-xl flex items-center border border-white/5 shrink-0 overflow-hidden"
+          style={{
+            background: `linear-gradient(to bottom right, rgba(var(--color-primary-rgb), 0.2), rgba(var(--color-primary-rgb), 0.05))`
+          }}
+        >
           {renderIcon()}
         </div>
 
         {/* Content */}
         <div className="min-w-0 flex-1">
-          <h3 className="text-white font-bold text-base leading-tight truncate">{shortcut.name}</h3>
+          <h3
+            className="font-bold text-base leading-tight truncate"
+            style={{ color: "var(--color-background-contrast)" }}
+          >
+            {shortcut.name}
+          </h3>
           <div className="flex items-center gap-2 mt-1">
-            <span className="text-xs font-mono text-slate-400 truncate">{subtitle}</span>
+            <span
+              className="text-xs font-mono truncate"
+              style={{ color: "rgba(var(--color-background-contrast), 0.6)" }}
+              title={shortcut.url && shortcut.url.length > 60 ? shortcut.url : undefined}
+            >
+              {subtitle}
+            </span>
             {container && (
               <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${isRunning ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]" : "bg-red-500"}`} />
             )}
@@ -105,9 +145,16 @@ export const ShortcutCardList: React.FC<ExtendedShortcutCardProps> = ({
               e.stopPropagation();
               onToggleFavorite();
             }}
-            className={`p-2 transition-colors ${
-              shortcut.is_favorite ? "text-yellow-400" : "text-slate-500 hover:text-yellow-400"
-            }`}
+            className="p-2 transition-colors"
+            style={{
+              color: shortcut.is_favorite ? "var(--color-primary)" : "rgb(100, 116, 139)"
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.color = "var(--color-primary)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.color = shortcut.is_favorite ? "var(--color-primary)" : "rgb(100, 116, 139)";
+            }}
           >
             <Star className={`w-5 h-5 ${shortcut.is_favorite ? "fill-current" : ""}`} />
           </button>

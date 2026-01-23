@@ -12,7 +12,7 @@ import {
 } from "./components";
 import { DashboardView, ManagementView } from "./views";
 import { API_BASE } from "./constants/api";
-import { useDragAndDrop } from "./hooks";
+import { useDragAndDrop, useTheme } from "./hooks";
 import type {
   DockerContainer,
   Shortcut,
@@ -62,6 +62,9 @@ function App() {
   });
   const [viewMode, setViewMode] = useState<ViewMode>("default");
   const [mobileColumns, setMobileColumns] = useState<MobileColumns>(2);
+
+  // Theme hook
+  const { theme, updateTheme } = useTheme();
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -320,7 +323,10 @@ function App() {
   });
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-200 font-sans selection:bg-blue-500/30 flex flex-col">
+    <div
+      className="min-h-screen text-slate-200 font-sans selection:bg-blue-500/30 flex flex-col"
+      style={{ backgroundColor: theme.background }}
+    >
       <Header
         view={view}
         setView={setView}
@@ -332,6 +338,8 @@ function App() {
         mobileColumns={mobileColumns}
         onViewModeChange={setViewMode}
         onMobileColumnsChange={setMobileColumns}
+        currentTheme={theme}
+        onThemeChange={updateTheme}
       />
 
       <main className="container mx-auto px-6 py-8">

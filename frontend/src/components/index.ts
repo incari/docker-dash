@@ -17,5 +17,6 @@ export { ContainerCard } from "./ContainerCard";
 export { ShortcutModal } from "./ShortcutModal";
 export { SectionModal } from "./SectionModal";
 export { ViewSelector } from "./ViewSelector";
+export { ThemeSelector } from "./ThemeSelector";
 export { Footer } from "./Footer";
 

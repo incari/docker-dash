@@ -32,11 +32,30 @@ export const ContainerCard: React.FC<ContainerCardProps> = ({
     ports.length === 0 ? "No ports" : ports.map((p) => `:${p}`).join(", ");
 
   return (
-    <div className="group relative bg-slate-900/60 border border-white/5 hover:border-green-500/30 rounded-2xl sm:rounded-3xl overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-green-500/5 h-full flex flex-col">
+    <div
+      className="group relative border rounded-2xl sm:rounded-3xl overflow-hidden transition-all duration-300 h-full flex flex-col"
+      style={{
+        backgroundColor: "var(--color-card-background)",
+        borderColor: "rgba(255, 255, 255, 0.05)",
+        boxShadow: "0 25px 50px -12px rgba(var(--color-primary-rgb), 0.05)",
+        color: "var(--color-background-contrast)",
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.borderColor = `rgba(var(--color-primary-rgb), 0.3)`;
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.05)";
+      }}
+    >
       {/* Mobile: Full-width Icon with overlay */}
-      <div className="sm:hidden relative w-full aspect-video bg-gradient-to-br from-green-500/20 to-blue-500/20 flex items-center justify-center">
+      <div
+        className="sm:hidden relative w-full aspect-video flex items-center justify-center"
+        style={{
+          background: `linear-gradient(to bottom right, rgba(var(--color-primary-rgb), 0.2), rgba(var(--color-primary-rgb), 0.05))`
+        }}
+      >
         {/* Server Icon - Full size */}
-        <Server className="w-32 h-32 text-green-400" />
+        <Server className="w-32 h-32" style={{ color: "var(--color-primary)" }} />
 
         {/* Overlay: Title, Subtitle, and Star */}
         <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/60 to-transparent flex flex-col justify-between p-4">
@@ -99,17 +118,38 @@ export const ContainerCard: React.FC<ContainerCardProps> = ({
       {/* Desktop: Horizontal layout (original) */}
       <div className="hidden sm:flex items-start gap-3 sm:gap-4 p-4 sm:p-5 md:p-6">
         {/* Icon - Using Server icon for containers */}
-        <div className="w-14 h-14 md:w-16 md:h-16 rounded-xl sm:rounded-2xl bg-gradient-to-br from-green-500/20 to-blue-500/20 flex items-center justify-center border border-white/5 shrink-0 overflow-hidden">
-          <Server className="w-6 h-6 md:w-7 md:h-7 text-green-400 group-hover:scale-110 transition-transform duration-500" />
+        <div
+          className="w-14 h-14 md:w-16 md:h-16 rounded-xl sm:rounded-2xl flex items-center justify-center border border-white/5 shrink-0 overflow-hidden"
+          style={{
+            background: `linear-gradient(to bottom right, rgba(var(--color-primary-rgb), 0.2), rgba(var(--color-primary-rgb), 0.05))`
+          }}
+        >
+          <Server
+            className="w-6 h-6 md:w-7 md:h-7 group-hover:scale-110 transition-transform duration-500"
+            style={{ color: "var(--color-primary)" }}
+          />
         </div>
 
         {/* Title and Subtitle */}
         <div className="min-w-0 flex-1">
-          <h3 className="text-white font-bold text-sm sm:text-base md:text-lg leading-tight group-hover:text-green-400 transition-colors uppercase truncate">
+          <h3
+            className="font-bold text-sm sm:text-base md:text-lg leading-tight transition-colors uppercase truncate"
+            style={{
+              color: "var(--color-background-contrast)"
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.color = "var(--color-primary)"}
+            onMouseLeave={(e) => e.currentTarget.style.color = "var(--color-background-contrast)"}
+          >
             {container.name}
           </h3>
           <div className="flex items-center gap-1.5 sm:gap-2 mt-1 sm:mt-1.5">
-            <span className="text-[10px] sm:text-xs font-mono text-slate-400 bg-slate-950 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded border border-white/5 tracking-wider uppercase truncate">
+            <span
+              className="text-[10px] sm:text-xs font-mono px-2 sm:px-2.5 py-0.5 sm:py-1 rounded border border-white/5 tracking-wider uppercase truncate"
+              style={{
+                color: "rgba(var(--color-background-contrast), 0.6)",
+                backgroundColor: "rgba(0, 0, 0, 0.3)"
+              }}
+            >
               {portsDisplay}
             </span>
             <div
@@ -129,11 +169,16 @@ export const ContainerCard: React.FC<ContainerCardProps> = ({
               e.stopPropagation();
               onToggleFavorite();
             }}
-            className={`p-1.5 sm:p-2 transition-colors shrink-0 ${
-              isFavorite
-                ? "text-yellow-400 hover:text-yellow-300"
-                : "text-slate-500 hover:text-yellow-400"
-            }`}
+            className="p-1.5 sm:p-2 transition-colors shrink-0"
+            style={{
+              color: isFavorite ? "var(--color-primary)" : "rgb(100, 116, 139)"
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.color = "var(--color-primary)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.color = isFavorite ? "var(--color-primary)" : "rgb(100, 116, 139)";
+            }}
             title={isFavorite ? "Remove from Favorites" : "Add to Favorites"}
           >
             <Star className={`w-5 h-5 ${isFavorite ? "fill-current" : ""}`} />
@@ -144,7 +189,16 @@ export const ContainerCard: React.FC<ContainerCardProps> = ({
               e.stopPropagation();
               onQuickAdd();
             }}
-            className="p-1.5 sm:p-2 transition-colors shrink-0 text-slate-500 hover:text-yellow-400"
+            className="p-1.5 sm:p-2 transition-colors shrink-0"
+            style={{
+              color: "rgb(100, 116, 139)"
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.color = "var(--color-primary)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.color = "rgb(100, 116, 139)";
+            }}
             title="Quick Add to Favorites"
           >
             <Star className="w-5 h-5" />
@@ -154,7 +208,10 @@ export const ContainerCard: React.FC<ContainerCardProps> = ({
 
       {/* Description - Below image on mobile, in card on desktop */}
       {container.description && (
-        <p className="text-slate-400 text-xs sm:text-sm leading-relaxed line-clamp-2 sm:line-clamp-3 px-4 sm:px-0 sm:mx-5 md:mx-6 my-4 sm:mb-4 md:mb-6 flex-1">
+        <p
+          className="text-xs sm:text-sm leading-relaxed line-clamp-2 sm:line-clamp-3 px-4 sm:px-0 sm:mx-5 md:mx-6 my-4 sm:mb-4 md:mb-6 flex-1"
+          style={{ color: "rgba(var(--color-background-contrast), 0.6)" }}
+        >
           {container.description}
         </p>
       )}
