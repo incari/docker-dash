@@ -1,15 +1,15 @@
 {
-  "name": "docker-dashboard",
+  "name": "docker-dash",
   "version": "1.0.0",
-  "description": "Docker Dashboard for managing container shortcuts",
+  "description": "Docker Dashboard for managing containers and shortcuts",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
     "dev:backend": "node --watch src/server.js",
     "dev:frontend": "pnpm --dir frontend dev",
     "dev": "concurrently \"pnpm dev:backend\" \"pnpm dev:frontend\"",
-    "docker:build": "docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/incari/docker-dash:latest .",
-    "docker:push": "docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/incari/docker-dash:latest --push .",
+    "docker:build": "docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/incari/docker-dash:latest -t ghcr.io/incari/docker-dashboard:latest .",
+    "docker:push": "docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/incari/docker-dash:latest -t ghcr.io/incari/docker-dashboard:latest --push .",
     "docker:login": "gh auth token | docker login ghcr.io -u incari --password-stdin"
   },
   "dependencies": {

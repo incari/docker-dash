@@ -1,5 +1,5 @@
-import React from "react";
-import { Settings, Trash2, Play, Square, RefreshCw, Star, GripVertical } from "lucide-react";
+import React, { useState } from "react";
+import { Settings, Trash2, Play, Square, RefreshCw, Star, GripVertical, MoreVertical } from "lucide-react";
 import type { ShortcutCardProps } from "../types";
 import { getLinkIcon, renderShortcutIcon, renderContainerStatus, getShortcutLink } from "../utils/cardHelpers";
 
@@ -10,9 +10,9 @@ interface ExtendedShortcutCardProps extends ShortcutCardProps {
 }
 
 /**
- * List view shortcut card - horizontal layout
+ * Table view shortcut card - row layout with actions at the end
  */
-export const ShortcutCardList: React.FC<ExtendedShortcutCardProps> = ({
+export const ShortcutCardTable: React.FC<ExtendedShortcutCardProps> = ({
   shortcut,
   container,
   tailscaleIP,
@@ -27,9 +27,10 @@ export const ShortcutCardList: React.FC<ExtendedShortcutCardProps> = ({
   isOver,
 }) => {
   const isRunning = container?.state === "running";
+  const [showMenu, setShowMenu] = useState(false);
 
   // Get link and subtitle using shared utility
-  const { link, subtitle } = getShortcutLink(shortcut, container, tailscaleIP, 60);
+  const { link, subtitle: linkDisplay } = getShortcutLink(shortcut, container, tailscaleIP, 50);
 
   const handleCardClick = () => {
     if (!isEditMode && link) {
@@ -41,9 +42,9 @@ export const ShortcutCardList: React.FC<ExtendedShortcutCardProps> = ({
     <div
       {...(isEditMode && dragHandleProps ? dragHandleProps : {})}
       onClick={handleCardClick}
-      className={`group relative border rounded-xl overflow-hidden transition-all duration-300 ${
+      className={`group relative border rounded-lg transition-all duration-300 ${
         isEditMode ? "cursor-grab active:cursor-grabbing" : link ? "cursor-pointer" : "cursor-default"
-      }`}
+      } ${showMenu ? "overflow-visible" : "overflow-hidden"}`}
       style={{
         backgroundColor: isOver
           ? "rgba(var(--color-primary-rgb), 0.1)"
@@ -77,10 +78,10 @@ export const ShortcutCardList: React.FC<ExtendedShortcutCardProps> = ({
         </div>
       )}
 
-      <div className={`flex items-start gap-3 p-3 sm:p-4 ${isEditMode ? "pl-12" : ""}`}>
+      <div className={`flex items-center gap-3 p-3 ${isEditMode ? "pl-12" : ""}`}>
         {/* Icon */}
         <div
-          className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center border border-white/5 shrink-0 overflow-hidden"
+          className="w-10 h-10 rounded-lg flex items-center border border-white/5 shrink-0 overflow-hidden"
           style={{
             background: `linear-gradient(to bottom right, rgba(var(--color-primary-rgb), 0.2), rgba(var(--color-primary-rgb), 0.05))`
           }}
@@ -88,34 +89,42 @@ export const ShortcutCardList: React.FC<ExtendedShortcutCardProps> = ({
           {renderShortcutIcon(shortcut)}
         </div>
 
-        {/* Content */}
-        <div className="min-w-0 flex-1">
+        {/* Name */}
+        <div className="min-w-0 flex-[0_0_200px] md:flex-[0_0_250px]">
           <div className="flex items-center gap-2">
             {renderContainerStatus(container)}
             <h3
-              className="font-bold text-sm sm:text-base leading-tight truncate"
+              className="font-bold text-sm leading-tight truncate"
               style={{ color: "var(--color-background-contrast)" }}
             >
               {shortcut.name}
             </h3>
           </div>
-          <div className="flex items-center gap-2 mt-1">
-            <span
-              className="text-[10px] sm:text-xs font-mono truncate flex items-center gap-1.5"
-              style={{ color: "rgba(var(--color-background-contrast), 0.6)" }}
-              title={link || undefined}
-            >
-              {getLinkIcon(shortcut, "lg")}
-              {subtitle}
-            </span>
-          </div>
+        </div>
+
+        {/* Link */}
+        <div className="hidden md:flex items-center gap-1.5 min-w-0 flex-[0_0_200px] lg:flex-[0_0_300px]">
+          <span
+            className="text-xs font-mono truncate flex items-center gap-1.5"
+            style={{ color: "rgba(var(--color-background-contrast), 0.6)" }}
+            title={link || undefined}
+          >
+            {getLinkIcon(shortcut, "lg")}
+            {linkDisplay}
+          </span>
+        </div>
+
+        {/* Description */}
+        <div className="hidden lg:block min-w-0 flex-1">
           {shortcut.description && (
-            <p className="text-slate-500 text-[10px] sm:text-xs mt-1 line-clamp-1">{shortcut.description}</p>
+            <p className="text-xs truncate" style={{ color: "rgba(var(--color-background-contrast), 0.5)" }}>
+              {shortcut.description}
+            </p>
           )}
         </div>
 
         {/* Actions */}
-        <div className="flex flex-col sm:flex-row items-end sm:items-center gap-1 sm:gap-2 shrink-0">
+        <div className="flex items-center gap-1 shrink-0">
           {/* Star - Only visible in edit/reorder mode */}
           {isEditMode && (
             <button
@@ -134,25 +143,25 @@ export const ShortcutCardList: React.FC<ExtendedShortcutCardProps> = ({
                 e.currentTarget.style.color = shortcut.is_favorite ? "var(--color-primary)" : "rgb(100, 116, 139)";
               }}
             >
-              <Star className={`w-5 h-5 ${shortcut.is_favorite ? "fill-current" : ""}`} />
+              <Star className={`w-4 h-4 ${shortcut.is_favorite ? "fill-current" : ""}`} />
             </button>
           )}
 
           {/* Container controls */}
           {!isEditMode && container && (
-            <div className="flex flex-col sm:flex-row gap-1">
+            <div className="flex gap-1">
               {isRunning ? (
                 <>
-                  <button onClick={(e) => { e.stopPropagation(); onStop(); }} className="p-1.5 sm:p-2 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white transition-all" title="Stop">
-                    <Square className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="currentColor" />
+                  <button onClick={(e) => { e.stopPropagation(); onStop(); }} className="p-2 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white transition-all" title="Stop">
+                    <Square className="w-3.5 h-3.5" fill="currentColor" />
                   </button>
-                  <button onClick={(e) => { e.stopPropagation(); onRestart(); }} className="p-1.5 sm:p-2 rounded-lg bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500 hover:text-white transition-all" title="Restart">
-                    <RefreshCw className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  <button onClick={(e) => { e.stopPropagation(); onRestart(); }} className="p-2 rounded-lg bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500 hover:text-white transition-all" title="Restart">
+                    <RefreshCw className="w-3.5 h-3.5" />
                   </button>
                 </>
               ) : (
-                <button onClick={(e) => { e.stopPropagation(); onStart(); }} className="p-1.5 sm:p-2 rounded-lg bg-green-500/10 text-green-400 hover:bg-green-500 hover:text-white transition-all" title="Start">
-                  <Play className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="currentColor" />
+                <button onClick={(e) => { e.stopPropagation(); onStart(); }} className="p-2 rounded-lg bg-green-500/10 text-green-400 hover:bg-green-500 hover:text-white transition-all" title="Start">
+                  <Play className="w-3.5 h-3.5" fill="currentColor" />
                 </button>
               )}
             </div>
@@ -160,12 +169,12 @@ export const ShortcutCardList: React.FC<ExtendedShortcutCardProps> = ({
 
           {/* Edit/Delete */}
           {!isEditMode && (
-            <div className="flex flex-col sm:flex-row gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-              <button onClick={(e) => { e.stopPropagation(); onEdit(); }} className="p-1.5 sm:p-2 text-slate-400 hover:text-white transition-colors" title="Edit">
-                <Settings className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            <div className="flex gap-1">
+              <button onClick={(e) => { e.stopPropagation(); onEdit(); }} className="p-2 text-slate-400 hover:text-white transition-colors" title="Edit">
+                <Settings className="w-3.5 h-3.5" />
               </button>
-              <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="p-1.5 sm:p-2 text-slate-400 hover:text-red-400 transition-colors" title="Delete">
-                <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="p-2 text-slate-400 hover:text-red-400 transition-colors" title="Delete">
+                <Trash2 className="w-3.5 h-3.5" />
               </button>
             </div>
           )}
@@ -174,4 +183,5 @@ export const ShortcutCardList: React.FC<ExtendedShortcutCardProps> = ({
     </div>
   );
 };
+
 

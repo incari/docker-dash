@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { LayoutGrid, LayoutList, Grid2x2, Maximize2, ChevronDown } from "lucide-react";
+import { LayoutGrid, LayoutList, Grid2x2, Maximize2, ChevronDown, Table } from "lucide-react";
 import type { ViewMode, MobileColumns } from "../types/viewTypes";
 
 interface ViewSelectorProps {
@@ -39,6 +39,7 @@ export const ViewSelector: React.FC<ViewSelectorProps> = ({
     { mode: "compact", label: "Compact", icon: <Grid2x2 className="w-4 h-4" /> },
     { mode: "icon", label: "Icon Only", icon: <Maximize2 className="w-4 h-4" /> },
     { mode: "list", label: "List", icon: <LayoutList className="w-4 h-4" /> },
+    { mode: "table", label: "Table", icon: <Table className="w-4 h-4" /> },
   ];
 
   const currentView = viewModes.find((v) => v.mode === viewMode) || viewModes[0];
@@ -47,7 +48,7 @@ export const ViewSelector: React.FC<ViewSelectorProps> = ({
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm font-medium transition-colors px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
+        className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm font-medium transition-colors px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 whitespace-nowrap"
         title="Change View"
       >
         {currentView.icon}

@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Settings, Trash2, Play, Square, RefreshCw, Star, GripVertical, MoreVertical } from "lucide-react";
 import type { ShortcutCardProps } from "../types";
-import { DynamicIcon } from "./DynamicIcon";
+import { getLinkIcon, renderShortcutIcon, renderContainerStatus, getShortcutLink } from "../utils/cardHelpers";
 
 interface ExtendedShortcutCardProps extends ShortcutCardProps {
   dragHandleProps?: Record<string, unknown>;
@@ -29,34 +29,8 @@ export const ShortcutCardCompact: React.FC<ExtendedShortcutCardProps> = ({
   const isRunning = container?.state === "running";
   const [showMenu, setShowMenu] = useState(false);
 
-  let link: string | null = null;
-  let subtitle = "No Link";
-
-  if (shortcut.url) {
-    link = shortcut.url;
-    const maxLength = 40;
-    subtitle = shortcut.url.length > maxLength
-      ? shortcut.url.substring(0, maxLength) + "..."
-      : shortcut.url;
-  } else if (shortcut.port) {
-    if ((shortcut as any).use_tailscale && tailscaleIP) {
-      link = `http://${tailscaleIP}:${shortcut.port}`;
-      subtitle = `Tailscale 📎 ${shortcut.port}`;
-    } else {
-      link = `http://${window.location.hostname}:${shortcut.port}`;
-      subtitle = `📎 ${shortcut.port}`;
-    }
-  } else if (container) {
-    subtitle = "Container Only";
-  }
-
-  const renderIcon = () => {
-    if (shortcut.icon && (shortcut.icon.startsWith("http") || shortcut.icon.includes("/"))) {
-      const src = shortcut.icon.startsWith("http") ? shortcut.icon : `/${shortcut.icon}`;
-      return <img src={src} alt={shortcut.name} className="w-full h-full object-cover" />;
-    }
-    return <DynamicIcon name={shortcut.icon || "Server"} className="w-full h-full" style={{ color: "var(--color-primary)" }} />;
-  };
+  // Get link and subtitle using shared utility
+  const { link, subtitle } = getShortcutLink(shortcut, container, tailscaleIP, 40);
 
   const handleCardClick = () => {
     if (!isEditMode && link) {
@@ -112,15 +86,13 @@ export const ShortcutCardCompact: React.FC<ExtendedShortcutCardProps> = ({
             background: `linear-gradient(to bottom right, rgba(var(--color-primary-rgb), 0.2), rgba(var(--color-primary-rgb), 0.05))`
           }}
         >
-          {renderIcon()}
+          {renderShortcutIcon(shortcut)}
         </div>
 
         {/* Title and Status */}
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5">
-            {container && (
-              <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${isRunning ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]" : "bg-red-500"}`} />
-            )}
+          <div className="flex items-center gap-2">
+            {renderContainerStatus(container)}
             <h3
               className="font-bold text-sm leading-tight truncate"
               style={{ color: "var(--color-background-contrast)" }}
@@ -129,10 +101,11 @@ export const ShortcutCardCompact: React.FC<ExtendedShortcutCardProps> = ({
             </h3>
           </div>
           <span
-            className="text-[10px] font-mono mt-0.5 block truncate"
+            className="text-[10px] font-mono mt-0.5 truncate flex items-center gap-1.5"
             style={{ color: "rgba(var(--color-background-contrast), 0.5)" }}
             title={link || undefined}
           >
+            {getLinkIcon(shortcut, "sm")}
             {subtitle}
           </span>
         </div>

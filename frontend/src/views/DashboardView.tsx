@@ -22,6 +22,7 @@ import {
     ShortcutCardCompact,
     ShortcutCardIcon,
     ShortcutCardList,
+    ShortcutCardTable,
     SortableShortcutCard,
     SortableSection,
     DroppableSection,
@@ -112,6 +113,8 @@ export function DashboardView({
                 return ShortcutCardIcon;
             case "list":
                 return ShortcutCardList;
+            case "table":
+                return ShortcutCardTable;
             default:
                 return ShortcutCard;
         }
@@ -157,13 +160,15 @@ export function DashboardView({
 
         switch (viewMode) {
             case "compact":
-                return `grid ${mobileClass} md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4`;
+                return `grid ${mobileClass} md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4`;
             case "icon":
-                return `grid ${mobileClass} md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4`;
+                return `grid ${mobileClass} md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-3`;
             case "list":
                 return `grid grid-cols-1 gap-3`;
+            case "table":
+                return `grid grid-cols-1 gap-2`;
             default:
-                return `grid ${mobileClass} md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6`;
+                return `grid ${mobileClass} md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-6`;
         }
     };
 

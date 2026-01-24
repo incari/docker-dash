@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   Settings,
   Trash2,
@@ -7,9 +7,10 @@ import {
   RefreshCw,
   Star,
   GripVertical,
+  MoreVertical,
 } from "lucide-react";
 import type { ShortcutCardProps } from "../types";
-import { DynamicIcon } from "./DynamicIcon";
+import { getLinkIcon, renderShortcutIcon, renderContainerStatus, getShortcutLink } from "../utils/cardHelpers";
 
 interface ExtendedShortcutCardProps extends ShortcutCardProps {
   dragHandleProps?: Record<string, unknown>;
@@ -35,54 +36,10 @@ export const ShortcutCard: React.FC<ExtendedShortcutCardProps> = ({
   isOver,
 }) => {
   const isRunning = container?.state === "running";
+  const [showMenu, setShowMenu] = useState(false);
 
-  // Determine the link based on use_tailscale setting
-  let link: string | null = null;
-  let subtitle = "No Link";
-
-  if (shortcut.url) {
-    link = shortcut.url;
-    // Display the URL with ellipsis if too long
-    const maxLength = 40;
-    subtitle = shortcut.url.length > maxLength
-      ? shortcut.url.substring(0, maxLength) + "..."
-      : shortcut.url;
-  } else if (shortcut.port) {
-    if ((shortcut as any).use_tailscale && tailscaleIP) {
-      link = `http://${tailscaleIP}:${shortcut.port}`;
-      subtitle = `Tailscale 📎 ${shortcut.port}`;
-    } else {
-      link = `http://${window.location.hostname}:${shortcut.port}`;
-      subtitle = `📎 ${shortcut.port}`;
-    }
-  } else if (container) {
-    subtitle = "Container Only";
-  }
-
-  const renderIcon = (isMobileHero = false) => {
-    if (
-      shortcut.icon &&
-      (shortcut.icon.startsWith("http") || shortcut.icon.includes("/"))
-    ) {
-      const src = shortcut.icon.startsWith("http")
-        ? shortcut.icon
-        : `/${shortcut.icon}`;
-      return (
-        <img
-          src={src}
-          alt={shortcut.name}
-          className="w-full h-full object-cover"
-        />
-      );
-    }
-    return (
-      <DynamicIcon
-        name={shortcut.icon || "Server"}
-        className="w-full h-full"
-        style={{ color: "var(--color-primary)" }}
-      />
-    );
-  };
+  // Get link and subtitle using shared utility
+  const { link, subtitle } = getShortcutLink(shortcut, container, tailscaleIP, 40);
 
   const handleCardClick = () => {
     if (!isEditMode && link) {
@@ -94,13 +51,13 @@ export const ShortcutCard: React.FC<ExtendedShortcutCardProps> = ({
     <div
       {...(isEditMode && dragHandleProps ? dragHandleProps : {})}
       onClick={handleCardClick}
-      className={`group relative border rounded-2xl sm:rounded-3xl overflow-hidden transition-all duration-300 h-full flex flex-col ${
+      className={`group relative border rounded-2xl sm:rounded-3xl transition-all duration-300 h-full flex flex-col ${
         isEditMode
           ? "cursor-grab active:cursor-grabbing"
           : link
           ? "cursor-pointer"
           : "cursor-default"
-      }`}
+      } ${showMenu ? "overflow-visible" : "overflow-hidden"}`}
       style={{
         backgroundColor: isOver
           ? "rgba(var(--color-primary-rgb), 0.1)"
@@ -142,7 +99,8 @@ export const ShortcutCard: React.FC<ExtendedShortcutCardProps> = ({
         }}
       >
         {/* Icon/Image - Full size */}
-        <div className="w-32 h-32">{renderIcon(true)}</div>
+
+        <div className="w-32 h-32">{renderShortcutIcon(shortcut)}</div>
 
         {/* Overlay: Title, Subtitle, and Star */}
         <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/60 to-transparent flex flex-col justify-between p-4">
@@ -197,42 +155,34 @@ export const ShortcutCard: React.FC<ExtendedShortcutCardProps> = ({
             </div>
             <div className="flex items-center gap-2">
               <span
-                className="text-[10px] font-mono text-slate-300 bg-slate-950/80 backdrop-blur-sm px-2 py-1 rounded border border-white/10 tracking-wider uppercase truncate"
+                className="text-[10px] font-mono text-slate-300 bg-slate-950/80 backdrop-blur-sm px-2 py-1 rounded border border-white/10 tracking-wider uppercase truncate flex items-center gap-1.5"
                 title={link || undefined}
               >
+                {getLinkIcon(shortcut, "md")}
                 {subtitle}
               </span>
             </div>
           </div>
         </div>
       </div>
-
       {/* Desktop: Horizontal layout (original) */}
-      <div className="hidden sm:flex items-start gap-3 sm:gap-4 p-4 sm:p-5 md:p-6">
+      <div className="hidden sm:flex items-start gap-4 sm:gap-5 p-4 sm:p-5 md:p-6">
         {/* Icon */}
         <div
-          className="w-14 h-14 md:w-16 md:h-16 rounded-xl sm:rounded-2xl flex items-center border border-white/5 shrink-0 overflow-hidden"
+          className="w-16 h-16 md:w-20 md:h-20 rounded-xl sm:rounded-2xl flex items-center border border-white/5 shrink-0 overflow-hidden"
           style={{
             background: `linear-gradient(to bottom right, rgba(var(--color-primary-rgb), 0.2), rgba(var(--color-primary-rgb), 0.05))`
           }}
         >
-          {renderIcon()}
+          {renderShortcutIcon(shortcut)}
         </div>
 
         {/* Title and Subtitle */}
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5">
-            {container && (
-              <div
-                className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                  isRunning
-                    ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]"
-                    : "bg-red-500"
-                }`}
-              />
-            )}
+          <div className="flex items-center gap-2.5 mb-2">
+            {renderContainerStatus(container)}
             <h3
-              className="font-bold text-sm sm:text-base md:text-lg leading-tight transition-colors uppercase truncate"
+              className="font-bold text-base sm:text-lg md:text-xl leading-tight transition-colors uppercase truncate"
               style={{
                 color: "var(--color-background-contrast)"
               }}
@@ -242,46 +192,155 @@ export const ShortcutCard: React.FC<ExtendedShortcutCardProps> = ({
               {shortcut.name}
             </h3>
           </div>
-          <div className="flex items-center gap-1.5 sm:gap-2 mt-1 sm:mt-1.5">
+          <div className="flex items-center gap-2 mt-1.5">
             <span
-              className="text-[10px] sm:text-xs font-mono px-2 sm:px-2.5 py-0.5 sm:py-1 rounded border border-white/5 tracking-wider uppercase truncate"
+              className="text-xs sm:text-sm font-mono px-2.5 sm:px-3 py-1 sm:py-1.5 rounded border border-white/5 tracking-wider uppercase truncate flex items-center gap-2"
               style={{
                 color: "rgba(var(--color-background-contrast), 0.6)",
                 backgroundColor: "rgba(0, 0, 0, 0.3)"
               }}
               title={link || undefined}
             >
+              {getLinkIcon(shortcut, "md")}
               {subtitle}
             </span>
           </div>
         </div>
 
-        {/* Favorite Star - Only visible in edit/reorder mode */}
-        {isEditMode && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggleFavorite();
-            }}
-            className="p-1.5 sm:p-2 transition-colors shrink-0"
-            style={{
-              color: shortcut.is_favorite ? "var(--color-primary)" : "rgb(100, 116, 139)"
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.color = "var(--color-primary)";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.color = shortcut.is_favorite ? "var(--color-primary)" : "rgb(100, 116, 139)";
-            }}
-            title={
-              shortcut.is_favorite ? "Remove from Favorites" : "Add to Favorites"
-            }
-          >
-            <Star
-              className={`w-5 h-5 ${shortcut.is_favorite ? "fill-current" : ""}`}
-            />
-          </button>
-        )}
+        {/* Star (only in edit mode) and Menu button */}
+        <div className="hidden sm:flex items-center gap-1 shrink-0">
+          {/* Star - Only visible in edit/reorder mode */}
+          {isEditMode && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleFavorite();
+              }}
+              className="p-1 transition-colors"
+              style={{
+                color: shortcut.is_favorite ? "var(--color-primary)" : "rgb(100, 116, 139)"
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.color = "var(--color-primary)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = shortcut.is_favorite ? "var(--color-primary)" : "rgb(100, 116, 139)";
+              }}
+            >
+              <Star className={`w-4 h-4 ${shortcut.is_favorite ? "fill-current" : ""}`} />
+            </button>
+          )}
+
+          {/* Three-dot menu - Hidden in edit mode */}
+          {!isEditMode && (
+            <div className="relative z-50">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowMenu(!showMenu);
+                }}
+                className="p-1 text-slate-400 hover:text-white transition-colors"
+                title="More actions"
+              >
+                <MoreVertical className="w-4 h-4" />
+              </button>
+
+              {/* Menu overlay */}
+              {showMenu && (
+                <>
+                  {/* Backdrop to close menu */}
+                  <div
+                    className="fixed inset-0 z-100"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowMenu(false);
+                    }}
+                  />
+
+                  {/* Menu content */}
+                  <div
+                    className="absolute right-0 top-full mt-1 z-101 rounded-lg border shadow-xl overflow-hidden min-w-[140px]"
+                    style={{
+                      backgroundColor: "var(--color-card-background)",
+                      borderColor: "rgba(var(--color-primary-rgb), 0.3)",
+                      boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.4)"
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {/* Container controls */}
+                    {container && (
+                      <>
+                        {isRunning ? (
+                          <>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onStop?.();
+                                setShowMenu(false);
+                              }}
+                              className="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-red-500/10 text-red-400 transition-colors"
+                            >
+                              <Square className="w-3.5 h-3.5" fill="currentColor" />
+                              Stop
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onRestart?.();
+                                setShowMenu(false);
+                              }}
+                              className="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-yellow-500/10 text-yellow-400 transition-colors"
+                            >
+                              <RefreshCw className="w-3.5 h-3.5" />
+                              Restart
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onStart?.();
+                              setShowMenu(false);
+                            }}
+                            className="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-green-500/10 text-green-400 transition-colors"
+                          >
+                            <Play className="w-3.5 h-3.5" fill="currentColor" />
+                            Start
+                          </button>
+                        )}
+                        <div className="h-px bg-white/5" />
+                      </>
+                    )}
+
+                    {/* Edit and Delete */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onEdit();
+                        setShowMenu(false);
+                      }}
+                      className="w-full px-3 py-2 text-left text-sm flex items-center gap-2 text-slate-400 hover:text-white hover:bg-slate-800/50 transition-colors"
+                    >
+                      <Settings className="w-3.5 h-3.5" />
+                      Edit
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDelete();
+                        setShowMenu(false);
+                      }}
+                      className="w-full px-3 py-2 text-left text-sm flex items-center gap-2 text-slate-400 hover:text-red-400 hover:bg-slate-800/50 transition-colors"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      Delete
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Description - Below image on mobile, in card on desktop */}
@@ -294,81 +353,7 @@ export const ShortcutCard: React.FC<ExtendedShortcutCardProps> = ({
         </p>
       )}
 
-      {/* Action Buttons - Full width on mobile, inline on desktop - Hidden in edit mode */}
-      {!isEditMode && (
-        <div className="px-4 pb-5 sm:px-5 sm:pb-5 md:px-6 md:pb-6 sm:flex sm:items-center sm:justify-between sm:gap-2 sm:mt-auto space-y-2 sm:space-y-0">
-          <div className="flex items-center gap-2 sm:gap-1.5">
-            {container && (
-              <div className="flex gap-2 sm:gap-1.5 flex-1 sm:flex-initial">
-                {isRunning ? (
-                  <>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onStop();
-                      }}
-                      className="flex-1 sm:flex-initial p-2.5 sm:p-2 rounded-lg sm:rounded-xl bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white transition-all border border-red-500/10"
-                      title="Stop Container"
-                    >
-                      <Square
-                        className="w-4 h-4 sm:w-3.5 sm:h-3.5 mx-auto"
-                        fill="currentColor"
-                      />
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onRestart();
-                      }}
-                      className="flex-1 sm:flex-initial p-2.5 sm:p-2 rounded-lg sm:rounded-xl bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500 hover:text-white transition-all border border-yellow-500/10"
-                      title="Restart Container"
-                    >
-                      <RefreshCw className="w-4 h-4 sm:w-3.5 sm:h-3.5 mx-auto" />
-                    </button>
-                  </>
-                ) : (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onStart();
-                    }}
-                    className="flex-1 sm:flex-initial p-2.5 sm:p-2 rounded-lg sm:rounded-xl bg-green-500/10 text-green-400 hover:bg-green-500 hover:text-white transition-all border border-green-500/10"
-                    title="Start Container"
-                  >
-                    <Play
-                      className="w-4 h-4 sm:w-3.5 sm:h-3.5 mx-auto"
-                      fill="currentColor"
-                    />
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-
-          <div className="flex items-center gap-2 sm:gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onEdit();
-              }}
-              className="flex-1 sm:flex-initial p-2.5 sm:p-2 text-slate-400 hover:text-white transition-colors rounded-lg sm:rounded-none bg-slate-800/50 sm:bg-transparent"
-              title="Edit Shortcut"
-            >
-              <Settings className="w-4 h-4 mx-auto" />
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onDelete();
-              }}
-              className="flex-1 sm:flex-initial p-2.5 sm:p-2 text-slate-400 hover:text-red-400 transition-colors rounded-lg sm:rounded-none bg-slate-800/50 sm:bg-transparent"
-              title="Delete Shortcut"
-            >
-              <Trash2 className="w-4 h-4 mx-auto" />
-            </button>
-          </div>
-        </div>
-      )}
+ 
     </div>
   );
 };

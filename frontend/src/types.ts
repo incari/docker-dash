@@ -162,7 +162,7 @@ export type IconType = "lucide" | "image" | "upload" | null;
 export type ModalMode = "add" | "edit";
 
 // View Types
-export type ViewMode = "default" | "compact" | "icon" | "list";
+export type ViewMode = "default" | "compact" | "icon" | "list" | "table";
 export type MobileColumns = 1 | 2;
 
 export interface ViewSettings {

@@ -11,6 +11,7 @@ export { ShortcutCard } from "./ShortcutCard";
 export { ShortcutCardCompact } from "./ShortcutCardCompact";
 export { ShortcutCardIcon } from "./ShortcutCardIcon";
 export { ShortcutCardList } from "./ShortcutCardList";
+export { ShortcutCardTable } from "./ShortcutCardTable";
 export { SortableShortcutCard } from "./SortableShortcutCard";
 export { SortableSection } from "./SortableSection";
 export { ContainerCard } from "./ContainerCard";
