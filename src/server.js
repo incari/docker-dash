@@ -679,10 +679,17 @@ app.delete('/api/sections/:id', (req, res) => {
 // Update shortcut's section
 app.put('/api/shortcuts/:id/section', (req, res) => {
   const { id } = req.params;
-  const { section_id } = req.body;
+  const { section_id, position } = req.body;
 
   try {
-    db.prepare('UPDATE shortcuts SET section_id = ? WHERE id = ?').run(section_id || null, id);
+    // Update both section_id and position if position is provided
+    if (position !== undefined) {
+      db.prepare('UPDATE shortcuts SET section_id = ?, position = ? WHERE id = ?')
+        .run(section_id || null, position, id);
+    } else {
+      db.prepare('UPDATE shortcuts SET section_id = ? WHERE id = ?')
+        .run(section_id || null, id);
+    }
     res.json({ success: true });
   } catch (error) {
     console.error('Failed to update shortcut section:', error);

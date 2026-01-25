@@ -41,19 +41,22 @@ export const ShortcutCard: React.FC<ExtendedShortcutCardProps> = ({
   // Get link and subtitle using shared utility
   const { link, subtitle } = getShortcutLink(shortcut, container, tailscaleIP, 40);
 
-  const handleCardClick = () => {
+  const handleCardClick = (e: React.MouseEvent) => {
     if (!isEditMode && link) {
       window.open(link, "_blank");
+    } else if (isEditMode) {
+      // Prevent click in edit mode to allow dragging
+      e.preventDefault();
     }
   };
 
   return (
     <div
       {...(isEditMode && dragHandleProps ? dragHandleProps : {})}
-      onClick={handleCardClick}
+      onClick={isEditMode ? undefined : handleCardClick}
       className={`group relative border rounded-2xl sm:rounded-3xl transition-all duration-300 h-full flex flex-col ${
         isEditMode
-          ? "cursor-grab active:cursor-grabbing"
+          ? ""
           : link
           ? "cursor-pointer"
           : "cursor-default"

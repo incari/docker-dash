@@ -12,7 +12,7 @@ import {
 } from "./components";
 import { DashboardView, ManagementView } from "./views";
 import { API_BASE } from "./constants/api";
-import { useDragAndDrop, useTheme } from "./hooks";
+import { useTheme } from "./hooks";
 import type {
   DockerContainer,
   Shortcut,
@@ -88,22 +88,7 @@ function App() {
     }
   }, [view]);
 
-  // Drag and Drop Hook
-  const {
-    sensors,
-    activeId,
-    handleDragStart,
-    handleDragOver,
-    handleDragEnd,
-    handleDragCancel,
-    customCollisionDetection,
-  } = useDragAndDrop({
-    shortcuts,
-    setShortcuts,
-    sections,
-    setSections,
-    fetchData,
-  });
+
 
   const fetchTailscaleInfo = useCallback(async () => {
     try {
@@ -296,6 +281,43 @@ function App() {
     }
   };
 
+  const handleReorderShortcuts = async (reorderedShortcuts: Array<{ id: number; position: number }>) => {
+    try {
+      await axios.put(`${API_BASE}/shortcuts/reorder`, { shortcuts: reorderedShortcuts });
+      // Delay refetch slightly to let FormKit finish its animation
+      setTimeout(() => fetchData(), 100);
+    } catch (err) {
+      console.error("Failed to reorder shortcuts:", err);
+      fetchData();
+    }
+  };
+
+  const handleMoveShortcutToSection = async (shortcutId: number, sectionId: number | null, newPosition: number) => {
+    try {
+      console.log(`[App] Moving shortcut ${shortcutId} to section ${sectionId} at position ${newPosition}`);
+      await axios.put(`${API_BASE}/shortcuts/${shortcutId}/section`, {
+        section_id: sectionId,
+        position: newPosition
+      });
+      // Delay refetch slightly to let FormKit finish its animation
+      setTimeout(() => fetchData(), 100);
+    } catch (err) {
+      console.error("Failed to move shortcut to section:", err);
+      fetchData();
+    }
+  };
+
+  const handleReorderSections = async (reorderedSections: Array<{ id: number; position: number }>) => {
+    try {
+      await axios.put(`${API_BASE}/sections/reorder`, { sections: reorderedSections });
+      // Refetch to get the latest state from server
+      await fetchData();
+    } catch (err) {
+      console.error("Failed to reorder sections:", err);
+      fetchData();
+    }
+  };
+
   const openEditModal = (shortcut: Shortcut) => {
     setEditingShortcut(shortcut);
     setIsModalOpen(true);
@@ -353,15 +375,7 @@ function App() {
               shortcutsBySection={shortcutsBySection}
               containers={containers}
               tailscaleInfo={tailscaleInfo}
-              sensors={sensors}
-              customCollisionDetection={customCollisionDetection}
-              activeId={activeId}
-              shortcuts={shortcuts}
               loading={loading}
-              handleDragStart={handleDragStart}
-              handleDragOver={handleDragOver}
-              handleDragEnd={handleDragEnd}
-              handleDragCancel={handleDragCancel}
               handleCreateSection={handleCreateSection}
               handleEditSection={handleEditSection}
               handleDeleteSection={handleDeleteSection}
