@@ -7,6 +7,9 @@ import {
     ChevronDown,
     ChevronRight,
 } from "lucide-react";
+import { useCallback, useEffect, useRef } from "react";
+import { useDragAndDrop } from "@formkit/drag-and-drop/react";
+import { animations } from "@formkit/drag-and-drop";
 
 import {
     ShortcutCard,
@@ -26,6 +29,20 @@ import type {
 
 interface TailscaleInfoExtended extends TailscaleInfo {
     available: boolean;
+}
+
+// Type for pending changes during edit mode
+interface PendingChange {
+    type: 'reorder' | 'move';
+    shortcutId: number;
+    sectionId: number | null;
+    position: number;
+}
+
+// Ref handle for DashboardView to expose save function
+export interface DashboardViewHandle {
+    getPendingChanges: () => PendingChange[];
+    clearPendingChanges: () => void;
 }
 
 interface DashboardViewProps {
@@ -50,6 +67,7 @@ interface DashboardViewProps {
     setView: (view: "dashboard" | "add") => void;
     viewMode: ViewMode;
     mobileColumns: MobileColumns;
+    onSaveChanges: (changes: PendingChange[]) => Promise<void>;
 }
 
 /**
@@ -176,6 +194,7 @@ interface SectionBlockProps {
     handleEditSection: (section: Section) => void;
     handleDeleteSection: (sectionId: number, sectionName: string) => void;
     renderShortcutCard: (shortcut: Shortcut) => React.ReactElement;
+    onShortcutMoved: (shortcutId: number, sectionId: number | null, position: number) => void;
 }
 
 function SectionBlock({
@@ -188,12 +207,48 @@ function SectionBlock({
     handleEditSection,
     handleDeleteSection,
     renderShortcutCard,
+    onShortcutMoved,
 }: SectionBlockProps) {
     // Don't render empty sections unless in edit mode
     if (shortcuts.length === 0 && !isEditMode) return null;
 
     // In edit mode, always show content (ignore collapsed state)
     const shouldShowContent = isEditMode || !section.is_collapsed;
+
+    // Setup FormKit drag-and-drop for this section
+    const [parent, list, setList] = useDragAndDrop<HTMLDivElement, Shortcut>(
+        shortcuts,
+        {
+            disabled: !isEditMode,
+            group: "shortcuts",
+            plugins: [animations()],
+        }
+    );
+
+    // Track the previous list to detect changes
+    const prevListRef = useRef<Shortcut[]>(shortcuts);
+
+    // Sync props to FormKit's internal state when shortcuts change from parent
+    useEffect(() => {
+        setList(shortcuts);
+        prevListRef.current = shortcuts;
+    }, [shortcuts, setList]);
+
+    // Detect changes in FormKit's list and report them
+    useEffect(() => {
+        // Check if there are any differences
+        const hasChanges = list.length !== prevListRef.current.length ||
+            list.some((s, i) => prevListRef.current[i]?.id !== s.id);
+
+        if (hasChanges && isEditMode) {
+            // Record position for all items currently in this section
+            list.forEach((shortcut, index) => {
+                onShortcutMoved(shortcut.id, section.id, index);
+            });
+
+            prevListRef.current = [...list];
+        }
+    }, [list, isEditMode, section.id, onShortcutMoved]);
 
     return (
         <div className="space-y-4">
@@ -244,21 +299,22 @@ function SectionBlock({
             {/* Section Content */}
             {shouldShowContent && (
                 <div
+                    ref={parent}
                     className={`${gridClasses} ${
                         isEditMode
                             ? `border-2 border-blue-500/30 bg-blue-500/5 rounded-xl transition-all ${
-                                shortcuts.length === 0 ? "p-8" : "p-4"
+                                list.length === 0 ? "p-8" : "p-4"
                             }`
                             : ""
                     }`}
                     style={isEditMode ? { minHeight } : undefined}
                 >
-                    {shortcuts.length === 0 && isEditMode ? (
+                    {list.length === 0 && isEditMode ? (
                         <div className="col-span-full flex items-center justify-center text-slate-500 text-sm italic">
                             Drag items here to reorganize
                         </div>
                     ) : (
-                        shortcuts.map((shortcut) => (
+                        list.map((shortcut) => (
                             <div key={shortcut.id}>{renderShortcutCard(shortcut)}</div>
                         ))
                     )}
@@ -267,52 +323,6 @@ function SectionBlock({
         </div>
     );
 }
-
-/*
-import { useDragAndDrop } from "@formkit/drag-and-drop/react";
-
-export function MyComponent() {
-  const todoItems = [
-    "Schedule perm",
-    "Rewind VHS tapes",
-    "Make change for the arcade",
-    "Get disposable camera developed",
-    "Learn C++",
-    "Return Nintendo Power Glove",
-  ];
-  const doneItems = ["Pickup new mix-tape from Beth"];
-
-  const [todoList, todos] = useDragAndDrop<HTMLUListElement, string>(
-    todoItems,
-    { group: "todoList" }
-  );
-  const [doneList, dones] = useDragAndDrop<HTMLUListElement, string>(
-    doneItems,
-    { group: "todoList" }
-  );
-
-  console.log({todos});
-  console.log({dones});
-  return (
-    <div className="kanban-board">
-      <ul ref={todoList}>
-        {todos.map((todo) => (
-          <li className="kanban-item" key={todo}>
-            {todo}
-          </li>
-        ))}
-      </ul>
-      <ul ref={doneList}>
-        {dones.map((done) => (
-          <li className="kanban-item" key={done}>
-            {done}
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
- */
 
 export function DashboardView({
     isEditMode,
@@ -336,9 +346,73 @@ export function DashboardView({
     setView,
     viewMode,
     mobileColumns,
+    onSaveChanges,
 }: DashboardViewProps) {
     const CardComponent = getCardComponentForViewMode(viewMode);
     const gridClasses = getGridLayoutClasses(viewMode, mobileColumns);
+
+    // Track pending changes during edit mode
+    const pendingChangesRef = useRef<Map<number, PendingChange>>(new Map());
+
+    // Handler for when a shortcut is moved/reordered (memoized to prevent useEffect re-runs)
+    const handleShortcutMoved = useCallback((shortcutId: number, sectionId: number | null, position: number) => {
+        pendingChangesRef.current.set(shortcutId, {
+            type: 'move',
+            shortcutId,
+            sectionId,
+            position,
+        });
+    }, []);
+
+    // When edit mode is turned off, save all pending changes
+    const prevIsEditMode = useRef(isEditMode);
+    useEffect(() => {
+        if (prevIsEditMode.current && !isEditMode) {
+            // Edit mode was just turned off - save changes
+            const changes = Array.from(pendingChangesRef.current.values());
+            if (changes.length > 0) {
+                onSaveChanges(changes).then(() => {
+                    pendingChangesRef.current.clear();
+                });
+            }
+        }
+        prevIsEditMode.current = isEditMode;
+    }, [isEditMode, onSaveChanges]);
+
+    // Setup FormKit drag-and-drop for unsectioned shortcuts
+    const [unsectionedParent, unsectionedList, setUnsectionedList] = useDragAndDrop<HTMLDivElement, Shortcut>(
+        unsectionedShortcuts,
+        {
+            disabled: !isEditMode,
+            group: "shortcuts",
+            plugins: [animations()],
+        }
+    );
+
+    // Track the previous unsectioned list to detect changes
+    const prevUnsectionedListRef = useRef<Shortcut[]>(unsectionedShortcuts);
+
+    // Sync props to FormKit's internal state when unsectionedShortcuts change from parent
+    useEffect(() => {
+        setUnsectionedList(unsectionedShortcuts);
+        prevUnsectionedListRef.current = unsectionedShortcuts;
+    }, [unsectionedShortcuts, setUnsectionedList]);
+
+    // Detect changes in FormKit's unsectioned list and report them
+    useEffect(() => {
+        // Check if there are any differences
+        const hasChanges = unsectionedList.length !== prevUnsectionedListRef.current.length ||
+            unsectionedList.some((s, i) => prevUnsectionedListRef.current[i]?.id !== s.id);
+
+        if (hasChanges && isEditMode) {
+            // Record position for all items currently in unsectioned area
+            unsectionedList.forEach((shortcut, index) => {
+                handleShortcutMoved(shortcut.id, null, index);
+            });
+
+            prevUnsectionedListRef.current = [...unsectionedList];
+        }
+    }, [unsectionedList, isEditMode, handleShortcutMoved]);
 
     /**
      * Render a single shortcut card with all necessary props
@@ -392,25 +466,26 @@ export function DashboardView({
                                     No Section
                                 </h2>
                                 <span className="text-sm text-slate-500">
-                                    ({unsectionedShortcuts.length})
+                                    ({unsectionedList.length})
                                 </span>
                             </div>
                             <div
+                                ref={unsectionedParent}
                                 className={`${gridClasses} ${
                                     isEditMode
                                         ? `border-2 border-blue-500/30 bg-blue-500/5 rounded-xl transition-all ${
-                                            unsectionedShortcuts.length === 0 ? "p-8" : "p-4"
+                                            unsectionedList.length === 0 ? "p-8" : "p-4"
                                         }`
                                         : ""
                                 }`}
                                 style={isEditMode ? { minHeight: getMinHeightForViewMode(viewMode) } : undefined}
                             >
-                                {unsectionedShortcuts.length === 0 && isEditMode ? (
+                                {unsectionedList.length === 0 && isEditMode ? (
                                     <div className="col-span-full flex items-center justify-center text-slate-500 text-sm italic">
                                         Drag items here to reorganize
                                     </div>
                                 ) : (
-                                    unsectionedShortcuts.map((shortcut) => (
+                                    unsectionedList.map((shortcut) => (
                                         <div key={shortcut.id}>{renderShortcutCard(shortcut)}</div>
                                     ))
                                 )}
@@ -421,21 +496,22 @@ export function DashboardView({
                     {/* Unsectioned without header if no sections */}
                     {showUnsectionedWithoutHeader && (
                         <div
+                            ref={unsectionedParent}
                             className={`${gridClasses} ${
                                 isEditMode
                                     ? `border-2 border-blue-500/30 bg-blue-500/5 rounded-xl transition-all ${
-                                        unsectionedShortcuts.length === 0 ? "p-8" : "p-4"
+                                        unsectionedList.length === 0 ? "p-8" : "p-4"
                                     }`
                                     : ""
                             }`}
                             style={isEditMode ? { minHeight: getMinHeightForViewMode(viewMode) } : undefined}
                         >
-                            {unsectionedShortcuts.length === 0 && isEditMode ? (
+                            {unsectionedList.length === 0 && isEditMode ? (
                                 <div className="col-span-full flex items-center justify-center text-slate-500 text-sm italic">
                                     Drag items here to reorganize
                                 </div>
                             ) : (
-                                unsectionedShortcuts.map((shortcut) => (
+                                unsectionedList.map((shortcut) => (
                                     <div key={shortcut.id}>{renderShortcutCard(shortcut)}</div>
                                 ))
                             )}
@@ -455,6 +531,7 @@ export function DashboardView({
                             handleEditSection={handleEditSection}
                             handleDeleteSection={handleDeleteSection}
                             renderShortcutCard={renderShortcutCard}
+                            onShortcutMoved={handleShortcutMoved}
                         />
                     ))}
                 </div>

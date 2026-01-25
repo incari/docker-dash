@@ -66,8 +66,10 @@ function App() {
   // Theme hook
   const { theme, updateTheme } = useTheme();
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
+  const fetchData = useCallback(async (showLoading = true) => {
+    if (showLoading) {
+      setLoading(true);
+    }
     try {
       const [shortcutsRes, containersRes, sectionsRes] = await Promise.all([
         axios.get(`${API_BASE}/shortcuts`),
@@ -84,10 +86,11 @@ function App() {
     } catch (err) {
       console.error("Failed to fetch data", err);
     } finally {
-      setLoading(false);
+      if (showLoading) {
+        setLoading(false);
+      }
     }
   }, [view]);
-
 
 
   const fetchTailscaleInfo = useCallback(async () => {
@@ -281,43 +284,6 @@ function App() {
     }
   };
 
-  const handleReorderShortcuts = async (reorderedShortcuts: Array<{ id: number; position: number }>) => {
-    try {
-      await axios.put(`${API_BASE}/shortcuts/reorder`, { shortcuts: reorderedShortcuts });
-      // Delay refetch slightly to let FormKit finish its animation
-      setTimeout(() => fetchData(), 100);
-    } catch (err) {
-      console.error("Failed to reorder shortcuts:", err);
-      fetchData();
-    }
-  };
-
-  const handleMoveShortcutToSection = async (shortcutId: number, sectionId: number | null, newPosition: number) => {
-    try {
-      console.log(`[App] Moving shortcut ${shortcutId} to section ${sectionId} at position ${newPosition}`);
-      await axios.put(`${API_BASE}/shortcuts/${shortcutId}/section`, {
-        section_id: sectionId,
-        position: newPosition
-      });
-      // Delay refetch slightly to let FormKit finish its animation
-      setTimeout(() => fetchData(), 100);
-    } catch (err) {
-      console.error("Failed to move shortcut to section:", err);
-      fetchData();
-    }
-  };
-
-  const handleReorderSections = async (reorderedSections: Array<{ id: number; position: number }>) => {
-    try {
-      await axios.put(`${API_BASE}/sections/reorder`, { sections: reorderedSections });
-      // Refetch to get the latest state from server
-      await fetchData();
-    } catch (err) {
-      console.error("Failed to reorder sections:", err);
-      fetchData();
-    }
-  };
-
   const openEditModal = (shortcut: Shortcut) => {
     setEditingShortcut(shortcut);
     setIsModalOpen(true);
@@ -327,22 +293,98 @@ function App() {
     setErrorModal({ isOpen: true, title, message });
   };
 
-  // Compute derived state
-  const dashboardShortcuts = shortcuts.filter((s) => s.is_favorite);
-  const shortcutsBySection: ShortcutsBySection = {};
-  const unsectionedShortcuts: Shortcut[] = [];
-
-  dashboardShortcuts.forEach((shortcut) => {
-    const sectionId = shortcut.section_id;
-    if (sectionId != null) {
-      if (!shortcutsBySection[sectionId]) {
-        shortcutsBySection[sectionId] = [];
-      }
-      shortcutsBySection[sectionId].push(shortcut);
-    } else {
-      unsectionedShortcuts.push(shortcut);
+  /**
+   * Handle saving all pending changes when edit mode is exited
+   * This batches all the drag-and-drop changes and sends them to the backend at once
+   * Uses optimistic updates to prevent UI flickering
+   */
+  const handleSaveChanges = async (changes: Array<{ type: string; shortcutId: number; sectionId: number | null; position: number }>) => {
+    if (changes.length === 0) {
+      return;
     }
-  });
+
+    // Optimistic update: Apply changes to local state immediately
+    setShortcuts(prevShortcuts => {
+      const updated = prevShortcuts.map(shortcut => {
+        const change = changes.find(c => c.shortcutId === shortcut.id);
+        if (change) {
+          return {
+            ...shortcut,
+            section_id: change.sectionId,
+            position: change.position,
+          };
+        }
+        return shortcut;
+      });
+      // Sort by position within each section
+      return updated.sort((a, b) => {
+        if (a.section_id === b.section_id) {
+          return (a.position ?? 0) - (b.position ?? 0);
+        }
+        return 0;
+      });
+    });
+
+    try {
+      // Send updates to backend (fire and forget, UI already updated)
+      await Promise.all(
+        changes.map(change =>
+          axios.put(`${API_BASE}/shortcuts/${change.shortcutId}/section`, {
+            section_id: change.sectionId,
+            position: change.position,
+          })
+        )
+      );
+    } catch (err) {
+      // On error, refetch to restore correct state
+      await fetchData(false);
+    }
+  };
+
+  /**
+   * Format data for FormKit drag-and-drop
+   * FormKit expects a simple array of items for each draggable container
+   *
+   * For sections: Each section gets its own array of shortcuts
+   * For empty sections: Empty array []
+   * For unsectioned items: Array of shortcuts with section_id = null
+   */
+  const formatDataForFormKit = () => {
+    const dashboardShortcuts = shortcuts.filter((s) => s.is_favorite);
+
+    // Group shortcuts by section
+    const formattedSections: Record<number, Shortcut[]> = {};
+    const formattedUnsectioned: Shortcut[] = [];
+
+    // Initialize all sections with empty arrays (for empty sections)
+    sections.forEach((section) => {
+      formattedSections[section.id] = [];
+    });
+
+    // Populate sections with shortcuts
+    dashboardShortcuts.forEach((shortcut) => {
+      const sectionId = shortcut.section_id;
+      if (sectionId != null) {
+        if (!formattedSections[sectionId]) {
+          formattedSections[sectionId] = [];
+        }
+        formattedSections[sectionId].push(shortcut);
+      } else {
+        formattedUnsectioned.push(shortcut);
+      }
+    });
+
+    return {
+      sections: formattedSections,
+      unsectioned: formattedUnsectioned,
+    };
+  };
+
+  // Format data for FormKit drag-and-drop
+  const formattedData = formatDataForFormKit();
+  const shortcutsBySection = formattedData.sections;
+  const unsectionedShortcuts = formattedData.unsectioned;
+  const dashboardShortcuts = shortcuts.filter((s) => s.is_favorite);
 
   return (
     <div
@@ -389,6 +431,7 @@ function App() {
               setView={setView}
               viewMode={viewMode}
               mobileColumns={mobileColumns}
+              onSaveChanges={handleSaveChanges}
             />
           ) : (
             <ManagementView
