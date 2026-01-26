@@ -4,10 +4,28 @@ import { initReactI18next } from 'react-i18next';
 import en from './locales/en.json';
 import es from './locales/es.json';
 
-// Get saved language from localStorage or default to 'en'
+// Supported languages
+const SUPPORTED_LANGUAGES = ['en', 'es'];
+
+// Get browser language (first 2 characters, e.g., 'en-US' -> 'en')
+const getBrowserLanguage = (): string => {
+  if (typeof window !== 'undefined' && navigator.language) {
+    const browserLang = navigator.language.split('-')[0];
+    if (browserLang && SUPPORTED_LANGUAGES.includes(browserLang)) {
+      return browserLang;
+    }
+  }
+  return 'en';
+};
+
+// Get saved language from localStorage, or browser language, or default to 'en'
 const getSavedLanguage = (): string => {
   if (typeof window !== 'undefined') {
-    return localStorage.getItem('language') || 'en';
+    const saved = localStorage.getItem('language');
+    if (saved && SUPPORTED_LANGUAGES.includes(saved)) {
+      return saved;
+    }
+    return getBrowserLanguage();
   }
   return 'en';
 };
