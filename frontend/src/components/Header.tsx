@@ -1,8 +1,7 @@
 import { Download, LayoutDashboard, Layers, Edit3 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { ViewSelector } from "./ViewSelector";
-import { ThemeSelector } from "./ThemeSelector";
 import type { ViewMode, MobileColumns } from "../types";
-import type { ThemeColors } from "../types/themeTypes";
 
 interface HeaderProps {
     view: "dashboard" | "add";
@@ -15,8 +14,6 @@ interface HeaderProps {
     mobileColumns: MobileColumns;
     onViewModeChange: (mode: ViewMode) => void;
     onMobileColumnsChange: (columns: MobileColumns) => void;
-    currentTheme: ThemeColors;
-    onThemeChange: (theme: ThemeColors) => void;
 }
 
 export function Header({
@@ -30,9 +27,9 @@ export function Header({
     mobileColumns,
     onViewModeChange,
     onMobileColumnsChange,
-    currentTheme,
-    onThemeChange,
 }: HeaderProps) {
+    const { t } = useTranslation();
+
     return (
         <header className="bg-slate-900 border-b border-white/5 sticky top-0 z-40">
             <div className="container mx-auto px-3 sm:px-6 h-14 sm:h-16 flex items-center justify-between">
@@ -65,7 +62,7 @@ export function Header({
                         } : undefined}
                     >
                         <LayoutDashboard className="w-4 h-4 shrink-0" />
-                        <span className="hidden sm:inline">Dashboard</span>
+                        <span className="hidden sm:inline">{t("header.dashboard")}</span>
                     </button>
                     <button
                         onClick={() => setView("add")}
@@ -80,11 +77,11 @@ export function Header({
                         } : undefined}
                     >
                         <Layers className="w-4 h-4 shrink-0" />
-                        <span className="hidden sm:inline">Shortcuts</span>
+                        <span className="hidden sm:inline">{t("header.shortcuts")}</span>
                     </button>
                 </div>
                 <div className="flex items-center gap-1 sm:gap-2 md:gap-4">
-                   
+
                     {showInstallPrompt && (
                         <button
                             onClick={handleInstallClick}
@@ -92,7 +89,7 @@ export function Header({
                             title="Install DockerDash"
                         >
                             <Download className="w-4 h-4" />
-                            <span className="hidden md:inline">Install</span>
+                            <span className="hidden md:inline">{t("common.install")}</span>
                         </button>
                     )}
                     {view === "dashboard" && (
@@ -109,19 +106,15 @@ export function Header({
                                         ? "text-green-400 bg-green-500/10"
                                         : "text-slate-400 hover:text-white hover:bg-slate-800"
                                     }`}
-                                title={isEditMode ? "Done Reordering" : "Reorder Dashboard"}
+                                title={isEditMode ? t("header.doneReordering") : t("header.reorderDashboard")}
                             >
                                 <Edit3 className="w-4 h-4 shrink-0" />
                                 <span className="hidden lg:inline">
-                                    {isEditMode ? "Done" : "Reorder"}
+                                    {isEditMode ? t("common.done") : t("header.reorder")}
                                 </span>
                             </button>
                         </>
                     )}
-                     <ThemeSelector
-                        currentTheme={currentTheme}
-                        onThemeChange={onThemeChange}
-                    />
                 </div>
             </div>
         </header>

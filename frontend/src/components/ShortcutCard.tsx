@@ -9,6 +9,7 @@ import {
   GripVertical,
   MoreVertical,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { ShortcutCardProps } from "../types";
 import { getLinkIcon, renderShortcutIcon, renderContainerStatus, getShortcutLink } from "../utils/cardHelpers";
 
@@ -35,6 +36,7 @@ export const ShortcutCard: React.FC<ExtendedShortcutCardProps> = ({
   isEditMode,
   isOver,
 }) => {
+  const { t } = useTranslation();
   const isRunning = container?.state === "running";
   const [showMenu, setShowMenu] = useState(false);
 
@@ -127,8 +129,8 @@ export const ShortcutCard: React.FC<ExtendedShortcutCardProps> = ({
                 }}
                 title={
                   shortcut.is_favorite
-                    ? "Remove from Favorites"
-                    : "Add to Favorites"
+                    ? t("shortcuts.removeFromFavorites")
+                    : t("shortcuts.addToFavorites")
                 }
               >
                 <Star
@@ -284,7 +286,7 @@ export const ShortcutCard: React.FC<ExtendedShortcutCardProps> = ({
                               className="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-red-500/10 text-red-400 transition-colors"
                             >
                               <Square className="w-3.5 h-3.5" fill="currentColor" />
-                              Stop
+                              {t("containers.stop")}
                             </button>
                             <button
                               onClick={(e) => {
@@ -295,7 +297,7 @@ export const ShortcutCard: React.FC<ExtendedShortcutCardProps> = ({
                               className="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-yellow-500/10 text-yellow-400 transition-colors"
                             >
                               <RefreshCw className="w-3.5 h-3.5" />
-                              Restart
+                              {t("containers.restart")}
                             </button>
                           </>
                         ) : (
@@ -308,7 +310,7 @@ export const ShortcutCard: React.FC<ExtendedShortcutCardProps> = ({
                             className="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-green-500/10 text-green-400 transition-colors"
                           >
                             <Play className="w-3.5 h-3.5" fill="currentColor" />
-                            Start
+                            {t("containers.start")}
                           </button>
                         )}
                         <div className="h-px bg-white/5" />
@@ -325,7 +327,7 @@ export const ShortcutCard: React.FC<ExtendedShortcutCardProps> = ({
                       className="w-full px-3 py-2 text-left text-sm flex items-center gap-2 text-slate-400 hover:text-white hover:bg-slate-800/50 transition-colors"
                     >
                       <Settings className="w-3.5 h-3.5" />
-                      Edit
+                      {t("common.edit")}
                     </button>
                     <button
                       onClick={(e) => {
@@ -336,7 +338,7 @@ export const ShortcutCard: React.FC<ExtendedShortcutCardProps> = ({
                       className="w-full px-3 py-2 text-left text-sm flex items-center gap-2 text-slate-400 hover:text-red-400 hover:bg-slate-800/50 transition-colors"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
-                      Delete
+                      {t("common.delete")}
                     </button>
                   </div>
                 </>

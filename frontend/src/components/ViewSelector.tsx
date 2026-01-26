@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { LayoutGrid, LayoutList, Grid2x2, Maximize2, ChevronDown, Table } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { ViewMode, MobileColumns } from "../types/viewTypes";
 
 interface ViewSelectorProps {
@@ -15,6 +16,7 @@ export const ViewSelector: React.FC<ViewSelectorProps> = ({
   onViewModeChange,
   onMobileColumnsChange,
 }) => {
+  const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -35,11 +37,11 @@ export const ViewSelector: React.FC<ViewSelectorProps> = ({
   }, [isOpen]);
 
   const viewModes: { mode: ViewMode; label: string; icon: React.ReactNode }[] = [
-    { mode: "default", label: "Default", icon: <LayoutGrid className="w-4 h-4" /> },
-    { mode: "compact", label: "Compact", icon: <Grid2x2 className="w-4 h-4" /> },
-    { mode: "icon", label: "Icon Only", icon: <Maximize2 className="w-4 h-4" /> },
-    { mode: "list", label: "List", icon: <LayoutList className="w-4 h-4" /> },
-    { mode: "table", label: "Table", icon: <Table className="w-4 h-4" /> },
+    { mode: "default", label: t("view.default"), icon: <LayoutGrid className="w-4 h-4" /> },
+    { mode: "compact", label: t("view.compact"), icon: <Grid2x2 className="w-4 h-4" /> },
+    { mode: "icon", label: t("view.iconOnly"), icon: <Maximize2 className="w-4 h-4" /> },
+    { mode: "list", label: t("view.list"), icon: <LayoutList className="w-4 h-4" /> },
+    { mode: "table", label: t("view.table"), icon: <Table className="w-4 h-4" /> },
   ];
 
   const currentView = viewModes.find((v) => v.mode === viewMode) || viewModes[0];
@@ -49,7 +51,7 @@ export const ViewSelector: React.FC<ViewSelectorProps> = ({
       <button
         onClick={() => setIsOpen(!isOpen)}
         className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm font-medium transition-colors px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 whitespace-nowrap"
-        title="Change View"
+        title={t("view.title")}
       >
         {currentView.icon}
         <span className="hidden md:inline">{currentView.label}</span>
@@ -60,7 +62,7 @@ export const ViewSelector: React.FC<ViewSelectorProps> = ({
         <div className="absolute right-0 top-full mt-2 w-48 bg-slate-900 border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50">
           {/* View Modes */}
           <div className="p-2">
-            <div className="text-xs font-semibold text-slate-500 px-2 py-1">View Mode</div>
+            <div className="text-xs font-semibold text-slate-500 px-2 py-1">{t("view.viewMode")}</div>
             {viewModes.map((view) => (
               <button
                 key={view.mode}
@@ -82,7 +84,7 @@ export const ViewSelector: React.FC<ViewSelectorProps> = ({
 
           {/* Mobile Columns */}
           <div className="border-t border-white/5 p-2">
-            <div className="text-xs font-semibold text-slate-500 px-2 py-1">Mobile Columns</div>
+            <div className="text-xs font-semibold text-slate-500 px-2 py-1">{t("view.mobileColumns")}</div>
             <div className="flex gap-2 px-2">
               <button
                 onClick={() => {
@@ -95,7 +97,7 @@ export const ViewSelector: React.FC<ViewSelectorProps> = ({
                     : "bg-slate-800 text-slate-400 hover:bg-slate-700"
                 }`}
               >
-                1 Col
+                {t("view.oneCol")}
               </button>
               <button
                 onClick={() => {
@@ -108,7 +110,7 @@ export const ViewSelector: React.FC<ViewSelectorProps> = ({
                     : "bg-slate-800 text-slate-400 hover:bg-slate-700"
                 }`}
               >
-                2 Col
+                {t("view.twoCol")}
               </button>
             </div>
           </div>

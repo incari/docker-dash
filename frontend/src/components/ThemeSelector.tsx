@@ -1,17 +1,21 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Palette, Check } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { PRESET_THEMES } from "../types/themeTypes";
 import type { ThemeColors } from "../types/themeTypes";
 
 interface ThemeSelectorProps {
   currentTheme: ThemeColors;
   onThemeChange: (theme: ThemeColors) => void;
+  dropdownDirection?: "up" | "down";
 }
 
 export const ThemeSelector: React.FC<ThemeSelectorProps> = ({
   currentTheme,
   onThemeChange,
+  dropdownDirection = "down",
 }) => {
+  const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const [showCustom, setShowCustom] = useState(false);
   const [customPrimary, setCustomPrimary] = useState(currentTheme.primary);
@@ -59,18 +63,20 @@ export const ThemeSelector: React.FC<ThemeSelectorProps> = ({
       <button
         onClick={() => setIsOpen(!isOpen)}
         className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm font-medium transition-colors px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
-        title="Change Theme"
+        title={t("theme.title")}
       >
         <Palette className="w-4 h-4" />
-        <span className="hidden sm:inline">Theme</span>
+        <span className="hidden sm:inline">{t("theme.title")}</span>
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 top-full mt-2 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50 min-w-[280px] max-w-[320px] overflow-hidden">
+        <div className={`absolute right-0 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50 min-w-[280px] max-w-[320px] overflow-hidden ${
+          dropdownDirection === "up" ? "bottom-full mb-2" : "top-full mt-2"
+        }`}>
           {!showCustom ? (
             <>
               <div className="px-3 py-2 border-b border-slate-700">
-                <h3 className="text-sm font-semibold text-white">Choose Theme</h3>
+                <h3 className="text-sm font-semibold text-white">{t("theme.chooseTheme")}</h3>
               </div>
               <div className="max-h-[400px] overflow-y-auto p-2">
                 {PRESET_THEMES.map((theme) => (
@@ -103,19 +109,19 @@ export const ThemeSelector: React.FC<ThemeSelectorProps> = ({
                   onClick={() => setShowCustom(true)}
                   className="w-full px-3 py-2 text-sm text-blue-400 hover:bg-slate-700 rounded-lg transition-colors"
                 >
-                  Custom Colors...
+                  {t("theme.customColors")}
                 </button>
               </div>
             </>
           ) : (
             <>
               <div className="px-3 py-2 border-b border-slate-700">
-                <h3 className="text-sm font-semibold text-white">Custom Theme</h3>
+                <h3 className="text-sm font-semibold text-white">{t("theme.customTheme")}</h3>
               </div>
               <div className="p-4 space-y-4">
                 <div>
                   <label className="block text-xs font-medium text-slate-300 mb-2">
-                    Primary Color
+                    {t("theme.primaryColor")}
                   </label>
                   <div className="flex gap-2 items-center">
                     <input
@@ -135,7 +141,7 @@ export const ThemeSelector: React.FC<ThemeSelectorProps> = ({
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-slate-300 mb-2">
-                    Background Color
+                    {t("theme.backgroundColor")}
                   </label>
                   <div className="flex gap-2 items-center">
                     <input
@@ -159,13 +165,13 @@ export const ThemeSelector: React.FC<ThemeSelectorProps> = ({
                   onClick={() => setShowCustom(false)}
                   className="flex-1 px-3 py-2 text-sm text-slate-300 hover:bg-slate-700 rounded-lg transition-colors"
                 >
-                  Back
+                  {t("common.back")}
                 </button>
                 <button
                   onClick={handleCustomApply}
                   className="flex-1 px-3 py-2 text-sm bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors"
                 >
-                  Apply
+                  {t("theme.apply")}
                 </button>
               </div>
             </>

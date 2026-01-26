@@ -8,6 +8,7 @@ import {
     ChevronRight,
 } from "lucide-react";
 import { useCallback, useEffect, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { useDragAndDrop } from "@formkit/drag-and-drop/react";
 import { animations } from "@formkit/drag-and-drop";
 
@@ -130,17 +131,17 @@ function getMinHeightForViewMode(viewMode: ViewMode): string {
 /**
  * Edit mode banner with section creation button
  */
-function EditModeBanner({ handleCreateSection }: { handleCreateSection: () => void }) {
+function EditModeBanner({ handleCreateSection, t }: { handleCreateSection: () => void; t: (key: string) => string }) {
     return (
         <div className="bg-blue-500/10 border border-blue-500/30 rounded-2xl p-4 mb-6">
             <div className="flex items-center gap-3 mb-3">
                 <Edit2 className="w-5 h-5 text-blue-400" />
                 <div className="flex-1">
                     <h3 className="text-blue-400 font-semibold text-sm">
-                        Edit Mode Active
+                        {t("dashboard.editModeActive")}
                     </h3>
                     <p className="text-slate-400 text-xs mt-0.5">
-                        Drag and drop shortcuts to reorder or move between sections.
+                        {t("dashboard.editModeDescription")}
                     </p>
                 </div>
             </div>
@@ -149,7 +150,7 @@ function EditModeBanner({ handleCreateSection }: { handleCreateSection: () => vo
                 className="flex items-center gap-2 px-3 py-2 bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/30 rounded-lg text-blue-400 text-sm font-medium transition-colors"
             >
                 <Plus className="w-4 h-4" />
-                Create Section
+                {t("dashboard.createSection")}
             </button>
         </div>
     );
@@ -158,24 +159,23 @@ function EditModeBanner({ handleCreateSection }: { handleCreateSection: () => vo
 /**
  * Empty state component when no favorites exist
  */
-function EmptyDashboardState({ setView }: { setView: (view: "dashboard" | "add") => void }) {
+function EmptyDashboardState({ setView, t }: { setView: (view: "dashboard" | "add") => void; t: (key: string) => string }) {
     return (
         <div className="text-center py-20 border-2 border-dashed border-white/5 rounded-3xl bg-white/[0.02]">
             <div className="bg-slate-800 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Bookmark className="w-8 h-8 text-slate-500" />
             </div>
             <h3 className="text-lg font-semibold text-white">
-                No favorites found
+                {t("dashboard.noFavorites")}
             </h3>
             <p className="text-slate-400 mt-2 mb-6">
-                Star your containers or URLs in the management page to see them
-                here.
+                {t("dashboard.noFavoritesDescription")}
             </p>
             <button
                 onClick={() => setView("add")}
                 className="text-blue-400 hover:text-blue-300 font-medium underline underline-offset-4"
             >
-                Manage your shortcuts
+                {t("dashboard.manageShortcuts")}
             </button>
         </div>
     );
@@ -195,6 +195,7 @@ interface SectionBlockProps {
     handleDeleteSection: (sectionId: number, sectionName: string) => void;
     renderShortcutCard: (shortcut: Shortcut) => React.ReactElement;
     onShortcutMoved: (shortcutId: number, sectionId: number | null, position: number) => void;
+    t: (key: string) => string;
 }
 
 function SectionBlock({
@@ -208,6 +209,7 @@ function SectionBlock({
     handleDeleteSection,
     renderShortcutCard,
     onShortcutMoved,
+    t,
 }: SectionBlockProps) {
     // Don't render empty sections unless in edit mode
     if (shortcuts.length === 0 && !isEditMode) return null;
@@ -311,7 +313,7 @@ function SectionBlock({
                 >
                     {list.length === 0 && isEditMode ? (
                         <div className="col-span-full flex items-center justify-center text-slate-500 text-sm italic">
-                            Drag items here to reorganize
+                            {t("dashboard.dragItemsHere")}
                         </div>
                     ) : (
                         list.map((shortcut) => (
@@ -348,6 +350,7 @@ export function DashboardView({
     mobileColumns,
     onSaveChanges,
 }: DashboardViewProps) {
+    const { t } = useTranslation();
     const CardComponent = getCardComponentForViewMode(viewMode);
     const gridClasses = getGridLayoutClasses(viewMode, mobileColumns);
 
@@ -452,10 +455,10 @@ export function DashboardView({
             className="space-y-8"
         >
             {/* Edit Mode Banner */}
-            {showEditModeBanner && <EditModeBanner handleCreateSection={handleCreateSection} />}
+            {showEditModeBanner && <EditModeBanner handleCreateSection={handleCreateSection} t={t} />}
 
             {hasNoFavorites ? (
-                <EmptyDashboardState setView={setView} />
+                <EmptyDashboardState setView={setView} t={t} />
             ) : (
                 <div className="space-y-8">
                     {/* Unsectioned Shortcuts */}
@@ -463,7 +466,7 @@ export function DashboardView({
                         <div className="space-y-4">
                             <div className="flex items-center gap-3">
                                 <h2 className="text-lg font-semibold text-slate-400">
-                                    No Section
+                                    {t("dashboard.noSection")}
                                 </h2>
                                 <span className="text-sm text-slate-500">
                                     ({unsectionedList.length})
@@ -482,7 +485,7 @@ export function DashboardView({
                             >
                                 {unsectionedList.length === 0 && isEditMode ? (
                                     <div className="col-span-full flex items-center justify-center text-slate-500 text-sm italic">
-                                        Drag items here to reorganize
+                                        {t("dashboard.dragItemsHere")}
                                     </div>
                                 ) : (
                                     unsectionedList.map((shortcut) => (
@@ -508,7 +511,7 @@ export function DashboardView({
                         >
                             {unsectionedList.length === 0 && isEditMode ? (
                                 <div className="col-span-full flex items-center justify-center text-slate-500 text-sm italic">
-                                    Drag items here to reorganize
+                                    {t("dashboard.dragItemsHere")}
                                 </div>
                             ) : (
                                 unsectionedList.map((shortcut) => (
@@ -532,6 +535,7 @@ export function DashboardView({
                             handleDeleteSection={handleDeleteSection}
                             renderShortcutCard={renderShortcutCard}
                             onShortcutMoved={handleShortcutMoved}
+                            t={t}
                         />
                     ))}
                 </div>

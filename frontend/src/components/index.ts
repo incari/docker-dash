@@ -15,6 +15,7 @@ export { ShortcutModal } from "./ShortcutModal";
 export { SectionModal } from "./SectionModal";
 export { ViewSelector } from "./ViewSelector";
 export { ThemeSelector } from "./ThemeSelector";
+export { LanguageSelector } from "./LanguageSelector";
 export { Footer } from "./Footer";
 
 

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
 import axios from "axios";
+import { useTranslation } from "react-i18next";
 import {
   X,
   Bookmark,
@@ -45,6 +46,7 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
   onClose,
   onError,
 }) => {
+  const { t } = useTranslation();
   const [formData, setFormData] = useState<FormData>({
     name: "",
     description: "",
@@ -121,19 +123,17 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
     if (formData.type === "port") {
       if (formData.port && !isValidPort(formData.port)) {
         onError(
-          "Invalid Port Number",
-          "Please enter a valid port number between 1 and 65535.\n\nNote: Port is optional for containers that don't expose any ports."
+          t("validation.invalidPort"),
+          `${t("validation.invalidPort")}\n\n${t("validation.invalidPortNote")}`
         );
         return;
       }
     } else {
       if (!formData.url || !isValidUrl(formData.url)) {
-        setUrlError(
-          "This is not a valid URL. Please enter a valid URL like example.com or https://example.com"
-        );
+        setUrlError(t("validation.invalidUrl"));
         onError(
-          "Invalid URL",
-          "Please enter a valid URL.\n\nSupported formats:\n• example.com\n• www.example.com\n• http://example.com\n• https://example.com"
+          t("validation.invalidUrl"),
+          t("validation.invalidUrl")
         );
         return;
       }
@@ -142,12 +142,10 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
     // Validate image URL if using URL tab
     if (activeTab === "url" && formData.icon) {
       if (!isValidUrl(formData.icon)) {
-        setIconUrlError(
-          "This is not a valid URL. Please enter a valid image URL like https://example.com/image.png"
-        );
+        setIconUrlError(t("validation.invalidImageUrl"));
         onError(
-          "Invalid Image URL",
-          "Please enter a valid image URL.\n\nExample: https://example.com/image.png"
+          t("validation.invalidImageUrl"),
+          t("validation.invalidImageUrl")
         );
         return;
       }
@@ -218,7 +216,7 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
       >
         <div className="p-6 border-b border-white/5 flex items-center justify-between bg-slate-800/20">
           <h2 className="text-xl font-bold text-white">
-            {shortcut?.id ? "Edit Shortcut" : "Create New Shortcut"}
+            {shortcut?.id ? t("shortcuts.editShortcut") : t("shortcuts.createNew")}
           </h2>
           <button
             onClick={onClose}
@@ -236,7 +234,7 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
           {!shortcut?.id && (
             <div className="space-y-2">
               <label className="text-sm font-semibold text-slate-300">
-                Link to Container (Optional)
+                {t("shortcuts.linkToContainer")}
               </label>
               <select
                 value={formData.container_id}
@@ -251,7 +249,7 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
                 }}
                 className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-white appearance-none"
               >
-                <option value="">Manual Entry</option>
+                <option value="">{t("shortcuts.manualEntry")}</option>
                 {containers.map((c) => (
                   <option
                     key={c.id}
@@ -267,7 +265,7 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
               <label htmlFor="display-name" className="text-sm font-semibold text-slate-300">
-                Display Name
+                {t("shortcuts.displayName")}
               </label>
               <input
                 id="display-name"
@@ -276,13 +274,13 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
                 onChange={(e) =>
                   setFormData({ ...formData, name: e.target.value })
                 }
-                placeholder="e.g. Plex Media"
+                placeholder={t("shortcuts.displayNamePlaceholder")}
                 className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-white placeholder-slate-600"
               />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-semibold text-slate-300">
-                Connection Mode
+                {t("shortcuts.connectionMode")}
               </label>
               <div className="flex bg-slate-950 p-1 rounded-xl border border-white/10">
                 <button
@@ -293,7 +291,7 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
                       : "text-slate-500"
                     }`}
                 >
-                  LOCAL PORT
+                  {t("shortcuts.localPort")}
                 </button>
                 <button
                   type="button"
@@ -303,7 +301,7 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
                       : "text-slate-500"
                     }`}
                 >
-                  WEB URL
+                  {t("shortcuts.webUrl")}
                 </button>
               </div>
             </div>
@@ -312,10 +310,10 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
           {/* Port/URL Input */}
           <div className="space-y-2">
             <label className="text-sm font-semibold text-slate-300">
-              {formData.type === "port" ? "Port Number" : "Target URL"}
+              {formData.type === "port" ? t("shortcuts.portNumber") : t("shortcuts.targetUrl")}
               {formData.type === "port" && (
                 <span className="text-xs text-slate-500 font-normal ml-2">
-                  (Optional)
+                  ({t("common.optional")})
                 </span>
               )}
             </label>
@@ -325,6 +323,7 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
                 port={formData.port}
                 containerId={formData.container_id}
                 onChange={(port) => setFormData({ ...formData, port })}
+                t={t}
               />
             ) : (
               <UrlInput
@@ -336,13 +335,12 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
                 }}
                 onBlur={() => {
                   if (formData.url && !isValidUrl(formData.url)) {
-                    setUrlError(
-                      "This is not a valid URL. Please enter a valid URL like example.com or https://example.com"
-                    );
+                    setUrlError(t("validation.invalidUrl"));
                   } else {
                     setUrlError("");
                   }
                 }}
+                t={t}
               />
             )}
           </div>
@@ -364,7 +362,7 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
           {/* Description */}
           <div className="space-y-2">
             <label className="text-sm font-semibold text-slate-300">
-              Description
+              {t("shortcuts.descriptionLabel")}
             </label>
             <textarea
               rows={2}
@@ -372,7 +370,7 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
               onChange={(e) =>
                 setFormData({ ...formData, description: e.target.value })
               }
-              placeholder="What does this service do?"
+              placeholder={t("shortcuts.descriptionPlaceholder")}
               className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-white resize-none"
             />
           </div>
@@ -387,6 +385,7 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
             setSelectedFile={setSelectedFile}
             iconUrlError={iconUrlError}
             setIconUrlError={setIconUrlError}
+            t={t}
           />
 
           {/* Buttons */}
@@ -396,13 +395,13 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
               onClick={onClose}
               className="flex-1 py-4 rounded-2xl bg-slate-800 text-white font-bold hover:bg-slate-700 transition-colors"
             >
-              Cancel
+              {t("common.cancel")}
             </button>
             <button
               type="submit"
               className="flex-[2] py-4 rounded-2xl bg-blue-600 text-white font-bold hover:bg-blue-500 shadow-xl shadow-blue-500/20 active:scale-95 transition-all"
             >
-              {shortcut?.id ? "Update Shortcut" : "Create Shortcut"}
+              {shortcut?.id ? t("common.save") : t("common.create")}
             </button>
           </div>
         </form>
@@ -418,6 +417,7 @@ interface PortSelectorProps {
   port: string;
   containerId: string;
   onChange: (port: string) => void;
+  t: (key: string) => string;
 }
 
 const PortSelector: React.FC<PortSelectorProps> = ({
@@ -425,6 +425,7 @@ const PortSelector: React.FC<PortSelectorProps> = ({
   port,
   containerId,
   onChange,
+  t,
 }) => {
   const [isCustom, setIsCustom] = useState(false);
 
@@ -449,7 +450,7 @@ const PortSelector: React.FC<PortSelectorProps> = ({
             }}
             className="flex-1 bg-slate-800 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-white appearance-none"
           >
-            <option value="">Select a port...</option>
+            <option value="">{t("shortcuts.selectPort")}</option>
             {availablePorts.map((p) => (
               <option
                 key={p}
@@ -458,13 +459,13 @@ const PortSelector: React.FC<PortSelectorProps> = ({
                 {p}
               </option>
             ))}
-            <option value="__custom__">Custom port...</option>
+            <option value="__custom__">{t("shortcuts.customPort")}</option>
           </select>
         </div>
         <p className="text-xs text-slate-500 pl-1">
           {availablePorts.length === 1
-            ? "Container has 1 port available, or enter a custom port"
-            : `Container has ${availablePorts.length} ports available, or enter a custom port`}
+            ? t("shortcuts.containerHasOnePort")
+            : t("shortcuts.containerHasPorts", { count: availablePorts.length })}
         </p>
       </div>
     );
@@ -479,7 +480,7 @@ const PortSelector: React.FC<PortSelectorProps> = ({
           max="65535"
           value={port}
           onChange={(e) => onChange(e.target.value)}
-          placeholder="8080 (leave empty if no port)"
+          placeholder={t("shortcuts.portPlaceholder")}
           className="flex-1 bg-slate-800 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-white"
         />
         {availablePorts.length > 0 && (
@@ -491,16 +492,16 @@ const PortSelector: React.FC<PortSelectorProps> = ({
             }}
             className="px-4 py-3 bg-slate-700 hover:bg-slate-600 border border-white/10 rounded-xl text-sm text-slate-300 transition-colors whitespace-nowrap"
           >
-            Use available
+            {t("shortcuts.useAvailable")}
           </button>
         )}
       </div>
       <p className="text-xs text-slate-500 pl-1">
         {containerId
           ? availablePorts.length > 0
-            ? "Enter custom port or use available ports"
-            : "Container has no exposed ports"
-          : "Leave empty for containers that don't expose ports"}
+            ? t("shortcuts.enterCustomOrUseAvailable")
+            : t("shortcuts.containerNoExposedPorts")
+          : t("shortcuts.leaveEmptyNoPorts")}
       </p>
     </div>
   );
@@ -511,6 +512,7 @@ interface UrlInputProps {
   urlError: string;
   onChange: (url: string) => void;
   onBlur: () => void;
+  t: (key: string) => string;
 }
 
 const UrlInput: React.FC<UrlInputProps> = ({
@@ -518,6 +520,7 @@ const UrlInput: React.FC<UrlInputProps> = ({
   urlError,
   onChange,
   onBlur,
+  t,
 }) => (
   <>
     <input
@@ -526,15 +529,14 @@ const UrlInput: React.FC<UrlInputProps> = ({
       value={url}
       onChange={(e) => onChange(e.target.value)}
       onBlur={onBlur}
-      placeholder="example.com or https://example.com"
+      placeholder={t("shortcuts.urlPlaceholder")}
       className={`w-full bg-slate-800 border ${urlError ? "border-red-500" : "border-white/10"
         } rounded-xl px-4 py-3 focus:outline-none focus:ring-2 ${urlError ? "focus:ring-red-500" : "focus:ring-blue-500"
         } transition-all text-white`}
     />
     {!urlError && (
       <p className="text-xs text-slate-500 pl-1">
-        Supports: example.com, www.example.com, http://example.com,
-        https://example.com
+        {t("shortcuts.urlSupports")}
       </p>
     )}
     {urlError && (
@@ -732,6 +734,7 @@ interface IconSelectorProps {
   setSelectedFile: (file: File | null) => void;
   iconUrlError: string;
   setIconUrlError: (error: string) => void;
+  t: (key: string) => string;
 }
 
 const IconSelector: React.FC<IconSelectorProps> = ({
@@ -743,26 +746,34 @@ const IconSelector: React.FC<IconSelectorProps> = ({
   setSelectedFile,
   iconUrlError,
   setIconUrlError,
-}) => (
+  t,
+}) => {
+  const tabLabels: Record<"icon" | "url" | "upload", string> = {
+    icon: t("shortcuts.iconTab"),
+    url: t("shortcuts.urlTab"),
+    upload: t("shortcuts.uploadTab"),
+  };
+
+  return (
   <div className="space-y-4 pt-2">
     <label className="text-sm font-semibold text-slate-300">
-      Identity & Branding
+      {t("shortcuts.identityBranding")}
     </label>
     <div className="flex gap-2 p-1 bg-slate-950 rounded-xl border border-white/10">
-      {(["icon", "url", "upload"] as const).map((t) => (
+      {(["icon", "url", "upload"] as const).map((tab) => (
         <button
-          key={t}
+          key={tab}
           type="button"
-          onClick={() => setActiveTab(t)}
-          className={`flex-1 py-2.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${activeTab === t
+          onClick={() => setActiveTab(tab)}
+          className={`flex-1 py-2.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${activeTab === tab
               ? "bg-slate-800 text-white"
               : "text-slate-500 hover:text-slate-300"
             }`}
         >
-          {t === "icon" && <Bookmark className="w-3 h-3" />}
-          {t === "url" && <LinkIcon className="w-3 h-3" />}
-          {t === "upload" && <Upload className="w-3 h-3" />}
-          {t}
+          {tab === "icon" && <Bookmark className="w-3 h-3" />}
+          {tab === "url" && <LinkIcon className="w-3 h-3" />}
+          {tab === "upload" && <Upload className="w-3 h-3" />}
+          {tabLabels[tab]}
         </button>
       ))}
     </div>
@@ -785,7 +796,7 @@ const IconSelector: React.FC<IconSelectorProps> = ({
             <input
               type="text"
               className="bg-transparent flex-1 focus:outline-none text-white text-sm"
-              placeholder="Enter or paste image URL..."
+              placeholder={t("shortcuts.imageUrlPlaceholder")}
               value={activeTab === "url" && (icon.startsWith("http") || icon.includes("/")) ? icon : ""}
               onChange={(e) => {
                 setIcon(e.target.value);
@@ -793,9 +804,7 @@ const IconSelector: React.FC<IconSelectorProps> = ({
               }}
               onBlur={(e) => {
                 if (e.target.value && !isValidUrl(e.target.value)) {
-                  setIconUrlError(
-                    "This is not a valid URL. Please enter a valid image URL like https://example.com/image.png"
-                  );
+                  setIconUrlError(t("validation.invalidImageUrl"));
                 } else {
                   setIconUrlError("");
                 }
@@ -841,4 +850,5 @@ const IconSelector: React.FC<IconSelectorProps> = ({
       )}
     </div>
   </div>
-);
+  );
+};

@@ -402,8 +402,6 @@ function App() {
         mobileColumns={mobileColumns}
         onViewModeChange={setViewMode}
         onMobileColumnsChange={setMobileColumns}
-        currentTheme={theme}
-        onThemeChange={updateTheme}
       />
 
       <main className="container mx-auto px-6 py-8">
@@ -452,7 +450,10 @@ function App() {
         </AnimatePresence>
       </main>
 
-      <Footer />
+      <Footer
+        currentTheme={theme}
+        onThemeChange={updateTheme}
+      />
 
       <AnimatePresence>
         {isModalOpen && (

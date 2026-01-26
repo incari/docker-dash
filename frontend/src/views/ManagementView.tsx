@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
 import { Plus, ArrowLeft, Link as LinkIcon, Server } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { ShortcutCard, ContainerCard } from "../components";
 import type { DockerContainer, Shortcut } from "../types";
 
@@ -32,6 +33,7 @@ export function ManagementView({
     handleQuickAdd,
     handleToggleFavorite,
 }: ManagementViewProps) {
+    const { t } = useTranslation();
     const customShortcuts = shortcuts.filter((s) => !s.container_id);
 
     return (
@@ -54,10 +56,10 @@ export function ManagementView({
                         </button>
                         <div>
                             <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-                                <LinkIcon className="text-blue-500 w-6 h-6" /> Custom Shortcuts
+                                <LinkIcon className="text-blue-500 w-6 h-6" /> {t("shortcuts.title")}
                             </h2>
                             <p className="text-slate-400 text-sm mt-1">
-                                Manual entries not linked to local containers.
+                                {t("shortcuts.description")}
                             </p>
                         </div>
                     </div>
@@ -69,16 +71,16 @@ export function ManagementView({
                         className="bg-blue-600 hover:bg-blue-500 text-white px-3 md:px-4 py-2 rounded-lg flex items-center gap-2 transition-all shadow-lg shadow-blue-500/20 font-medium"
                     >
                         <Plus className="w-5 h-5" />
-                        <span className="hidden md:inline">Add Custom</span>
+                        <span className="hidden md:inline">{t("shortcuts.addCustom")}</span>
                     </button>
                 </div>
 
                 {customShortcuts.length === 0 ? (
                     <div className="text-center py-12 border-2 border-dashed border-white/5 rounded-2xl bg-white/[0.02]">
                         <LinkIcon className="w-10 h-10 text-slate-600 mx-auto mb-3" />
-                        <p className="text-slate-400">No custom shortcuts yet.</p>
+                        <p className="text-slate-400">{t("shortcuts.noShortcuts")}</p>
                         <p className="text-slate-500 text-sm mt-1">
-                            Add URLs that aren't linked to containers.
+                            {t("shortcuts.noShortcutsDescription")}
                         </p>
                     </div>
                 ) : (
@@ -104,19 +106,19 @@ export function ManagementView({
             <section className="space-y-6">
                 <div>
                     <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-                        <Server className="text-green-500 w-6 h-6" /> Docker Containers
+                        <Server className="text-green-500 w-6 h-6" /> {t("containers.title")}
                     </h2>
                     <p className="text-slate-400 text-sm mt-1">
-                        Containers running on your system.
+                        {t("containers.description")}
                     </p>
                 </div>
 
                 {containers.length === 0 ? (
                     <div className="text-center py-12 border-2 border-dashed border-white/5 rounded-2xl bg-white/[0.02]">
                         <Server className="w-10 h-10 text-slate-600 mx-auto mb-3" />
-                        <p className="text-slate-400">No containers found.</p>
+                        <p className="text-slate-400">{t("containers.noContainers")}</p>
                         <p className="text-slate-500 text-sm mt-1">
-                            Start some Docker containers to see them here.
+                            {t("containers.noContainersDescription")}
                         </p>
                     </div>
                 ) : (
