@@ -31,7 +31,7 @@ export function Header({
     const { t } = useTranslation();
 
     return (
-        <header className="bg-slate-900 border-b border-white/5 sticky top-0 z-40">
+        <header className="bg-slate-900 border-b border-white/5 sticky top-0 z-50">
             <div className="container mx-auto px-3 sm:px-6 h-14 sm:h-16 flex items-center justify-between">
                 <div className="flex items-center gap-2 sm:gap-4">
                     <button
@@ -46,20 +46,16 @@ export function Header({
                             />
                         </div>
                         <h1 className="text-sm sm:text-base md:text-xl font-bold tracking-tight text-white whitespace-nowrap">
-                            Docker<span style={{ color: "var(--color-primary)" }}>Dash</span>
+                            Docker<span className="text-blue-500">Dash</span>
                         </h1>
                     </button>
                     <button
                         onClick={() => setView("dashboard")}
                         className={`flex items-center gap-1 sm:gap-2 text-xs sm:text-sm font-medium transition-colors px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg whitespace-nowrap ${
                             view === "dashboard"
-                                ? ""
+                                ? "text-blue-500 bg-blue-500/10"
                                 : "text-slate-400 hover:text-white hover:bg-slate-800"
                         }`}
-                        style={view === "dashboard" ? {
-                            color: "var(--color-primary)",
-                            backgroundColor: "rgba(var(--color-primary-rgb), 0.1)"
-                        } : undefined}
                     >
                         <LayoutDashboard className="w-4 h-4 shrink-0" />
                         <span className="hidden sm:inline">{t("header.dashboard")}</span>
@@ -68,13 +64,9 @@ export function Header({
                         onClick={() => setView("add")}
                         className={`flex items-center gap-1 sm:gap-2 text-xs sm:text-sm font-medium transition-colors px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg whitespace-nowrap ${
                             view === "add"
-                                ? ""
+                                ? "text-blue-500 bg-blue-500/10"
                                 : "text-slate-400 hover:text-white hover:bg-slate-800"
                         }`}
-                        style={view === "add" ? {
-                            color: "var(--color-primary)",
-                            backgroundColor: "rgba(var(--color-primary-rgb), 0.1)"
-                        } : undefined}
                     >
                         <Layers className="w-4 h-4 shrink-0" />
                         <span className="hidden sm:inline">{t("header.shortcuts")}</span>

@@ -136,7 +136,7 @@ export const ShortcutCardCompact: React.FC<ExtendedShortcutCardProps> = ({
 
           {/* Three-dot menu - Hidden in edit mode */}
           {!isEditMode && (
-            <div className="relative z-50">
+            <div className={`relative ${showMenu ? "z-50" : ""}`}>
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -153,7 +153,7 @@ export const ShortcutCardCompact: React.FC<ExtendedShortcutCardProps> = ({
                 <>
                   {/* Backdrop to close menu */}
                   <div
-                    className="fixed inset-0 z-100"
+                    className="fixed inset-0 z-40"
                     onClick={(e) => {
                       e.stopPropagation();
                       setShowMenu(false);
@@ -162,7 +162,7 @@ export const ShortcutCardCompact: React.FC<ExtendedShortcutCardProps> = ({
 
                   {/* Menu content */}
                   <div
-                    className="absolute right-0 top-full mt-1 z-101 rounded-lg border shadow-xl overflow-hidden min-w-[140px]"
+                    className="absolute right-0 top-full mt-1 z-50 rounded-lg border shadow-xl overflow-hidden min-w-[140px]"
                     style={{
                       backgroundColor: "var(--color-card-background)",
                       borderColor: "rgba(var(--color-primary-rgb), 0.3)",

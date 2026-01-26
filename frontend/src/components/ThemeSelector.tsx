@@ -70,7 +70,7 @@ export const ThemeSelector: React.FC<ThemeSelectorProps> = ({
       </button>
 
       {isOpen && (
-        <div className={`absolute right-0 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50 min-w-[280px] max-w-[320px] overflow-hidden ${
+        <div className={`absolute right-0 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-[100] min-w-[280px] max-w-[320px] overflow-hidden ${
           dropdownDirection === "up" ? "bottom-full mb-2" : "top-full mt-2"
         }`}>
           {!showCustom ? (

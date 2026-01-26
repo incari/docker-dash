@@ -1,360 +1,138 @@
 import { useState, useEffect, useCallback } from "react";
-import axios from "axios";
 import { AnimatePresence } from "framer-motion";
 
-import {
-  Header,
-  Footer,
-  ConfirmModal,
-  ErrorModal,
-  ShortcutModal,
-  SectionModal,
-} from "./components";
-import { DashboardView, ManagementView } from "./views";
-import { API_BASE } from "./constants/api";
-import { useTheme } from "./hooks";
-import type {
-  DockerContainer,
-  Shortcut,
-  Section,
-  ViewMode,
-  MobileColumns,
-} from "./types";
-import type {
-  ConfirmModalState,
-  ErrorModalState,
-  SectionModalState,
-  TailscaleInfoExtended,
-  ShortcutsBySection,
-} from "./appTypes";
+import { Header } from "./components/Header";
+import { Footer } from "./components/Footer";
+import { ConfirmModal } from "./components/ConfirmModal";
+import { ErrorModal } from "./components/ErrorModal";
+import { ShortcutModal } from "./components/ShortcutModal";
+import { SectionModal } from "./components/SectionModal";
+import { DashboardView } from "./views/DashboardView";
+import { ManagementView } from "./views/ManagementView";
+import { useTheme } from "./hooks/useTheme";
+import { useDashboardData } from "./hooks/useDashboardData";
+import { useContainerActions } from "./hooks/useContainerActions";
+import { useShortcutActions } from "./hooks/useShortcutActions";
+import { useSectionActions } from "./hooks/useSectionActions";
+import { useModals } from "./hooks/useModals";
+import { useInstallPrompt } from "./hooks/useInstallPrompt";
+import { useViewSettings } from "./hooks/useViewSettings";
+import type { Section } from "./types";
 
 function App() {
+  // ==================== View State ====================
   const [view, setView] = useState<"dashboard" | "add">("dashboard");
-  const [shortcuts, setShortcuts] = useState<Shortcut[]>([]);
-  const [sections, setSections] = useState<Section[]>([]);
-  const [containers, setContainers] = useState<DockerContainer[]>([]);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingShortcut, setEditingShortcut] = useState<Shortcut | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [confirmModal, setConfirmModal] = useState<ConfirmModalState>({
-    isOpen: false,
-    title: "",
-    message: "",
-    onConfirm: null,
-    type: "danger",
-  });
-  const [errorModal, setErrorModal] = useState<ErrorModalState>({
-    isOpen: false,
-    title: "",
-    message: "",
-  });
-  const [tailscaleInfo, setTailscaleInfo] = useState<TailscaleInfoExtended>({
-    available: false,
-    enabled: false,
-    ip: null,
-  });
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  const [showInstallPrompt, setShowInstallPrompt] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
-  const [sectionModal, setSectionModal] = useState<SectionModalState>({
-    isOpen: false,
-    section: null,
-  });
-  const [viewMode, setViewMode] = useState<ViewMode>("default");
-  const [mobileColumns, setMobileColumns] = useState<MobileColumns>(2);
 
-  // Theme hook
+  // ==================== Custom Hooks ====================
   const { theme, updateTheme } = useTheme();
+  const { viewMode, mobileColumns, setViewMode, setMobileColumns } = useViewSettings();
+  const { showInstallPrompt, handleInstallClick } = useInstallPrompt();
+  const {
+    shortcuts,
+    sections,
+    containers,
+    tailscaleInfo,
+    loading,
+    fetchData,
+    fetchTailscaleInfo,
+    setShortcuts,
+    setSections,
+  } = useDashboardData();
 
-  const fetchData = useCallback(async (showLoading = true) => {
-    if (showLoading) {
-      setLoading(true);
-    }
-    try {
-      const [shortcutsRes, containersRes, sectionsRes] = await Promise.all([
-        axios.get(`${API_BASE}/shortcuts`),
-        axios.get(`${API_BASE}/containers`),
-        axios.get(`${API_BASE}/sections`),
-      ]);
-      setShortcuts(shortcutsRes.data);
-      setContainers(containersRes.data);
-      setSections(sectionsRes.data);
+  const modals = useModals();
 
-      if (shortcutsRes.data.length === 0 && view === "dashboard") {
-        setView("add");
-      }
-    } catch (err) {
-      console.error("Failed to fetch data", err);
-    } finally {
-      if (showLoading) {
-        setLoading(false);
-      }
-    }
-  }, [view]);
+  // ==================== Action Hooks ====================
+  const containerActions = useContainerActions(fetchData);
 
+  const shortcutActions = useShortcutActions(
+    {
+      onRefresh: fetchData,
+      onError: modals.showError,
+      showDeleteConfirm: (onConfirm) => {
+        modals.showConfirm(
+          "Delete Shortcut",
+          "Are you sure you want to delete this shortcut? This action cannot be undone.",
+          onConfirm
+        );
+      },
+    },
+    setShortcuts
+  );
 
-  const fetchTailscaleInfo = useCallback(async () => {
-    try {
-      const res = await axios.get(`${API_BASE}/tailscale`);
-      setTailscaleInfo(res.data);
-    } catch (err) {
-      console.error("Failed to fetch Tailscale info", err);
-    }
-  }, []);
+  const sectionActions = useSectionActions(
+    {
+      onRefresh: fetchData,
+      onError: modals.showError,
+      showDeleteConfirm: (sectionName, onConfirm) => {
+        modals.showConfirm(
+          "Delete Section",
+          `Are you sure you want to delete "${sectionName}"? Shortcuts in this section will be moved to "No Section".`,
+          onConfirm
+        );
+      },
+    },
+    setSections
+  );
 
+  // ==================== Effects ====================
   useEffect(() => {
     fetchData();
     fetchTailscaleInfo();
-
-    const handleBeforeInstallPrompt = (e: Event) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-      setShowInstallPrompt(true);
-    };
-
-    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
-    return () => {
-      window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
-    };
   }, [fetchData, fetchTailscaleInfo]);
 
-  const handleInstallClick = async () => {
-    if (!deferredPrompt) return;
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === "accepted") {
-      setShowInstallPrompt(false);
+  // Redirect to add view if no shortcuts
+  useEffect(() => {
+    if (!loading && shortcuts.length === 0 && view === "dashboard") {
+      setView("add");
     }
-    setDeferredPrompt(null);
-  };
+  }, [loading, shortcuts.length, view]);
 
-  const handleStart = async (id: string) => {
-    try {
-      await axios.post(`${API_BASE}/containers/${id}/start`);
-      fetchData();
-    } catch (err) {
-      console.error(err);
-    }
-  };
+  // ==================== Container Action Handlers ====================
+  const handleStart = useCallback((id: string) => {
+    containerActions.handleStart(id);
+  }, [containerActions]);
 
-  const handleStop = async (id: string) => {
-    setConfirmModal({
-      isOpen: true,
-      title: "Stop Container",
-      message: "Are you sure you want to stop this container? This will terminate all active processes.",
-      type: "danger",
-      onConfirm: async () => {
-        try {
-          await axios.post(`${API_BASE}/containers/${id}/stop`);
-          fetchData();
-        } catch (err) {
-          console.error(err);
-        }
-      },
-    });
-  };
-
-  const handleRestart = async (id: string) => {
-    try {
-      await axios.post(`${API_BASE}/containers/${id}/restart`);
-      fetchData();
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleDelete = async (id: number) => {
-    setConfirmModal({
-      isOpen: true,
-      title: "Delete Shortcut",
-      message: "Are you sure you want to delete this shortcut? This action cannot be undone.",
-      type: "danger",
-      onConfirm: async () => {
-        try {
-          await axios.delete(`${API_BASE}/shortcuts/${id}`);
-          fetchData();
-        } catch (err) {
-          console.error(err);
-        }
-      },
-    });
-  };
-
-
-  const handleCreateSection = () => {
-    setSectionModal({ isOpen: true, section: null });
-  };
-
-  const handleEditSection = (section: Section) => {
-    setSectionModal({ isOpen: true, section });
-  };
-
-  const handleSaveSection = async (name: string) => {
-    try {
-      if (sectionModal.section) {
-        await axios.put(`${API_BASE}/sections/${sectionModal.section.id}`, { name });
-      } else {
-        await axios.post(`${API_BASE}/sections`, { name });
-      }
-      setSectionModal({ isOpen: false, section: null });
-      fetchData();
-    } catch (err: any) {
-      console.error("Failed to save section:", err);
-      setErrorModal({
-        isOpen: true,
-        title: sectionModal.section ? "Error Updating Section" : "Error Creating Section",
-        message: err.response?.data?.error || "Failed to save section",
-      });
-    }
-  };
-
-  const handleDeleteSection = async (sectionId: number, sectionName: string) => {
-    setConfirmModal({
-      isOpen: true,
-      title: "Delete Section",
-      message: `Are you sure you want to delete "${sectionName}"? Shortcuts in this section will be moved to "No Section".`,
-      type: "danger",
-      onConfirm: async () => {
-        try {
-          await axios.delete(`${API_BASE}/sections/${sectionId}`);
-          fetchData();
-        } catch (err: any) {
-          console.error("Failed to delete section:", err);
-          setErrorModal({
-            isOpen: true,
-            title: "Error Deleting Section",
-            message: err.response?.data?.error || "Failed to delete section",
-          });
-        }
-      },
-    });
-  };
-
-  const handleToggleSection = async (sectionId: number, isCollapsed: boolean) => {
-    try {
-      await axios.put(`${API_BASE}/sections/${sectionId}`, {
-        is_collapsed: !isCollapsed,
-      });
-      setSections(
-        sections.map((s) =>
-          s.id === sectionId ? { ...s, is_collapsed: !isCollapsed } : s
-        )
+  const handleStop = useCallback((id: string) => {
+    containerActions.handleStop(id, (onConfirm) => {
+      modals.showConfirm(
+        "Stop Container",
+        "Are you sure you want to stop this container? This will terminate all active processes.",
+        onConfirm
       );
-    } catch (err) {
-      console.error("Failed to toggle section:", err);
-      fetchData();
-    }
-  };
-
-  const handleQuickAdd = async (container: DockerContainer) => {
-    const ports = container.ports.map((p) => p.public).filter(Boolean);
-    const port = ports[0] || "";
-
-    const formData = new FormData();
-    formData.append("name", container.name);
-    if (port) formData.append("port", String(port));
-    formData.append("container_id", container.id);
-    formData.append("icon", "Server");
-    // Description is optional - only add if it exists and is not empty
-    if (container.description && container.description.trim()) {
-      formData.append("description", container.description.trim());
-    }
-
-    try {
-      await axios.post(`${API_BASE}/shortcuts`, formData);
-      fetchData();
-    } catch (err: any) {
-      console.error(err);
-      setErrorModal({
-        isOpen: true,
-        title: "Error Adding Shortcut",
-        message: err.response?.data?.error || "Failed to add shortcut",
-      });
-    }
-  };
-
-  const handleToggleFavorite = async (id: number, currentStatus: boolean | number) => {
-    try {
-      await axios.post(`${API_BASE}/shortcuts/${id}/favorite`, {
-        is_favorite: !currentStatus,
-      });
-      fetchData();
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const openEditModal = (shortcut: Shortcut) => {
-    setEditingShortcut(shortcut);
-    setIsModalOpen(true);
-  };
-
-  const handleError = (title: string, message: string) => {
-    setErrorModal({ isOpen: true, title, message });
-  };
-
-  /**
-   * Handle saving all pending changes when edit mode is exited
-   * This batches all the drag-and-drop changes and sends them to the backend at once
-   * Uses optimistic updates to prevent UI flickering
-   */
-  const handleSaveChanges = async (changes: Array<{ type: string; shortcutId: number; sectionId: number | null; position: number }>) => {
-    if (changes.length === 0) {
-      return;
-    }
-
-    // Optimistic update: Apply changes to local state immediately
-    setShortcuts(prevShortcuts => {
-      const updated = prevShortcuts.map(shortcut => {
-        const change = changes.find(c => c.shortcutId === shortcut.id);
-        if (change) {
-          return {
-            ...shortcut,
-            section_id: change.sectionId,
-            position: change.position,
-          };
-        }
-        return shortcut;
-      });
-      // Sort by position within each section
-      return updated.sort((a, b) => {
-        if (a.section_id === b.section_id) {
-          return (a.position ?? 0) - (b.position ?? 0);
-        }
-        return 0;
-      });
     });
+  }, [containerActions, modals]);
 
+  const handleRestart = useCallback((id: string) => {
+    containerActions.handleRestart(id);
+  }, [containerActions]);
+
+  // ==================== Section Handlers ====================
+  const handleCreateSection = useCallback(() => {
+    modals.openSectionModal(null);
+  }, [modals]);
+
+  const handleEditSection = useCallback((section: Section) => {
+    modals.openSectionModal(section);
+  }, [modals]);
+
+  const handleSaveSection = useCallback(async (name: string) => {
     try {
-      // Send updates to backend (fire and forget, UI already updated)
-      await Promise.all(
-        changes.map(change =>
-          axios.put(`${API_BASE}/shortcuts/${change.shortcutId}/section`, {
-            section_id: change.sectionId,
-            position: change.position,
-          })
-        )
-      );
-    } catch (err) {
-      // On error, refetch to restore correct state
-      await fetchData(false);
+      await sectionActions.handleSaveSection(name, modals.sectionModal.section);
+      modals.closeSectionModal();
+    } catch {
+      // Error already handled in hook
     }
-  };
+  }, [sectionActions, modals]);
 
-  /**
-   * Format data for FormKit drag-and-drop
-   * FormKit expects a simple array of items for each draggable container
-   *
-   * For sections: Each section gets its own array of shortcuts
-   * For empty sections: Empty array []
-   * For unsectioned items: Array of shortcuts with section_id = null
-   */
+  // ==================== Computed Data ====================
+  // Compute inline like original - useMemo can cause issues with FormKit drag-and-drop
   const formatDataForFormKit = () => {
     const dashboardShortcuts = shortcuts.filter((s) => s.is_favorite);
 
     // Group shortcuts by section
-    const formattedSections: Record<number, Shortcut[]> = {};
-    const formattedUnsectioned: Shortcut[] = [];
+    const formattedSections: Record<number, typeof shortcuts> = {};
+    const formattedUnsectioned: typeof shortcuts = [];
 
     // Initialize all sections with empty arrays (for empty sections)
     sections.forEach((section) => {
@@ -385,6 +163,35 @@ function App() {
   const shortcutsBySection = formattedData.sections;
   const unsectionedShortcuts = formattedData.unsectioned;
   const dashboardShortcuts = shortcuts.filter((s) => s.is_favorite);
+
+  // ==================== Shortcut/Section Handlers (wrapped for component props) ====================
+  const handleDeleteSection = useCallback((sectionId: number, sectionName: string) => {
+    sectionActions.handleDeleteSection(sectionId, sectionName);
+  }, [sectionActions]);
+
+  const handleToggleSection = useCallback((sectionId: number, isCollapsed: boolean) => {
+    sectionActions.handleToggleSection(sectionId, isCollapsed);
+  }, [sectionActions]);
+
+  const openEditModal = useCallback((shortcut: typeof shortcuts[0]) => {
+    modals.openShortcutModal(shortcut);
+  }, [modals]);
+
+  const handleDelete = useCallback((id: number) => {
+    shortcutActions.handleDelete(id);
+  }, [shortcutActions]);
+
+  const handleToggleFavorite = useCallback((id: number, currentStatus: boolean | number) => {
+    shortcutActions.handleToggleFavorite(id, currentStatus);
+  }, [shortcutActions]);
+
+  const handleQuickAdd = useCallback((container: typeof containers[0]) => {
+    shortcutActions.handleQuickAdd(container);
+  }, [shortcutActions]);
+
+  const handleSaveChanges = useCallback(async (changes: Array<{ type: string; shortcutId: number; sectionId: number | null; position: number }>) => {
+    await shortcutActions.handleSaveChanges(changes);
+  }, [shortcutActions]);
 
   return (
     <div
@@ -437,8 +244,8 @@ function App() {
               shortcuts={shortcuts}
               tailscaleInfo={tailscaleInfo}
               setView={setView}
-              setEditingShortcut={setEditingShortcut}
-              setIsModalOpen={setIsModalOpen}
+              setEditingShortcut={(shortcut) => modals.openShortcutModal(shortcut)}
+              setIsModalOpen={(isOpen) => isOpen ? modals.openShortcutModal() : modals.closeShortcutModal()}
               openEditModal={openEditModal}
               handleDelete={handleDelete}
               handleStart={handleStart}
@@ -456,49 +263,43 @@ function App() {
       />
 
       <AnimatePresence>
-        {isModalOpen && (
+        {modals.shortcutModal.isOpen && (
           <ShortcutModal
-            isOpen={isModalOpen}
-            shortcut={editingShortcut}
+            isOpen={modals.shortcutModal.isOpen}
+            shortcut={modals.shortcutModal.shortcut}
             containers={containers}
             tailscaleInfo={tailscaleInfo}
             onSave={fetchData}
-            onClose={() => {
-              setIsModalOpen(false);
-              setEditingShortcut(null);
-            }}
-            onError={handleError}
+            onClose={modals.closeShortcutModal}
+            onError={modals.showError}
           />
         )}
       </AnimatePresence>
 
       <AnimatePresence>
-        {sectionModal.isOpen && (
+        {modals.sectionModal.isOpen && (
           <SectionModal
-            isOpen={sectionModal.isOpen}
-            mode={sectionModal.section ? "edit" : "add"}
-            section={sectionModal.section}
+            isOpen={modals.sectionModal.isOpen}
+            mode={modals.sectionModal.section ? "edit" : "add"}
+            section={modals.sectionModal.section}
             onSave={handleSaveSection}
-            onClose={() => setSectionModal({ isOpen: false, section: null })}
+            onClose={modals.closeSectionModal}
           />
         )}
       </AnimatePresence>
 
       <ConfirmModal
-        isOpen={confirmModal.isOpen}
-        title={confirmModal.title}
-        message={confirmModal.message}
-        onConfirm={() => {
-          confirmModal.onConfirm?.();
-          setConfirmModal({ ...confirmModal, isOpen: false });
-        }}
-        onCancel={() => setConfirmModal({ ...confirmModal, isOpen: false })}
+        isOpen={modals.confirmModal.isOpen}
+        title={modals.confirmModal.title}
+        message={modals.confirmModal.message}
+        onConfirm={modals.confirmAndClose}
+        onCancel={modals.closeConfirm}
       />
 
       <ErrorModal
-        isOpen={errorModal.isOpen}
-        message={`${errorModal.title}\n\n${errorModal.message}`}
-        onClose={() => setErrorModal({ ...errorModal, isOpen: false })}
+        isOpen={modals.errorModal.isOpen}
+        message={`${modals.errorModal.title}\n\n${modals.errorModal.message}`}
+        onClose={modals.closeError}
       />
     </div>
   );

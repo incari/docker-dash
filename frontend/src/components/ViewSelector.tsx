@@ -59,7 +59,7 @@ export const ViewSelector: React.FC<ViewSelectorProps> = ({
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 top-full mt-2 w-48 bg-slate-900 border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50">
+        <div className="absolute right-0 top-full mt-2 w-48 bg-slate-900 border border-white/10 rounded-xl shadow-2xl overflow-hidden z-100">
           {/* View Modes */}
           <div className="p-2">
             <div className="text-xs font-semibold text-slate-500 px-2 py-1">{t("view.viewMode")}</div>
