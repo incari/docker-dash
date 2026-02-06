@@ -26,7 +26,8 @@ function App() {
 
   // ==================== Custom Hooks ====================
   const { theme, updateTheme } = useTheme();
-  const { viewMode, mobileColumns, setViewMode, setMobileColumns } = useViewSettings();
+  const { viewMode, mobileColumns, setViewMode, setMobileColumns } =
+    useViewSettings();
   const { showInstallPrompt, handleInstallClick } = useInstallPrompt();
   const {
     shortcuts,
@@ -53,11 +54,11 @@ function App() {
         modals.showConfirm(
           "Delete Shortcut",
           "Are you sure you want to delete this shortcut? This action cannot be undone.",
-          onConfirm
+          onConfirm,
         );
       },
     },
-    setShortcuts
+    setShortcuts,
   );
 
   const sectionActions = useSectionActions(
@@ -68,11 +69,11 @@ function App() {
         modals.showConfirm(
           "Delete Section",
           `Are you sure you want to delete "${sectionName}"? Shortcuts in this section will be moved to "No Section".`,
-          onConfirm
+          onConfirm,
         );
       },
     },
-    setSections
+    setSections,
   );
 
   // ==================== Effects ====================
@@ -89,41 +90,59 @@ function App() {
   }, [loading, shortcuts.length, view]);
 
   // ==================== Container Action Handlers ====================
-  const handleStart = useCallback((id: string) => {
-    containerActions.handleStart(id);
-  }, [containerActions]);
+  const handleStart = useCallback(
+    (id: string) => {
+      containerActions.handleStart(id);
+    },
+    [containerActions],
+  );
 
-  const handleStop = useCallback((id: string) => {
-    containerActions.handleStop(id, (onConfirm) => {
-      modals.showConfirm(
-        "Stop Container",
-        "Are you sure you want to stop this container? This will terminate all active processes.",
-        onConfirm
-      );
-    });
-  }, [containerActions, modals]);
+  const handleStop = useCallback(
+    (id: string) => {
+      containerActions.handleStop(id, (onConfirm) => {
+        modals.showConfirm(
+          "Stop Container",
+          "Are you sure you want to stop this container? This will terminate all active processes.",
+          onConfirm,
+        );
+      });
+    },
+    [containerActions, modals],
+  );
 
-  const handleRestart = useCallback((id: string) => {
-    containerActions.handleRestart(id);
-  }, [containerActions]);
+  const handleRestart = useCallback(
+    (id: string) => {
+      containerActions.handleRestart(id);
+    },
+    [containerActions],
+  );
 
   // ==================== Section Handlers ====================
   const handleCreateSection = useCallback(() => {
     modals.openSectionModal(null);
   }, [modals]);
 
-  const handleEditSection = useCallback((section: Section) => {
-    modals.openSectionModal(section);
-  }, [modals]);
+  const handleEditSection = useCallback(
+    (section: Section) => {
+      modals.openSectionModal(section);
+    },
+    [modals],
+  );
 
-  const handleSaveSection = useCallback(async (name: string) => {
-    try {
-      await sectionActions.handleSaveSection(name, modals.sectionModal.section);
-      modals.closeSectionModal();
-    } catch {
-      // Error already handled in hook
-    }
-  }, [sectionActions, modals]);
+  const handleSaveSection = useCallback(
+    async (name: string) => {
+      try {
+        await sectionActions.handleSaveSection(
+          name,
+          modals.sectionModal.section,
+        );
+        modals.closeSectionModal();
+      } catch {
+        // Error already handled in hook
+      }
+    },
+    [sectionActions, modals],
+  );
 
   // ==================== Computed Data ====================
   // Compute inline like original - useMemo can cause issues with FormKit drag-and-drop
@@ -165,33 +184,68 @@ function App() {
   const dashboardShortcuts = shortcuts.filter((s) => s.is_favorite);
 
   // ==================== Shortcut/Section Handlers (wrapped for component props) ====================
-  const handleDeleteSection = useCallback((sectionId: number, sectionName: string) => {
-    sectionActions.handleDeleteSection(sectionId, sectionName);
-  }, [sectionActions]);
+  const handleDeleteSection = useCallback(
+    (sectionId: number, sectionName: string) => {
+      sectionActions.handleDeleteSection(sectionId, sectionName);
+    },
+    [sectionActions],
+  );
 
-  const handleToggleSection = useCallback((sectionId: number, isCollapsed: boolean) => {
-    sectionActions.handleToggleSection(sectionId, isCollapsed);
-  }, [sectionActions]);
+  const handleToggleSection = useCallback(
+    (sectionId: number, isCollapsed: boolean) => {
+      sectionActions.handleToggleSection(sectionId, isCollapsed);
+    },
+    [sectionActions],
+  );
 
-  const openEditModal = useCallback((shortcut: typeof shortcuts[0]) => {
-    modals.openShortcutModal(shortcut);
-  }, [modals]);
+  const handleReorderSections = useCallback(
+    async (sections: Section[]) => {
+      await sectionActions.handleReorderSections(sections);
+    },
+    [sectionActions],
+  );
 
-  const handleDelete = useCallback((id: number) => {
-    shortcutActions.handleDelete(id);
-  }, [shortcutActions]);
+  const openEditModal = useCallback(
+    (shortcut: (typeof shortcuts)[0]) => {
+      modals.openShortcutModal(shortcut);
+    },
+    [modals],
+  );
 
-  const handleToggleFavorite = useCallback((id: number, currentStatus: boolean | number) => {
-    shortcutActions.handleToggleFavorite(id, currentStatus);
-  }, [shortcutActions]);
+  const handleDelete = useCallback(
+    (id: number) => {
+      shortcutActions.handleDelete(id);
+    },
+    [shortcutActions],
+  );
 
-  const handleQuickAdd = useCallback((container: typeof containers[0]) => {
-    shortcutActions.handleQuickAdd(container);
-  }, [shortcutActions]);
+  const handleToggleFavorite = useCallback(
+    (id: number, currentStatus: boolean | number) => {
+      shortcutActions.handleToggleFavorite(id, currentStatus);
+    },
+    [shortcutActions],
+  );
 
-  const handleSaveChanges = useCallback(async (changes: Array<{ type: string; shortcutId: number; sectionId: number | null; position: number }>) => {
-    await shortcutActions.handleSaveChanges(changes);
-  }, [shortcutActions]);
+  const handleQuickAdd = useCallback(
+    (container: (typeof containers)[0]) => {
+      shortcutActions.handleQuickAdd(container);
+    },
+    [shortcutActions],
+  );
+
+  const handleSaveChanges = useCallback(
+    async (
+      changes: Array<{
+        type: string;
+        shortcutId: number;
+        sectionId: number | null;
+        position: number;
+      }>,
+    ) => {
+      await shortcutActions.handleSaveChanges(changes);
+    },
+    [shortcutActions],
+  );
 
   return (
     <div
@@ -227,6 +281,7 @@ function App() {
               handleEditSection={handleEditSection}
               handleDeleteSection={handleDeleteSection}
               handleToggleSection={handleToggleSection}
+              handleReorderSections={handleReorderSections}
               openEditModal={openEditModal}
               handleDelete={handleDelete}
               handleStart={handleStart}
@@ -244,8 +299,14 @@ function App() {
               shortcuts={shortcuts}
               tailscaleInfo={tailscaleInfo}
               setView={setView}
-              setEditingShortcut={(shortcut) => modals.openShortcutModal(shortcut)}
-              setIsModalOpen={(isOpen) => isOpen ? modals.openShortcutModal() : modals.closeShortcutModal()}
+              setEditingShortcut={(shortcut) =>
+                modals.openShortcutModal(shortcut)
+              }
+              setIsModalOpen={(isOpen) =>
+                isOpen
+                  ? modals.openShortcutModal()
+                  : modals.closeShortcutModal()
+              }
               openEditModal={openEditModal}
               handleDelete={handleDelete}
               handleStart={handleStart}
