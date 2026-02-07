@@ -11,6 +11,7 @@ import {
   Image as ImageIcon,
   CheckCircle,
   ChevronDown,
+  Trash2,
 } from "lucide-react";
 import type { ShortcutModalProps } from "../types";
 import { DynamicIcon } from "./DynamicIcon";
@@ -22,6 +23,7 @@ import {
   normalizeUrl,
   cleanDescription,
 } from "../utils/validation";
+import { uploadsApi, type UploadedImage } from "../services/api";
 
 interface FormData {
   name: string;
@@ -624,6 +626,18 @@ const IconDropdown: React.FC<IconDropdownProps> = ({ icon, setIcon }) => {
     width: 0,
     openUpward: false,
   });
+  const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    isOpen: boolean;
+    filename: string;
+    displayName: string;
+    shortcuts: Array<{ id: number; name: string }>;
+  }>({
+    isOpen: false,
+    filename: "",
+    displayName: "",
+    shortcuts: [],
+  });
   const buttonRef = React.useRef<HTMLButtonElement>(null);
   const dropdownRef = React.useRef<HTMLDivElement>(null);
 
@@ -631,6 +645,19 @@ const IconDropdown: React.FC<IconDropdownProps> = ({ icon, setIcon }) => {
   const sortedIcons = Object.keys(AVAILABLE_ICONS).sort((a, b) =>
     a.toLowerCase().localeCompare(b.toLowerCase()),
   );
+
+  // Fetch uploaded images when dropdown opens
+  useEffect(() => {
+    if (isOpen) {
+      uploadsApi
+        .getAll()
+        .then(setUploadedImages)
+        .catch((err) => {
+          console.error("Failed to fetch uploaded images:", err);
+          setUploadedImages([]);
+        });
+    }
+  }, [isOpen]);
 
   const updatePosition = useCallback(() => {
     if (buttonRef.current) {
@@ -681,6 +708,73 @@ const IconDropdown: React.FC<IconDropdownProps> = ({ icon, setIcon }) => {
     }
   }, [isOpen, updatePosition]);
 
+  // Check if current icon is an uploaded image
+  const isUploadedImage = icon.startsWith("uploads/");
+  const displayName = isUploadedImage
+    ? icon.split("/").pop()?.split("-").slice(1).join("-") || icon
+    : icon;
+
+  // Handle delete image with confirmation
+  const handleDeleteImage = async (filename: string, displayName: string) => {
+    try {
+      // First try to delete without force to check if it's in use
+      await uploadsApi.delete(filename, false);
+
+      // If successful, refresh the list
+      const updatedImages = await uploadsApi.getAll();
+      setUploadedImages(updatedImages);
+
+      // If the deleted image was selected, clear the icon
+      if (icon === `uploads/${filename}`) {
+        setIcon("Server");
+      }
+    } catch (err: any) {
+      // If status is 409, image is in use - show confirmation modal
+      if (err.response?.status === 409) {
+        const shortcuts = err.response?.data?.shortcuts || [];
+        setDeleteConfirm({
+          isOpen: true,
+          filename,
+          displayName,
+          shortcuts,
+        });
+      } else {
+        // Other errors - show alert
+        const errorMessage =
+          err.response?.data?.error || "Failed to delete image";
+        alert(errorMessage);
+      }
+    }
+  };
+
+  // Handle confirmed delete (force delete)
+  const handleConfirmedDelete = async () => {
+    try {
+      await uploadsApi.delete(deleteConfirm.filename, true);
+
+      // Refresh the list
+      const updatedImages = await uploadsApi.getAll();
+      setUploadedImages(updatedImages);
+
+      // If the deleted image was selected, clear the icon
+      if (icon === `uploads/${deleteConfirm.filename}`) {
+        setIcon("Server");
+      }
+
+      // Close the confirmation modal
+      setDeleteConfirm({
+        isOpen: false,
+        filename: "",
+        displayName: "",
+        shortcuts: [],
+      });
+    } catch (err: any) {
+      const errorMessage =
+        err.response?.data?.error || "Failed to delete image";
+      alert(errorMessage);
+    }
+  };
+
   return (
     <div className="w-full">
       <button
@@ -690,13 +784,21 @@ const IconDropdown: React.FC<IconDropdownProps> = ({ icon, setIcon }) => {
         className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-3 flex items-center justify-between hover:border-white/20 transition-colors"
       >
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-slate-700 flex items-center justify-center">
-            <DynamicIcon
-              name={icon}
-              className="w-5 h-5 text-white"
-            />
+          <div className="w-8 h-8 rounded-lg bg-slate-700 flex items-center justify-center overflow-hidden">
+            {isUploadedImage ? (
+              <img
+                src={`/${icon}`}
+                alt={displayName}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <DynamicIcon
+                name={icon}
+                className="w-5 h-5 text-white"
+              />
+            )}
           </div>
-          <span className="text-white">{icon}</span>
+          <span className="text-white truncate">{displayName}</span>
         </div>
         <ChevronDown
           className={`w-5 h-5 text-slate-400 transition-transform ${
@@ -715,8 +817,72 @@ const IconDropdown: React.FC<IconDropdownProps> = ({ icon, setIcon }) => {
               left: dropdownPos.left,
               width: dropdownPos.width,
             }}
-            className="z-[100] bg-slate-800 border border-white/10 rounded-xl shadow-2xl max-h-64 overflow-y-auto custom-scrollbar"
+            className="z-[250] bg-slate-800 border border-white/10 rounded-xl shadow-2xl max-h-64 overflow-y-auto custom-scrollbar"
           >
+            {/* Uploaded Images Section */}
+            {uploadedImages.length > 0 && (
+              <>
+                <div className="px-4 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wider border-b border-white/5">
+                  Uploaded Images
+                </div>
+                {uploadedImages.map((image) => {
+                  const imageName =
+                    image.filename.split("-").slice(1).join("-") ||
+                    image.filename;
+                  return (
+                    <div
+                      key={image.url}
+                      className={`w-full px-4 py-2.5 flex items-center gap-3 group hover:bg-slate-700 transition-colors ${
+                        icon === image.url
+                          ? "bg-blue-600/20 text-blue-400"
+                          : "text-white"
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIcon(image.url);
+                          setIsOpen(false);
+                        }}
+                        className="flex items-center gap-3 flex-1 min-w-0"
+                      >
+                        <div
+                          className={`w-8 h-8 rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0 ${
+                            icon === image.url
+                              ? "bg-blue-600/30"
+                              : "bg-slate-700"
+                          }`}
+                        >
+                          <img
+                            src={`/${image.url}`}
+                            alt={imageName}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                        <span className="text-sm truncate">{imageName}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteImage(image.filename, imageName);
+                        }}
+                        className="p-1.5 rounded-lg hover:bg-red-500/20 text-slate-400 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0"
+                        title="Delete image"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  );
+                })}
+                <div className="border-b border-white/5 my-1" />
+              </>
+            )}
+
+            {/* Lucide Icons Section */}
+            <div className="px-4 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+              Icons
+            </div>
             {sortedIcons.map((iconKey) => (
               <button
                 key={iconKey}
@@ -747,6 +913,103 @@ const IconDropdown: React.FC<IconDropdownProps> = ({ icon, setIcon }) => {
           </div>,
           document.body,
         )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirm.isOpen &&
+        createPortal(
+          <div className="fixed inset-0 z-[300] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+              onClick={() =>
+                setDeleteConfirm({
+                  isOpen: false,
+                  filename: "",
+                  displayName: "",
+                  shortcuts: [],
+                })
+              }
+            />
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="relative bg-gradient-to-br from-slate-900 to-slate-800 rounded-3xl p-8 max-w-md w-full shadow-2xl border border-yellow-500/20"
+            >
+              <button
+                onClick={() =>
+                  setDeleteConfirm({
+                    isOpen: false,
+                    filename: "",
+                    displayName: "",
+                    shortcuts: [],
+                  })
+                }
+                className="absolute top-4 right-4 p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded-xl transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              <div className="flex items-center gap-4 mb-6">
+                <div className="p-3 bg-yellow-500/20 rounded-2xl">
+                  <Trash2 className="w-8 h-8 text-yellow-400" />
+                </div>
+                <h2 className="text-2xl font-bold text-white">Delete Image?</h2>
+              </div>
+
+              <p className="text-slate-300 mb-4 leading-relaxed">
+                The image{" "}
+                <span className="font-semibold text-white">
+                  "{deleteConfirm.displayName}"
+                </span>{" "}
+                is currently being used by the following shortcut
+                {deleteConfirm.shortcuts.length > 1 ? "s" : ""}:
+              </p>
+
+              <div className="bg-slate-950/50 rounded-xl p-4 mb-6 max-h-32 overflow-y-auto">
+                <ul className="space-y-2">
+                  {deleteConfirm.shortcuts.map((shortcut) => (
+                    <li
+                      key={shortcut.id}
+                      className="text-slate-300 flex items-center gap-2"
+                    >
+                      <span className="w-1.5 h-1.5 bg-blue-400 rounded-full"></span>
+                      {shortcut.name}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <p className="text-slate-400 text-sm mb-6">
+                If you delete this image, these shortcuts will be updated to use
+                the default icon.
+              </p>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() =>
+                    setDeleteConfirm({
+                      isOpen: false,
+                      filename: "",
+                      displayName: "",
+                      shortcuts: [],
+                    })
+                  }
+                  className="flex-1 py-3 px-6 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-xl transition-all duration-200"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleConfirmedDelete}
+                  className="flex-1 py-3 px-6 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-semibold rounded-xl transition-all duration-200 shadow-lg shadow-red-500/30"
+                >
+                  Delete Anyway
+                </button>
+              </div>
+            </motion.div>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 };
@@ -774,11 +1037,27 @@ const IconSelector: React.FC<IconSelectorProps> = ({
   setIconUrlError,
   t,
 }) => {
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
   const tabLabels: Record<"icon" | "url" | "upload", string> = {
     icon: t("shortcuts.iconTab"),
     url: t("shortcuts.urlTab"),
     upload: t("shortcuts.uploadTab"),
   };
+
+  // Create and cleanup preview URL for selected file
+  useEffect(() => {
+    if (selectedFile) {
+      const url = URL.createObjectURL(selectedFile);
+      setPreviewUrl(url);
+      return () => {
+        URL.revokeObjectURL(url);
+        setPreviewUrl(null);
+      };
+    } else {
+      setPreviewUrl(null);
+    }
+  }, [selectedFile]);
 
   return (
     <div className="space-y-4 pt-2">
@@ -826,10 +1105,7 @@ const IconSelector: React.FC<IconSelectorProps> = ({
                 className="bg-transparent flex-1 focus:outline-none text-white text-sm"
                 placeholder={t("shortcuts.imageUrlPlaceholder")}
                 value={
-                  activeTab === "url" &&
-                  (icon.startsWith("http") || icon.includes("/"))
-                    ? icon
-                    : ""
+                  activeTab === "url" && icon.startsWith("http") ? icon : ""
                 }
                 onChange={(e) => {
                   setIcon(e.target.value);
@@ -858,28 +1134,45 @@ const IconSelector: React.FC<IconSelectorProps> = ({
         )}
 
         {activeTab === "upload" && (
-          <label className="w-full h-24 border-2 border-dashed border-white/10 rounded-2xl flex flex-col items-center justify-center cursor-pointer hover:bg-white/[0.02] transition-colors group">
-            <input
-              type="file"
-              className="hidden"
-              onChange={(e) => setSelectedFile(e.target.files?.[0] ?? null)}
-            />
-            {selectedFile ? (
-              <div className="flex flex-col items-center text-green-400">
-                <CheckCircle className="w-6 h-6 mb-1" />
-                <span className="text-xs font-medium truncate max-w-[200px]">
-                  {selectedFile.name}
-                </span>
+          <div className="w-full space-y-3">
+            <label className="w-full h-24 border-2 border-dashed border-white/10 rounded-2xl flex flex-col items-center justify-center cursor-pointer hover:bg-white/[0.02] transition-colors group">
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/jpg,image/gif,image/webp,image/svg+xml,image/x-icon"
+                className="hidden"
+                onChange={(e) => setSelectedFile(e.target.files?.[0] ?? null)}
+              />
+              {selectedFile ? (
+                <div className="flex flex-col items-center text-green-400">
+                  <CheckCircle className="w-6 h-6 mb-1" />
+                  <span className="text-xs font-medium truncate max-w-[200px]">
+                    {selectedFile.name}
+                  </span>
+                </div>
+              ) : (
+                <>
+                  <ImageIcon className="w-6 h-6 text-slate-500 group-hover:text-blue-500 mb-1 transition-colors" />
+                  <span className="text-xs text-slate-500 group-hover:text-slate-300">
+                    Choose image file
+                  </span>
+                  <span className="text-[10px] text-slate-600 mt-1">
+                    PNG, JPG, GIF, WebP, SVG, ICO
+                  </span>
+                </>
+              )}
+            </label>
+            {selectedFile && previewUrl && (
+              <div className="w-full flex items-center justify-center">
+                <div className="w-16 h-16 rounded-lg bg-slate-700 flex items-center justify-center overflow-hidden">
+                  <img
+                    src={previewUrl}
+                    alt="Preview"
+                    className="w-full h-full object-cover"
+                  />
+                </div>
               </div>
-            ) : (
-              <>
-                <ImageIcon className="w-6 h-6 text-slate-500 group-hover:text-blue-500 mb-1 transition-colors" />
-                <span className="text-xs text-slate-500 group-hover:text-slate-300">
-                  Choose local asset
-                </span>
-              </>
             )}
-          </label>
+          </div>
         )}
       </div>
     </div>

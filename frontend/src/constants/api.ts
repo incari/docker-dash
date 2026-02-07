@@ -2,7 +2,7 @@
  * API configuration and endpoints
  */
 
-export const API_BASE = '/api';
+export const API_BASE = "/api";
 
 export const API_ENDPOINTS = {
   // Shortcuts
@@ -26,5 +26,7 @@ export const API_ENDPOINTS = {
 
   // Tailscale
   TAILSCALE: `${API_BASE}/tailscale`,
-} as const;
 
+  // Uploads
+  UPLOADS: `${API_BASE}/uploads`,
+} as const;

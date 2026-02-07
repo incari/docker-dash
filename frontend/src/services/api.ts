@@ -21,7 +21,10 @@ export const shortcutsApi = {
   },
 
   update: async (id: number, formData: FormData): Promise<Shortcut> => {
-    const response = await axios.put(API_ENDPOINTS.SHORTCUT_BY_ID(id), formData);
+    const response = await axios.put(
+      API_ENDPOINTS.SHORTCUT_BY_ID(id),
+      formData,
+    );
     return response.data;
   },
 
@@ -30,14 +33,25 @@ export const shortcutsApi = {
   },
 
   toggleFavorite: async (id: number, isFavorite: boolean): Promise<void> => {
-    await axios.post(API_ENDPOINTS.SHORTCUT_FAVORITE(id), { is_favorite: isFavorite });
+    await axios.post(API_ENDPOINTS.SHORTCUT_FAVORITE(id), {
+      is_favorite: isFavorite,
+    });
   },
 
-  updateSection: async (id: number, sectionId: number | null, position: number): Promise<void> => {
-    await axios.put(API_ENDPOINTS.SHORTCUT_SECTION(id), { section_id: sectionId, position });
+  updateSection: async (
+    id: number,
+    sectionId: number | null,
+    position: number,
+  ): Promise<void> => {
+    await axios.put(API_ENDPOINTS.SHORTCUT_SECTION(id), {
+      section_id: sectionId,
+      position,
+    });
   },
 
-  reorder: async (shortcuts: Array<{ id: number; position: number }>): Promise<void> => {
+  reorder: async (
+    shortcuts: Array<{ id: number; position: number }>,
+  ): Promise<void> => {
     await axios.put(API_ENDPOINTS.SHORTCUTS_REORDER, { shortcuts });
   },
 };
@@ -55,7 +69,10 @@ export const sectionsApi = {
     return response.data;
   },
 
-  update: async (id: number, data: { name?: string; is_collapsed?: boolean }): Promise<void> => {
+  update: async (
+    id: number,
+    data: { name?: string; is_collapsed?: boolean },
+  ): Promise<void> => {
     await axios.put(API_ENDPOINTS.SECTION_BY_ID(id), data);
   },
 
@@ -63,7 +80,9 @@ export const sectionsApi = {
     await axios.delete(API_ENDPOINTS.SECTION_BY_ID(id));
   },
 
-  reorder: async (sections: Array<{ id: number; position: number }>): Promise<void> => {
+  reorder: async (
+    sections: Array<{ id: number; position: number }>,
+  ): Promise<void> => {
     await axios.put(API_ENDPOINTS.SECTIONS_REORDER, { sections });
   },
 };
@@ -119,3 +138,22 @@ export const settingsApi = {
   },
 };
 
+// ==================== Uploads API ====================
+
+export interface UploadedImage {
+  filename: string;
+  url: string;
+  uploadedAt: string;
+}
+
+export const uploadsApi = {
+  getAll: async (): Promise<UploadedImage[]> => {
+    const response = await axios.get(API_ENDPOINTS.UPLOADS);
+    return response.data;
+  },
+  delete: async (filename: string, force: boolean = false): Promise<void> => {
+    await axios.delete(`${API_ENDPOINTS.UPLOADS}/${filename}`, {
+      params: { force: force ? "true" : "false" },
+    });
+  },
+};

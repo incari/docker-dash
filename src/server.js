@@ -207,7 +207,33 @@ const storage = multer.diskStorage({
   }
 });
 
-const upload = multer({ storage: storage });
+// File filter to only accept image files
+const imageFileFilter = (req, file, cb) => {
+  const allowedMimeTypes = [
+    'image/png',
+    'image/jpeg',
+    'image/jpg',
+    'image/gif',
+    'image/webp',
+    'image/svg+xml',
+    'image/x-icon',
+    'image/vnd.microsoft.icon'
+  ];
+
+  if (allowedMimeTypes.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Only image files are allowed (PNG, JPG, GIF, WebP, SVG, ICO)'), false);
+  }
+};
+
+const upload = multer({
+  storage: storage,
+  fileFilter: imageFileFilter,
+  limits: {
+    fileSize: 20 * 1024 * 1024 // 5MB limit
+  }
+});
 
 app.use(cors());
 app.use(express.json());
@@ -219,6 +245,79 @@ if (fs.existsSync(frontendPath)) {
 
 // Serve the uploads directory at /uploads
 app.use('/uploads', express.static(uploadDir));
+
+// Get list of uploaded images
+app.get('/api/uploads', (req, res) => {
+  try {
+    if (!fs.existsSync(uploadDir)) {
+      return res.json([]);
+    }
+
+    const files = fs.readdirSync(uploadDir);
+    const imageFiles = files
+      .filter(file => {
+        const ext = path.extname(file).toLowerCase();
+        return ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.ico'].includes(ext);
+      })
+      .map(file => ({
+        filename: file,
+        url: `uploads/${file}`,
+        uploadedAt: fs.statSync(path.join(uploadDir, file)).mtime
+      }))
+      .sort((a, b) => b.uploadedAt - a.uploadedAt); // Most recent first
+
+    res.json(imageFiles);
+  } catch (error) {
+    console.error('Error listing uploaded images:', error);
+    res.status(500).json({ error: 'Failed to list uploaded images' });
+  }
+});
+
+// Delete an uploaded image
+app.delete('/api/uploads/:filename', (req, res) => {
+  try {
+    const { filename } = req.params;
+    const { force } = req.query; // Allow force deletion
+
+    // Security: prevent path traversal attacks
+    if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+      return res.status(400).json({ error: 'Invalid filename' });
+    }
+
+    const filePath = path.join(uploadDir, filename);
+
+    // Check if file exists
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+
+    // Check if any shortcuts are using this image
+    const shortcutsUsingImage = db.prepare(
+      'SELECT id, name FROM shortcuts WHERE icon = ?'
+    ).all(`uploads/${filename}`);
+
+    if (shortcutsUsingImage.length > 0 && force !== 'true') {
+      // Return info about shortcuts using this image
+      return res.status(409).json({
+        error: 'Image is in use',
+        shortcuts: shortcutsUsingImage
+      });
+    }
+
+    // If force=true, update all shortcuts using this image to use default icon
+    if (force === 'true' && shortcutsUsingImage.length > 0) {
+      const updateStmt = db.prepare('UPDATE shortcuts SET icon = ? WHERE icon = ?');
+      updateStmt.run('Server', `uploads/${filename}`);
+    }
+
+    // Delete the file
+    fs.unlinkSync(filePath);
+    res.json({ success: true, message: 'Image deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting uploaded image:', error);
+    res.status(500).json({ error: 'Failed to delete image' });
+  }
+});
 
 // Health check for Docker
 app.get('/health', (req, res) => res.status(200).send('OK'));
