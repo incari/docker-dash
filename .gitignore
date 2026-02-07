@@ -34,3 +34,7 @@ Thumbs.db
 dist/
 build/
 
+/.agents
+/.augment
+/.claude
+/skills

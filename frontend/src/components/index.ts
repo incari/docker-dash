@@ -18,4 +18,5 @@ export { ThemeSelector } from "./ThemeSelector";
 export { LanguageSelector } from "./LanguageSelector";
 export { Footer } from "./Footer";
 
-
+// Dashboard components
+export { EditModeBanner, EmptyDashboardState, SectionBlock } from "./dashboard";
