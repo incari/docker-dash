@@ -2,50 +2,7 @@
 
 A modern, responsive dashboard for managing your Docker containers. Create shortcuts (favorites) for your most used containers, organize them into sections, and access them quickly.
 
-![Docker Dashboard](https://github.com/incari/docker-dash/assets/placeholder.png)
 
-## Features
-
-### Container Management
--   **Real-time Container Discovery**: Automatically detects and displays all running Docker containers on your server
--   **Container Controls**: Start, Stop, and Restart containers directly from the dashboard
--   **Quick Add from Containers**: Star icon on running containers to instantly create shortcuts
--   **Port Detection**: Automatically detects exposed ports from running containers
-
-### Smart Shortcuts System
--   **Flexible URL Options**:
-    -   Link to container ports (auto-detects server IP)
-    -   Use custom URLs for external services
-    -   Tailscale IP detection for secure remote access
--   **Customizable Appearance**:
-    -   Choose from icon library (Lucide React icons)
-    -   Use custom image URLs
-    -   Upload your own images
-    -   Custom names and descriptions
--   **Organization**: Group shortcuts into collapsible sections with drag-and-drop support
-
-### Advanced Features
--   **Tailscale Integration**:
-    -   Automatically detects Tailscale IP addresses when using host network mode
-    -   Perfect for secure remote access to your homelab/server
-    -   Works seamlessly with Unraid and other Linux hosts
--   **Drag & Drop Interface**:
-    -   Reorder shortcuts within sections
-    -   Move shortcuts between sections
-    -   Reorganize sections
-    -   Optimized for both mobile touch and desktop mouse interactions
--   **Responsive Design**:
-    -   Mobile-first design with touch-friendly controls
-    -   Desktop hover actions for quick access
-    -   Adaptive layouts for all screen sizes
--   **PWA Support**: Install as a Progressive Web App on mobile devices or desktop
--   **Persistent Storage**: SQLite database for reliable data persistence across restarts
-
-## Prerequisites
-
--   [Node.js](https://nodejs.org/) (v18 or higher)
--   [pnpm](https://pnpm.io/) (Package manager)
--   [Docker](https://www.docker.com/) (Running locally for backend access)
 
 ## Installation
 
@@ -172,8 +129,87 @@ services:
 
 > **Note**: With `network_mode: host`, the app will be available at `http://HOST_IP:3000` (not 3080).
 
+
+
+## Features
+
+### Container Management
+-   **Real-time Container Discovery**: Automatically detects and displays all running Docker containers on your server.
+-   **Container Controls**: Start, Stop, and Restart containers directly from the dashboard *note* Editing the container to use a URL will still track the container to start/stop the container.
+-   **Quick Add from Containers**: Star icon on running containers to instantly create shortcuts
+-   **Port Detection**: Automatically detects exposed ports from running containers. *note* Some container can use multiple ports, in this case you can select the port you want to use when you create the shortcut.
+
+
+### Smart Shortcuts System
+-   **Flexible URL Options**:
+    -   Link to container ports (auto-detects server IP)
+    -   Use custom URLs for external services
+    -   Tailscale IP detection for secure remote access
+-   **Customizable Appearance**:
+    -   Choose from icon library (Lucide React icons)
+    -   Use custom image URLs
+    -   **Upload your own images** with built-in image management
+    -   **Delete uploaded images** with confirmation dialog
+    -   Custom names and descriptions
+-   **Organization**: Group shortcuts into collapsible sections with drag-and-drop support
+-   **Multiple View Modes**: Switch between Compact, Icon, List, and Table views in Management page
+ -   Upload your own images with built-in image management
+        - After uploading the image, it will be available in the icon selector, you can use it for multiple bookmarks.
+        - Delete uploaded images with confirmation dialog
+        - Support to gifs and svg images
+        ![Animated gift support](/public/gifs-support.gif "Gifs support")
+
+
+
+### Bookmarks 
+-   **Bookmark your favorite websites**:
+    -   Add a name, description, url and icon
+    -   Choose from icon library (Lucide React icons)
+    -   Use custom image URLs
+    -   Same image management as shortcuts
+   
+### Advanced Features
+-   **Tailscale Integration**:
+    -   Automatically detects Tailscale IP addresses when using host network mode
+    -   Perfect for secure remote access to your homelab/server
+    -   Works seamlessly with Unraid and other Linux hosts
+-   **Drag & Drop Interface**:
+    -   Reorder shortcuts within sections
+    -   Move shortcuts between sections
+    -   Reorganize sections
+    -   Optimized for both mobile touch and desktop mouse interactions
+-   **Responsive Design**:
+    -   Mobile-first design with touch-friendly controls
+    -   Desktop hover actions for quick access
+    -   Adaptive layouts for all screen sizes
+-   **PWA Support**: Install as a Progressive Web App on mobile devices or desktop
+-   **Persistent Storage**: SQLite database for reliable data persistence across restarts
+
+## Prerequisites
+
+-   [Node.js](https://nodejs.org/) (v18 or higher)
+-   [pnpm](https://pnpm.io/) (Package manager)
+-   [Docker](https://www.docker.com/) (Running locally for backend access)
+
 ## Tech Stack
 
--   **Frontend**: React, Vite, Tailwind CSS, Framer Motion, @dnd-kit (Drag & Drop).
--   **Backend**: Node.js, Express, Better-SQLite3 (for persistent data).
--   **Icons**: Lucide React.
+-   **Frontend**: React, Vite, Tailwind CSS, Framer Motion, @dnd-kit (Drag & Drop), i18next (Internationalization)
+-   **Backend**: Node.js, Express, Better-SQLite3 (for persistent data), Multer (file uploads)
+-   **Icons**: Lucide React
+
+## Recent Updates
+
+Check out the [CHANGELOG.md](CHANGELOG.md) for detailed information about recent features and improvements, including:
+- Image upload and management functionality
+- Multiple view modes (Compact, Icon, List, Table)
+- Enhanced drag-and-drop with visual feedback
+- Internationalization support (English/Spanish)
+- Performance optimizations with React hooks
+- Improved dashboard organization and UX
+- Fixed bugs and improved stability
+- New features implemented 
+
+
+[Feedback and features requests](https://tally.so/r/aQ2zNE)
+
+Upcoming: New repo with standardized Icons URLS and auto-detect and use the container name and image for the shortcut. 
