@@ -104,8 +104,9 @@
     "containerNoExposedPorts": "El contenedor no tiene puertos expuestos",
     "leaveEmptyNoPorts": "Dejar vacío para contenedores que no exponen puertos",
     "useTailscale": "Usar IP de Tailscale",
-    "tailscaleDescription": "Conectar vía red Tailscale",
+    "tailscaleDescription": "Acceder a este servicio a través de tu red Tailscale en lugar de IP local",
     "tailscaleNotAvailable": "Tailscale no disponible",
+    "imageUrlHint": "Prefiere enlaces directos a recursos PNG/SVG.",
     "section": "Sección",
     "noSection": "Sin Sección",
     "identityBranding": "Identidad y Marca",
@@ -121,8 +122,22 @@
     "noSection": "Sin Sección"
   },
   "modals": {
+    "confirm": {
+      "cancel": "Cancelar",
+      "delete": "Eliminar",
+      "deleteShortcut": "Eliminar Acceso Directo",
+      "deleteShortcutMessage": "¿Estás seguro de que quieres eliminar este acceso directo? Esta acción no se puede deshacer.",
+      "deleteSection": "Eliminar Sección",
+      "deleteSectionMessage": "¿Estás seguro de que quieres eliminar \"{{sectionName}}\"? Los accesos directos en esta sección se moverán a \"Sin Sección\".",
+      "stopContainer": "Detener Contenedor",
+      "stopContainerMessage": "¿Estás seguro de que quieres detener este contenedor? Esto terminará todos los procesos activos."
+    },
     "error": {
-      "title": "Error"
+      "title": "Error",
+      "close": "Cerrar",
+      "savingShortcut": "Error al Guardar Acceso Directo",
+      "unexpectedError": "Ocurrió un error inesperado al guardar el acceso directo.",
+      "portUrlOrContainerRequired": "Se debe especificar Puerto, URL o Contenedor"
     }
   },
   "validation": {
@@ -153,4 +168,3 @@
     "twoCol": "2 Col"
   }
 }
-

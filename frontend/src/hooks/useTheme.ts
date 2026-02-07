@@ -16,7 +16,7 @@ function getLuminance(hex: string): number {
   const b = (rgb >> 0) & 0xff;
 
   // Convert to relative luminance
-  const [rs, gs, bs] = [r, g, b].map(c => {
+  const [rs, gs, bs] = [r, g, b].map((c) => {
     const val = c / 255;
     return val <= 0.03928 ? val / 12.92 : Math.pow((val + 0.055) / 1.055, 2.4);
   });
@@ -49,13 +49,22 @@ function getInitialTheme(): ThemeColors {
 // Helper function to apply theme to DOM
 function applyThemeToDOM(theme: ThemeColors) {
   document.documentElement.style.setProperty("--color-primary", theme.primary);
-  document.documentElement.style.setProperty("--color-background", theme.background);
+  document.documentElement.style.setProperty(
+    "--color-background",
+    theme.background,
+  );
 
   // Calculate and set contrast colors
   const primaryContrast = getContrastColor(theme.primary);
   const backgroundContrast = getContrastColor(theme.background);
-  document.documentElement.style.setProperty("--color-primary-contrast", primaryContrast);
-  document.documentElement.style.setProperty("--color-background-contrast", backgroundContrast);
+  document.documentElement.style.setProperty(
+    "--color-primary-contrast",
+    primaryContrast,
+  );
+  document.documentElement.style.setProperty(
+    "--color-background-contrast",
+    backgroundContrast,
+  );
 
   // Calculate lighter/darker variants
   const primaryRgb = parseInt(theme.primary.slice(1), 16);
@@ -64,7 +73,20 @@ function applyThemeToDOM(theme: ThemeColors) {
   const b = (primaryRgb >> 0) & 0xff;
 
   // Primary with opacity variants
-  document.documentElement.style.setProperty("--color-primary-rgb", `${r}, ${g}, ${b}`);
+  document.documentElement.style.setProperty(
+    "--color-primary-rgb",
+    `${r}, ${g}, ${b}`,
+  );
+
+  // Background contrast RGB values for opacity control
+  const contrastRgb = parseInt(backgroundContrast.slice(1), 16);
+  const contrastR = (contrastRgb >> 16) & 0xff;
+  const contrastG = (contrastRgb >> 8) & 0xff;
+  const contrastB = (contrastRgb >> 0) & 0xff;
+  document.documentElement.style.setProperty(
+    "--color-background-contrast-rgb",
+    `${contrastR}, ${contrastG}, ${contrastB}`,
+  );
 
   // Calculate card background (slightly lighter/darker than main background)
   const bgLuminance = getLuminance(theme.background);
@@ -79,7 +101,7 @@ function applyThemeToDOM(theme: ThemeColors) {
   const cardG = Math.max(0, Math.min(255, bgG + adjustment));
   const cardB = Math.max(0, Math.min(255, bgB + adjustment));
 
-  const cardBg = `#${cardR.toString(16).padStart(2, '0')}${cardG.toString(16).padStart(2, '0')}${cardB.toString(16).padStart(2, '0')}`;
+  const cardBg = `#${cardR.toString(16).padStart(2, "0")}${cardG.toString(16).padStart(2, "0")}${cardB.toString(16).padStart(2, "0")}`;
   document.documentElement.style.setProperty("--color-card-background", cardBg);
 }
 
@@ -151,4 +173,3 @@ export function useTheme() {
     resetTheme,
   };
 }
-

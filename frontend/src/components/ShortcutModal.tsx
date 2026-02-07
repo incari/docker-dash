@@ -197,9 +197,8 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
         onClose();
       } catch (err: any) {
         const errorMessage =
-          err.response?.data?.error ||
-          "An unexpected error occurred while saving the shortcut.";
-        onError("Error Saving Shortcut", errorMessage);
+          err.response?.data?.error || t("modals.error.unexpectedError");
+        onError(t("modals.error.savingShortcut"), errorMessage);
       }
     },
     [formData, activeTab, selectedFile, shortcut, onSave, onClose, onError, t],
@@ -371,6 +370,7 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
                   use_tailscale: !formData.use_tailscale,
                 })
               }
+              t={t}
             />
           )}
 
@@ -570,26 +570,28 @@ interface TailscaleToggleProps {
   enabled: boolean;
   ip: string | null;
   onToggle: () => void;
+  t: (key: string) => string;
 }
 
 const TailscaleToggle: React.FC<TailscaleToggleProps> = ({
   enabled,
   ip,
   onToggle,
+  t,
 }) => (
   <div className="bg-slate-800/50 border border-white/10 rounded-xl p-4">
     <div className="flex items-center justify-between">
       <div className="flex-1">
         <div className="flex items-center gap-2">
           <label className="text-sm font-semibold text-slate-300">
-            Use Tailscale IP
+            {t("shortcuts.useTailscale")}
           </label>
           <span className="text-xs bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded-full">
             {ip}
           </span>
         </div>
         <p className="text-xs text-slate-500 mt-1">
-          Access this service via your Tailscale network instead of local IP
+          {t("shortcuts.tailscaleDescription")}
         </p>
       </div>
       <button
@@ -844,7 +846,7 @@ const IconSelector: React.FC<IconSelectorProps> = ({
             </div>
             {!iconUrlError && (
               <p className="text-[10px] text-slate-500 pl-1 italic">
-                Prefer direct links to PNG/SVG assets.
+                {t("shortcuts.imageUrlHint")}
               </p>
             )}
             {iconUrlError && (

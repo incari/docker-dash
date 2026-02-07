@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { AnimatePresence } from "framer-motion";
+import { useTranslation } from "react-i18next";
 
 import { Header } from "./components/Header";
 import { Footer } from "./components/Footer";
@@ -25,6 +26,7 @@ function App() {
   const [isEditMode, setIsEditMode] = useState(false);
 
   // ==================== Custom Hooks ====================
+  const { t } = useTranslation();
   const { theme, updateTheme } = useTheme();
   const { viewMode, mobileColumns, setViewMode, setMobileColumns } =
     useViewSettings();
@@ -51,13 +53,13 @@ function App() {
       onError: modals.showError,
       showDeleteConfirm: (onConfirm: () => Promise<void>) => {
         modals.showConfirm(
-          "Delete Shortcut",
-          "Are you sure you want to delete this shortcut? This action cannot be undone.",
+          t("modals.confirm.deleteShortcut"),
+          t("modals.confirm.deleteShortcutMessage"),
           onConfirm,
         );
       },
     }),
-    [fetchData, modals],
+    [fetchData, modals, t],
   );
 
   const sectionActionsOptions = useMemo(
@@ -69,13 +71,13 @@ function App() {
         onConfirm: () => Promise<void>,
       ) => {
         modals.showConfirm(
-          "Delete Section",
-          `Are you sure you want to delete "${sectionName}"? Shortcuts in this section will be moved to "No Section".`,
+          t("modals.confirm.deleteSection"),
+          t("modals.confirm.deleteSectionMessage", { sectionName }),
           onConfirm,
         );
       },
     }),
-    [fetchData, modals],
+    [fetchData, modals, t],
   );
 
   // ==================== Action Hooks ====================
@@ -111,13 +113,13 @@ function App() {
     (id: string) => {
       containerActions.handleStop(id, (onConfirm) => {
         modals.showConfirm(
-          "Stop Container",
-          "Are you sure you want to stop this container? This will terminate all active processes.",
+          t("modals.confirm.stopContainer"),
+          t("modals.confirm.stopContainerMessage"),
           onConfirm,
         );
       });
     },
-    [containerActions, modals],
+    [containerActions, modals, t],
   );
 
   const handleRestart = useCallback(
@@ -337,6 +339,8 @@ function App() {
               handleStop={handleStop}
               handleQuickAdd={handleQuickAdd}
               handleToggleFavorite={handleToggleFavorite}
+              viewMode={viewMode}
+              mobileColumns={mobileColumns}
             />
           )}
         </AnimatePresence>

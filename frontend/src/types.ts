@@ -75,6 +75,7 @@ export interface ShortcutCardProps {
   onRestart?: () => void;
   onToggleFavorite: () => void;
   isEditMode?: boolean;
+  alwaysShowStar?: boolean;
 }
 
 export interface SortableShortcutCardProps extends ShortcutCardProps {}

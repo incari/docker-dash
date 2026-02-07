@@ -1,6 +1,7 @@
 import React, { useEffect } from "react";
 import { motion } from "framer-motion";
 import { AlertTriangle, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { ErrorModalProps } from "../types";
 
 /**
@@ -11,6 +12,8 @@ export const ErrorModal: React.FC<ErrorModalProps> = ({
   message,
   onClose,
 }) => {
+  const { t } = useTranslation();
+
   // Add ESC key handler
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -56,7 +59,9 @@ export const ErrorModal: React.FC<ErrorModalProps> = ({
           <div className="p-3 bg-red-500/20 rounded-2xl">
             <AlertTriangle className="w-8 h-8 text-red-400" />
           </div>
-          <h2 className="text-2xl font-bold text-white">Error</h2>
+          <h2 className="text-2xl font-bold text-white">
+            {t("modals.error.title")}
+          </h2>
         </div>
 
         <p className="text-slate-300 mb-6 leading-relaxed">{message}</p>
@@ -65,7 +70,7 @@ export const ErrorModal: React.FC<ErrorModalProps> = ({
           onClick={onClose}
           className="w-full py-3 px-6 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-semibold rounded-xl transition-all duration-200 shadow-lg shadow-red-500/30"
         >
-          Close
+          {t("modals.error.close")}
         </button>
       </motion.div>
     </div>

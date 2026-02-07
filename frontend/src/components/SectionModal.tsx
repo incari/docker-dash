@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
+import { useTranslation } from "react-i18next";
 import type { SectionModalProps } from "../types";
 
 /**
@@ -12,6 +13,7 @@ export const SectionModal: React.FC<SectionModalProps> = ({
   onSave,
   onClose,
 }) => {
+  const { t } = useTranslation();
   const [name, setName] = useState("");
 
   useEffect(() => {
@@ -74,18 +76,20 @@ export const SectionModal: React.FC<SectionModalProps> = ({
       >
         <div className="p-6">
           <h3 className="text-xl font-bold text-white mb-4">
-            {mode === "edit" ? "Edit Section" : "Create Section"}
+            {mode === "edit"
+              ? t("sections.editSection")
+              : t("sections.createSection")}
           </h3>
           <form onSubmit={handleSubmit}>
             <div className="mb-6">
               <label className="block text-sm font-medium text-slate-300 mb-2">
-                Section Name
+                {t("sections.name")}
               </label>
               <input
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Enter section name..."
+                placeholder={t("sections.namePlaceholder")}
                 className="w-full px-4 py-3 bg-slate-800 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 autoFocus
               />
@@ -96,14 +100,14 @@ export const SectionModal: React.FC<SectionModalProps> = ({
                 onClick={onClose}
                 className="flex-1 py-3 rounded-xl bg-slate-800 text-white font-semibold hover:bg-slate-700 transition-colors"
               >
-                Cancel
+                {t("common.cancel")}
               </button>
               <button
                 type="submit"
                 disabled={!name.trim()}
                 className="flex-1 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:text-slate-500 text-white font-semibold transition-colors"
               >
-                {mode === "edit" ? "Save" : "Create"}
+                {mode === "edit" ? t("common.save") : t("common.create")}
               </button>
             </div>
           </form>

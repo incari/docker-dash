@@ -104,8 +104,9 @@
     "containerNoExposedPorts": "Container has no exposed ports",
     "leaveEmptyNoPorts": "Leave empty for containers that don't expose ports",
     "useTailscale": "Use Tailscale IP",
-    "tailscaleDescription": "Connect via Tailscale network",
+    "tailscaleDescription": "Access this service via your Tailscale network instead of local IP",
     "tailscaleNotAvailable": "Tailscale not available",
+    "imageUrlHint": "Prefer direct links to PNG/SVG assets.",
     "section": "Section",
     "noSection": "No Section",
     "identityBranding": "Identity & Branding",
@@ -121,8 +122,22 @@
     "noSection": "No Section"
   },
   "modals": {
+    "confirm": {
+      "cancel": "Cancel",
+      "delete": "Delete",
+      "deleteShortcut": "Delete Shortcut",
+      "deleteShortcutMessage": "Are you sure you want to delete this shortcut? This action cannot be undone.",
+      "deleteSection": "Delete Section",
+      "deleteSectionMessage": "Are you sure you want to delete \"{{sectionName}}\"? Shortcuts in this section will be moved to \"No Section\".",
+      "stopContainer": "Stop Container",
+      "stopContainerMessage": "Are you sure you want to stop this container? This will terminate all active processes."
+    },
     "error": {
-      "title": "Error"
+      "title": "Error",
+      "close": "Close",
+      "savingShortcut": "Error Saving Shortcut",
+      "unexpectedError": "An unexpected error occurred while saving the shortcut.",
+      "portUrlOrContainerRequired": "Either Port, URL, or Container must be specified"
     }
   },
   "validation": {
@@ -153,4 +168,3 @@
     "twoCol": "2 Col"
   }
 }
-

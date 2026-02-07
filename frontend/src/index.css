@@ -15,6 +15,7 @@
   --color-primary-contrast: #ffffff;
   --color-background-contrast: #ffffff;
   --color-primary-rgb: 59, 130, 246;
+  --color-background-contrast-rgb: 255, 255, 255;
 
   background-color: var(--color-background);
 

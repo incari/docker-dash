@@ -1,6 +1,7 @@
 import React, { useEffect } from "react";
 import { motion } from "framer-motion";
 import { AlertTriangle, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { ConfirmModalProps } from "../types";
 
 /**
@@ -13,6 +14,8 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
   onConfirm,
   onCancel,
 }) => {
+  const { t } = useTranslation();
+
   // Add ESC key handler
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -68,13 +71,13 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
             onClick={onCancel}
             className="flex-1 py-3 px-6 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-xl transition-all duration-200"
           >
-            Cancel
+            {t("modals.confirm.cancel")}
           </button>
           <button
             onClick={onConfirm}
             className="flex-1 py-3 px-6 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-semibold rounded-xl transition-all duration-200 shadow-lg shadow-red-500/30"
           >
-            Delete
+            {t("modals.confirm.delete")}
           </button>
         </div>
       </motion.div>
