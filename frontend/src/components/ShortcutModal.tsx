@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
 import axios from "axios";
@@ -114,90 +114,96 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setUrlError("");
-    setIconUrlError("");
-
-    // Validation
-    if (formData.type === "port") {
-      if (formData.port && !isValidPort(formData.port)) {
-        onError(
-          t("validation.invalidPort"),
-          `${t("validation.invalidPort")}\n\n${t("validation.invalidPortNote")}`
-        );
-        return;
-      }
-    } else {
-      if (!formData.url || !isValidUrl(formData.url)) {
-        setUrlError(t("validation.invalidUrl"));
-        onError(
-          t("validation.invalidUrl"),
-          t("validation.invalidUrl")
-        );
-        return;
-      }
-    }
-
-    // Validate image URL if using URL tab
-    if (activeTab === "url" && formData.icon) {
-      if (!isValidUrl(formData.icon)) {
-        setIconUrlError(t("validation.invalidImageUrl"));
-        onError(
-          t("validation.invalidImageUrl"),
-          t("validation.invalidImageUrl")
-        );
-        return;
-      }
-    }
-
-    const data = new window.FormData();
-    data.append("name", formData.name.trim());
-    const cleanedDesc = cleanDescription(formData.description);
-    if (cleanedDesc) {
-      data.append("description", cleanedDesc);
-    }
-
-    if (formData.type === "port") {
-      if (formData.port) {
-        data.append("port", formData.port);
-      }
-      data.append("use_tailscale", String(formData.use_tailscale));
-    } else {
-      data.append("url", normalizeUrl(formData.url));
-    }
-
-    if (activeTab === "icon") data.append("icon", formData.icon);
-    else if (activeTab === "url")
-      data.append("icon", normalizeUrl(formData.icon));
-    else if (activeTab === "upload" && selectedFile)
-      data.append("image", selectedFile);
-    else if (shortcut) data.append("icon", shortcut.icon || "Server");
-
-    if (formData.container_id)
-      data.append("container_id", formData.container_id);
-
-    try {
-      if (shortcut?.id) {
-        await axios.put(`${API_BASE}/shortcuts/${shortcut.id}`, data);
-      } else {
-        await axios.post(`${API_BASE}/shortcuts`, data);
-      }
-      onSave();
-      onClose();
-    } catch (err: any) {
-      const errorMessage =
-        err.response?.data?.error ||
-        "An unexpected error occurred while saving the shortcut.";
-      onError("Error Saving Shortcut", errorMessage);
-    }
-  };
-
-  const linkedContainer = containers.find(
-    (c) => c.id === formData.container_id
+  // Memoize computed values to avoid recalculation on every render
+  const linkedContainer = useMemo(
+    () => containers.find((c) => c.id === formData.container_id),
+    [containers, formData.container_id],
   );
-  const availablePorts =
-    linkedContainer?.ports?.map((p) => p.public).filter(Boolean) || [];
+
+  const availablePorts = useMemo(
+    () => linkedContainer?.ports?.map((p) => p.public).filter(Boolean) || [],
+    [linkedContainer],
+  );
+
+  // Memoize form submission handler
+  const handleSubmit = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      setUrlError("");
+      setIconUrlError("");
+
+      // Validation
+      if (formData.type === "port") {
+        if (formData.port && !isValidPort(formData.port)) {
+          onError(
+            t("validation.invalidPort"),
+            `${t("validation.invalidPort")}\n\n${t("validation.invalidPortNote")}`,
+          );
+          return;
+        }
+      } else {
+        if (!formData.url || !isValidUrl(formData.url)) {
+          setUrlError(t("validation.invalidUrl"));
+          onError(t("validation.invalidUrl"), t("validation.invalidUrl"));
+          return;
+        }
+      }
+
+      // Validate image URL if using URL tab
+      if (activeTab === "url" && formData.icon) {
+        if (!isValidUrl(formData.icon)) {
+          setIconUrlError(t("validation.invalidImageUrl"));
+          onError(
+            t("validation.invalidImageUrl"),
+            t("validation.invalidImageUrl"),
+          );
+          return;
+        }
+      }
+
+      const data = new window.FormData();
+      data.append("name", formData.name.trim());
+      const cleanedDesc = cleanDescription(formData.description);
+      if (cleanedDesc) {
+        data.append("description", cleanedDesc);
+      }
+
+      if (formData.type === "port") {
+        if (formData.port) {
+          data.append("port", formData.port);
+        }
+        data.append("use_tailscale", String(formData.use_tailscale));
+      } else {
+        data.append("url", normalizeUrl(formData.url));
+      }
+
+      if (activeTab === "icon") data.append("icon", formData.icon);
+      else if (activeTab === "url")
+        data.append("icon", normalizeUrl(formData.icon));
+      else if (activeTab === "upload" && selectedFile)
+        data.append("image", selectedFile);
+      else if (shortcut) data.append("icon", shortcut.icon || "Server");
+
+      if (formData.container_id)
+        data.append("container_id", formData.container_id);
+
+      try {
+        if (shortcut?.id) {
+          await axios.put(`${API_BASE}/shortcuts/${shortcut.id}`, data);
+        } else {
+          await axios.post(`${API_BASE}/shortcuts`, data);
+        }
+        onSave();
+        onClose();
+      } catch (err: any) {
+        const errorMessage =
+          err.response?.data?.error ||
+          "An unexpected error occurred while saving the shortcut.";
+        onError("Error Saving Shortcut", errorMessage);
+      }
+    },
+    [formData, activeTab, selectedFile, shortcut, onSave, onClose, onError, t],
+  );
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
@@ -216,7 +222,9 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
       >
         <div className="p-6 border-b border-white/5 flex items-center justify-between bg-slate-800/20">
           <h2 className="text-xl font-bold text-white">
-            {shortcut?.id ? t("shortcuts.editShortcut") : t("shortcuts.createNew")}
+            {shortcut?.id
+              ? t("shortcuts.editShortcut")
+              : t("shortcuts.createNew")}
           </h2>
           <button
             onClick={onClose}
@@ -264,7 +272,10 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
-              <label htmlFor="display-name" className="text-sm font-semibold text-slate-300">
+              <label
+                htmlFor="display-name"
+                className="text-sm font-semibold text-slate-300"
+              >
                 {t("shortcuts.displayName")}
               </label>
               <input
@@ -286,20 +297,22 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setFormData({ ...formData, type: "port" })}
-                  className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${formData.type === "port"
+                  className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
+                    formData.type === "port"
                       ? "bg-slate-800 text-white shadow-lg"
                       : "text-slate-500"
-                    }`}
+                  }`}
                 >
                   {t("shortcuts.localPort")}
                 </button>
                 <button
                   type="button"
                   onClick={() => setFormData({ ...formData, type: "url" })}
-                  className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${formData.type === "url"
+                  className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
+                    formData.type === "url"
                       ? "bg-slate-800 text-white shadow-lg"
                       : "text-slate-500"
-                    }`}
+                  }`}
                 >
                   {t("shortcuts.webUrl")}
                 </button>
@@ -310,7 +323,9 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
           {/* Port/URL Input */}
           <div className="space-y-2">
             <label className="text-sm font-semibold text-slate-300">
-              {formData.type === "port" ? t("shortcuts.portNumber") : t("shortcuts.targetUrl")}
+              {formData.type === "port"
+                ? t("shortcuts.portNumber")
+                : t("shortcuts.targetUrl")}
               {formData.type === "port" && (
                 <span className="text-xs text-slate-500 font-normal ml-2">
                   ({t("common.optional")})
@@ -465,7 +480,9 @@ const PortSelector: React.FC<PortSelectorProps> = ({
         <p className="text-xs text-slate-500 pl-1">
           {availablePorts.length === 1
             ? t("shortcuts.containerHasOnePort")
-            : t("shortcuts.containerHasPorts", { count: availablePorts.length })}
+            : t("shortcuts.containerHasPorts", {
+                count: availablePorts.length,
+              })}
         </p>
       </div>
     );
@@ -530,9 +547,11 @@ const UrlInput: React.FC<UrlInputProps> = ({
       onChange={(e) => onChange(e.target.value)}
       onBlur={onBlur}
       placeholder={t("shortcuts.urlPlaceholder")}
-      className={`w-full bg-slate-800 border ${urlError ? "border-red-500" : "border-white/10"
-        } rounded-xl px-4 py-3 focus:outline-none focus:ring-2 ${urlError ? "focus:ring-red-500" : "focus:ring-blue-500"
-        } transition-all text-white`}
+      className={`w-full bg-slate-800 border ${
+        urlError ? "border-red-500" : "border-white/10"
+      } rounded-xl px-4 py-3 focus:outline-none focus:ring-2 ${
+        urlError ? "focus:ring-red-500" : "focus:ring-blue-500"
+      } transition-all text-white`}
     />
     {!urlError && (
       <p className="text-xs text-slate-500 pl-1">
@@ -576,12 +595,14 @@ const TailscaleToggle: React.FC<TailscaleToggleProps> = ({
       <button
         type="button"
         onClick={onToggle}
-        className={`relative w-14 h-7 rounded-full transition-colors ${enabled ? "bg-blue-600" : "bg-slate-700"
-          }`}
+        className={`relative w-14 h-7 rounded-full transition-colors ${
+          enabled ? "bg-blue-600" : "bg-slate-700"
+        }`}
       >
         <div
-          className={`absolute top-1 left-1 w-5 h-5 bg-white rounded-full transition-transform ${enabled ? "translate-x-7" : "translate-x-0"
-            }`}
+          className={`absolute top-1 left-1 w-5 h-5 bg-white rounded-full transition-transform ${
+            enabled ? "translate-x-7" : "translate-x-0"
+          }`}
         />
       </button>
     </div>
@@ -606,7 +627,7 @@ const IconDropdown: React.FC<IconDropdownProps> = ({ icon, setIcon }) => {
 
   // Sort icons alphabetically
   const sortedIcons = Object.keys(AVAILABLE_ICONS).sort((a, b) =>
-    a.toLowerCase().localeCompare(b.toLowerCase())
+    a.toLowerCase().localeCompare(b.toLowerCase()),
   );
 
   const updatePosition = useCallback(() => {
@@ -676,8 +697,9 @@ const IconDropdown: React.FC<IconDropdownProps> = ({ icon, setIcon }) => {
           <span className="text-white">{icon}</span>
         </div>
         <ChevronDown
-          className={`w-5 h-5 text-slate-400 transition-transform ${isOpen ? "rotate-180" : ""
-            }`}
+          className={`w-5 h-5 text-slate-400 transition-transform ${
+            isOpen ? "rotate-180" : ""
+          }`}
         />
       </button>
 
@@ -701,14 +723,16 @@ const IconDropdown: React.FC<IconDropdownProps> = ({ icon, setIcon }) => {
                   setIcon(iconKey);
                   setIsOpen(false);
                 }}
-                className={`w-full px-4 py-2.5 flex items-center gap-3 hover:bg-slate-700 transition-colors ${icon === iconKey
+                className={`w-full px-4 py-2.5 flex items-center gap-3 hover:bg-slate-700 transition-colors ${
+                  icon === iconKey
                     ? "bg-blue-600/20 text-blue-400"
                     : "text-white"
-                  }`}
+                }`}
               >
                 <div
-                  className={`w-8 h-8 rounded-lg flex items-center justify-center ${icon === iconKey ? "bg-blue-600/30" : "bg-slate-700"
-                    }`}
+                  className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                    icon === iconKey ? "bg-blue-600/30" : "bg-slate-700"
+                  }`}
                 >
                   <DynamicIcon
                     name={iconKey}
@@ -719,7 +743,7 @@ const IconDropdown: React.FC<IconDropdownProps> = ({ icon, setIcon }) => {
               </button>
             ))}
           </div>,
-          document.body
+          document.body,
         )}
     </div>
   );
@@ -755,100 +779,107 @@ const IconSelector: React.FC<IconSelectorProps> = ({
   };
 
   return (
-  <div className="space-y-4 pt-2">
-    <label className="text-sm font-semibold text-slate-300">
-      {t("shortcuts.identityBranding")}
-    </label>
-    <div className="flex gap-2 p-1 bg-slate-950 rounded-xl border border-white/10">
-      {(["icon", "url", "upload"] as const).map((tab) => (
-        <button
-          key={tab}
-          type="button"
-          onClick={() => setActiveTab(tab)}
-          className={`flex-1 py-2.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${activeTab === tab
-              ? "bg-slate-800 text-white"
-              : "text-slate-500 hover:text-slate-300"
+    <div className="space-y-4 pt-2">
+      <label className="text-sm font-semibold text-slate-300">
+        {t("shortcuts.identityBranding")}
+      </label>
+      <div className="flex gap-2 p-1 bg-slate-950 rounded-xl border border-white/10">
+        {(["icon", "url", "upload"] as const).map((tab) => (
+          <button
+            key={tab}
+            type="button"
+            onClick={() => setActiveTab(tab)}
+            className={`flex-1 py-2.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${
+              activeTab === tab
+                ? "bg-slate-800 text-white"
+                : "text-slate-500 hover:text-slate-300"
             }`}
-        >
-          {tab === "icon" && <Bookmark className="w-3 h-3" />}
-          {tab === "url" && <LinkIcon className="w-3 h-3" />}
-          {tab === "upload" && <Upload className="w-3 h-3" />}
-          {tabLabels[tab]}
-        </button>
-      ))}
-    </div>
-
-    <div className="bg-slate-950/50 rounded-2xl p-6 border border-white/5 min-h-20 flex items-center justify-center">
-      {activeTab === "icon" && (
-        <IconDropdown
-          icon={icon}
-          setIcon={setIcon}
-        />
-      )}
-
-      {activeTab === "url" && (
-        <div className="w-full space-y-3">
-          <div
-            className={`flex items-center gap-3 bg-slate-800 border ${iconUrlError ? "border-red-500" : "border-white/10"
-              } rounded-xl px-4 py-3`}
           >
-            <LinkIcon className="w-5 h-5 text-slate-500" />
-            <input
-              type="text"
-              className="bg-transparent flex-1 focus:outline-none text-white text-sm"
-              placeholder={t("shortcuts.imageUrlPlaceholder")}
-              value={activeTab === "url" && (icon.startsWith("http") || icon.includes("/")) ? icon : ""}
-              onChange={(e) => {
-                setIcon(e.target.value);
-                setIconUrlError("");
-              }}
-              onBlur={(e) => {
-                if (e.target.value && !isValidUrl(e.target.value)) {
-                  setIconUrlError(t("validation.invalidImageUrl"));
-                } else {
-                  setIconUrlError("");
-                }
-              }}
-            />
-          </div>
-          {!iconUrlError && (
-            <p className="text-[10px] text-slate-500 pl-1 italic">
-              Prefer direct links to PNG/SVG assets.
-            </p>
-          )}
-          {iconUrlError && (
-            <p className="text-xs text-red-400 pl-1 flex items-center gap-1">
-              <span>⚠</span> {iconUrlError}
-            </p>
-          )}
-        </div>
-      )}
+            {tab === "icon" && <Bookmark className="w-3 h-3" />}
+            {tab === "url" && <LinkIcon className="w-3 h-3" />}
+            {tab === "upload" && <Upload className="w-3 h-3" />}
+            {tabLabels[tab]}
+          </button>
+        ))}
+      </div>
 
-      {activeTab === "upload" && (
-        <label className="w-full h-24 border-2 border-dashed border-white/10 rounded-2xl flex flex-col items-center justify-center cursor-pointer hover:bg-white/[0.02] transition-colors group">
-          <input
-            type="file"
-            className="hidden"
-            onChange={(e) => setSelectedFile(e.target.files?.[0] ?? null)}
+      <div className="bg-slate-950/50 rounded-2xl p-6 border border-white/5 min-h-20 flex items-center justify-center">
+        {activeTab === "icon" && (
+          <IconDropdown
+            icon={icon}
+            setIcon={setIcon}
           />
-          {selectedFile ? (
-            <div className="flex flex-col items-center text-green-400">
-              <CheckCircle className="w-6 h-6 mb-1" />
-              <span className="text-xs font-medium truncate max-w-[200px]">
-                {selectedFile.name}
-              </span>
+        )}
+
+        {activeTab === "url" && (
+          <div className="w-full space-y-3">
+            <div
+              className={`flex items-center gap-3 bg-slate-800 border ${
+                iconUrlError ? "border-red-500" : "border-white/10"
+              } rounded-xl px-4 py-3`}
+            >
+              <LinkIcon className="w-5 h-5 text-slate-500" />
+              <input
+                type="text"
+                className="bg-transparent flex-1 focus:outline-none text-white text-sm"
+                placeholder={t("shortcuts.imageUrlPlaceholder")}
+                value={
+                  activeTab === "url" &&
+                  (icon.startsWith("http") || icon.includes("/"))
+                    ? icon
+                    : ""
+                }
+                onChange={(e) => {
+                  setIcon(e.target.value);
+                  setIconUrlError("");
+                }}
+                onBlur={(e) => {
+                  if (e.target.value && !isValidUrl(e.target.value)) {
+                    setIconUrlError(t("validation.invalidImageUrl"));
+                  } else {
+                    setIconUrlError("");
+                  }
+                }}
+              />
             </div>
-          ) : (
-            <>
-              <ImageIcon className="w-6 h-6 text-slate-500 group-hover:text-blue-500 mb-1 transition-colors" />
-              <span className="text-xs text-slate-500 group-hover:text-slate-300">
-                Choose local asset
-              </span>
-            </>
-          )}
-        </label>
-      )}
+            {!iconUrlError && (
+              <p className="text-[10px] text-slate-500 pl-1 italic">
+                Prefer direct links to PNG/SVG assets.
+              </p>
+            )}
+            {iconUrlError && (
+              <p className="text-xs text-red-400 pl-1 flex items-center gap-1">
+                <span>⚠</span> {iconUrlError}
+              </p>
+            )}
+          </div>
+        )}
+
+        {activeTab === "upload" && (
+          <label className="w-full h-24 border-2 border-dashed border-white/10 rounded-2xl flex flex-col items-center justify-center cursor-pointer hover:bg-white/[0.02] transition-colors group">
+            <input
+              type="file"
+              className="hidden"
+              onChange={(e) => setSelectedFile(e.target.files?.[0] ?? null)}
+            />
+            {selectedFile ? (
+              <div className="flex flex-col items-center text-green-400">
+                <CheckCircle className="w-6 h-6 mb-1" />
+                <span className="text-xs font-medium truncate max-w-[200px]">
+                  {selectedFile.name}
+                </span>
+              </div>
+            ) : (
+              <>
+                <ImageIcon className="w-6 h-6 text-slate-500 group-hover:text-blue-500 mb-1 transition-colors" />
+                <span className="text-xs text-slate-500 group-hover:text-slate-300">
+                  Choose local asset
+                </span>
+              </>
+            )}
+          </label>
+        )}
+      </div>
     </div>
-  </div>
   );
 };

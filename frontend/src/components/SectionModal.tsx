@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import type { SectionModalProps } from "../types";
 
@@ -22,14 +22,30 @@ export const SectionModal: React.FC<SectionModalProps> = ({
     }
   }, [section, isOpen]);
 
-  // Add ESC key handler
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
+  // Memoize form submission handler
+  const handleSubmit = useCallback(
+    (e: React.FormEvent) => {
+      e.preventDefault();
+      if (name.trim()) {
+        onSave(name.trim());
+        setName("");
+      }
+    },
+    [name, onSave],
+  );
+
+  // Memoize ESC key handler to prevent re-creating listener on every render
+  const handleEscape = useCallback(
+    (e: KeyboardEvent) => {
       if (e.key === "Escape" && isOpen) {
         onClose();
       }
-    };
+    },
+    [isOpen, onClose],
+  );
 
+  // Add ESC key handler
+  useEffect(() => {
     if (isOpen) {
       document.addEventListener("keydown", handleEscape);
     }
@@ -37,15 +53,7 @@ export const SectionModal: React.FC<SectionModalProps> = ({
     return () => {
       document.removeEventListener("keydown", handleEscape);
     };
-  }, [isOpen, onClose]);
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (name.trim()) {
-      onSave(name.trim());
-      setName("");
-    }
-  };
+  }, [isOpen, handleEscape]);
 
   if (!isOpen) return null;
 
@@ -104,4 +112,3 @@ export const SectionModal: React.FC<SectionModalProps> = ({
     </div>
   );
 };
-

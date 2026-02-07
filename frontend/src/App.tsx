@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { AnimatePresence } from "framer-motion";
 
 import { Header } from "./components/Header";
@@ -17,7 +17,7 @@ import { useSectionActions } from "./hooks/useSectionActions";
 import { useModals } from "./hooks/useModals";
 import { useInstallPrompt } from "./hooks/useInstallPrompt";
 import { useViewSettings } from "./hooks/useViewSettings";
-import type { Section } from "./types";
+import type { Section, Shortcut } from "./types";
 
 function App() {
   // ==================== View State ====================
@@ -43,38 +43,48 @@ function App() {
 
   const modals = useModals();
 
-  // ==================== Action Hooks ====================
-  const containerActions = useContainerActions(fetchData);
-
-  const shortcutActions = useShortcutActions(
-    {
+  // ==================== Action Hooks Configuration ====================
+  // Memoize action hook options to prevent unnecessary re-initialization
+  const shortcutActionsOptions = useMemo(
+    () => ({
       onRefresh: fetchData,
       onError: modals.showError,
-      showDeleteConfirm: (onConfirm) => {
+      showDeleteConfirm: (onConfirm: () => Promise<void>) => {
         modals.showConfirm(
           "Delete Shortcut",
           "Are you sure you want to delete this shortcut? This action cannot be undone.",
           onConfirm,
         );
       },
-    },
-    setShortcuts,
+    }),
+    [fetchData, modals],
   );
 
-  const sectionActions = useSectionActions(
-    {
+  const sectionActionsOptions = useMemo(
+    () => ({
       onRefresh: fetchData,
       onError: modals.showError,
-      showDeleteConfirm: (sectionName, onConfirm) => {
+      showDeleteConfirm: (
+        sectionName: string,
+        onConfirm: () => Promise<void>,
+      ) => {
         modals.showConfirm(
           "Delete Section",
           `Are you sure you want to delete "${sectionName}"? Shortcuts in this section will be moved to "No Section".`,
           onConfirm,
         );
       },
-    },
-    setSections,
+    }),
+    [fetchData, modals],
   );
+
+  // ==================== Action Hooks ====================
+  const containerActions = useContainerActions(fetchData);
+  const shortcutActions = useShortcutActions(
+    shortcutActionsOptions,
+    setShortcuts,
+  );
+  const sectionActions = useSectionActions(sectionActionsOptions, setSections);
 
   // ==================== Effects ====================
   useEffect(() => {
@@ -145,10 +155,16 @@ function App() {
   );
 
   // ==================== Computed Data ====================
-  // Compute inline like original - useMemo can cause issues with FormKit drag-and-drop
-  const formatDataForFormKit = () => {
-    const dashboardShortcuts = shortcuts.filter((s) => s.is_favorite);
+  // Memoize dashboard shortcuts to avoid recomputing on every render
+  const dashboardShortcuts = useMemo(
+    () => shortcuts.filter((s) => s.is_favorite),
+    [shortcuts],
+  );
 
+  // Memoize formatted data for FormKit drag-and-drop
+  // Note: We use useMemo here as the computation is expensive and the result
+  // is used in multiple places. FormKit handles its own internal state.
+  const { shortcutsBySection, unsectionedShortcuts } = useMemo(() => {
     // Group shortcuts by section
     const formattedSections: Record<number, typeof shortcuts> = {};
     const formattedUnsectioned: typeof shortcuts = [];
@@ -172,16 +188,10 @@ function App() {
     });
 
     return {
-      sections: formattedSections,
-      unsectioned: formattedUnsectioned,
+      shortcutsBySection: formattedSections,
+      unsectionedShortcuts: formattedUnsectioned,
     };
-  };
-
-  // Format data for FormKit drag-and-drop
-  const formattedData = formatDataForFormKit();
-  const shortcutsBySection = formattedData.sections;
-  const unsectionedShortcuts = formattedData.unsectioned;
-  const dashboardShortcuts = shortcuts.filter((s) => s.is_favorite);
+  }, [dashboardShortcuts, sections]);
 
   // ==================== Shortcut/Section Handlers (wrapped for component props) ====================
   const handleDeleteSection = useCallback(
@@ -247,6 +257,26 @@ function App() {
     [shortcutActions],
   );
 
+  // ==================== ManagementView Handlers ====================
+  // Memoize inline callbacks for ManagementView to prevent re-renders
+  const handleSetEditingShortcut = useCallback(
+    (shortcut: Shortcut | null) => {
+      modals.openShortcutModal(shortcut);
+    },
+    [modals],
+  );
+
+  const handleSetIsModalOpen = useCallback(
+    (isOpen: boolean) => {
+      if (isOpen) {
+        modals.openShortcutModal();
+      } else {
+        modals.closeShortcutModal();
+      }
+    },
+    [modals],
+  );
+
   return (
     <div
       className="min-h-screen text-slate-200 font-sans selection:bg-blue-500/30 flex flex-col"
@@ -299,14 +329,8 @@ function App() {
               shortcuts={shortcuts}
               tailscaleInfo={tailscaleInfo}
               setView={setView}
-              setEditingShortcut={(shortcut) =>
-                modals.openShortcutModal(shortcut)
-              }
-              setIsModalOpen={(isOpen) =>
-                isOpen
-                  ? modals.openShortcutModal()
-                  : modals.closeShortcutModal()
-              }
+              setEditingShortcut={handleSetEditingShortcut}
+              setIsModalOpen={handleSetIsModalOpen}
               openEditModal={openEditModal}
               handleDelete={handleDelete}
               handleStart={handleStart}
