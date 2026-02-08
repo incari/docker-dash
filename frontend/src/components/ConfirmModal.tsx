@@ -13,8 +13,19 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
   message,
   onConfirm,
   onCancel,
+  type = "danger",
 }) => {
   const { t } = useTranslation();
+
+  // Determine colors and text based on type
+  const isWarning = type === "warning";
+  const borderColor = isWarning ? "border-blue-500/20" : "border-yellow-500/20";
+  const iconBgColor = isWarning ? "bg-blue-500/20" : "bg-yellow-500/20";
+  const iconColor = isWarning ? "text-blue-400" : "text-yellow-400";
+  const buttonGradient = isWarning
+    ? "bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 shadow-blue-500/30"
+    : "bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 shadow-red-500/30";
+  const confirmText = isWarning ? "Update" : t("modals.confirm.delete");
 
   // Add ESC key handler
   useEffect(() => {
@@ -48,7 +59,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.9, opacity: 0 }}
-        className="relative bg-gradient-to-br from-slate-900 to-slate-800 rounded-3xl p-8 max-w-md w-full shadow-2xl border border-yellow-500/20"
+        className={`relative bg-gradient-to-br from-slate-900 to-slate-800 rounded-3xl p-8 max-w-md w-full shadow-2xl border ${borderColor}`}
       >
         <button
           onClick={onCancel}
@@ -58,8 +69,8 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
         </button>
 
         <div className="flex items-center gap-4 mb-6">
-          <div className="p-3 bg-yellow-500/20 rounded-2xl">
-            <AlertTriangle className="w-8 h-8 text-yellow-400" />
+          <div className={`p-3 ${iconBgColor} rounded-2xl`}>
+            <AlertTriangle className={`w-8 h-8 ${iconColor}`} />
           </div>
           <h2 className="text-2xl font-bold text-white">{title}</h2>
         </div>
@@ -75,9 +86,9 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
           </button>
           <button
             onClick={onConfirm}
-            className="flex-1 py-3 px-6 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-semibold rounded-xl transition-all duration-200 shadow-lg shadow-red-500/30"
+            className={`flex-1 py-3 px-6 ${buttonGradient} text-white font-semibold rounded-xl transition-all duration-200 shadow-lg`}
           >
-            {t("modals.confirm.delete")}
+            {confirmText}
           </button>
         </div>
       </motion.div>

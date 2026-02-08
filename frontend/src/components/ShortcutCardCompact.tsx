@@ -219,7 +219,7 @@ export const ShortcutCardCompact: React.FC<ExtendedShortcutCardProps> = ({
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                onStop();
+                                onStop?.();
                                 setShowMenu(false);
                               }}
                               className="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-red-500/10 text-red-400 transition-colors"
@@ -228,25 +228,25 @@ export const ShortcutCardCompact: React.FC<ExtendedShortcutCardProps> = ({
                                 className="w-3.5 h-3.5"
                                 fill="currentColor"
                               />
-                              Stop
+                              {t("containers.stop")}
                             </button>
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                onRestart();
+                                onRestart?.();
                                 setShowMenu(false);
                               }}
                               className="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-yellow-500/10 text-yellow-400 transition-colors"
                             >
                               <RefreshCw className="w-3.5 h-3.5" />
-                              Restart
+                              {t("containers.restart")}
                             </button>
                           </>
                         ) : (
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              onStart();
+                              onStart?.();
                               setShowMenu(false);
                             }}
                             className="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-green-500/10 text-green-400 transition-colors"
@@ -255,7 +255,7 @@ export const ShortcutCardCompact: React.FC<ExtendedShortcutCardProps> = ({
                               className="w-3.5 h-3.5"
                               fill="currentColor"
                             />
-                            Start
+                            {t("containers.start")}
                           </button>
                         )}
                         <div className="h-px bg-white/5" />

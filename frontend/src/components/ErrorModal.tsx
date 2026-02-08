@@ -1,18 +1,22 @@
 import React, { useEffect } from "react";
 import { motion } from "framer-motion";
-import { AlertTriangle, X } from "lucide-react";
+import { AlertTriangle, CheckCircle, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { ErrorModalProps } from "../types";
 
 /**
- * Error modal component for displaying error messages
+ * Error modal component for displaying error and success messages
  */
 export const ErrorModal: React.FC<ErrorModalProps> = ({
   isOpen,
+  title,
   message,
   onClose,
+  type = "error",
 }) => {
   const { t } = useTranslation();
+
+  const isSuccess = type === "success";
 
   // Add ESC key handler
   useEffect(() => {
@@ -46,7 +50,9 @@ export const ErrorModal: React.FC<ErrorModalProps> = ({
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.9, opacity: 0 }}
-        className="relative bg-gradient-to-br from-slate-900 to-slate-800 rounded-3xl p-8 max-w-md w-full shadow-2xl border border-red-500/20"
+        className={`relative bg-gradient-to-br from-slate-900 to-slate-800 rounded-3xl p-8 max-w-md w-full shadow-2xl border ${
+          isSuccess ? "border-green-500/20" : "border-red-500/20"
+        }`}
       >
         <button
           onClick={onClose}
@@ -56,11 +62,19 @@ export const ErrorModal: React.FC<ErrorModalProps> = ({
         </button>
 
         <div className="flex items-center gap-4 mb-6">
-          <div className="p-3 bg-red-500/20 rounded-2xl">
-            <AlertTriangle className="w-8 h-8 text-red-400" />
+          <div
+            className={`p-3 rounded-2xl ${
+              isSuccess ? "bg-green-500/20" : "bg-red-500/20"
+            }`}
+          >
+            {isSuccess ? (
+              <CheckCircle className="w-8 h-8 text-green-400" />
+            ) : (
+              <AlertTriangle className="w-8 h-8 text-red-400" />
+            )}
           </div>
           <h2 className="text-2xl font-bold text-white">
-            {t("modals.error.title")}
+            {title || (isSuccess ? "Success" : t("modals.error.title"))}
           </h2>
         </div>
 
@@ -68,7 +82,11 @@ export const ErrorModal: React.FC<ErrorModalProps> = ({
 
         <button
           onClick={onClose}
-          className="w-full py-3 px-6 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-semibold rounded-xl transition-all duration-200 shadow-lg shadow-red-500/30"
+          className={`w-full py-3 px-6 bg-gradient-to-r text-white font-semibold rounded-xl transition-all duration-200 shadow-lg ${
+            isSuccess
+              ? "from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 shadow-green-500/30"
+              : "from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 shadow-red-500/30"
+          }`}
         >
           {t("modals.error.close")}
         </button>

@@ -24,6 +24,7 @@ import {
   cleanDescription,
 } from "../utils/validation";
 import { uploadsApi, type UploadedImage } from "../services/api";
+import { getContainerIcon } from "../utils/dockerIconVault";
 
 interface FormData {
   name: string;
@@ -249,12 +250,23 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
                 value={formData.container_id}
                 onChange={(e) => {
                   const c = containers.find((x) => x.id === e.target.value);
+                  const newIcon = c
+                    ? getContainerIcon(c.name, "Server")
+                    : "Server";
                   setFormData((prev) => ({
                     ...prev,
                     container_id: e.target.value,
                     name: c ? c.name : prev.name,
                     port: c ? c.ports[0]?.public?.toString() || "" : prev.port,
+                    // Auto-select icon from docker-icon-vault based on container name
+                    icon: newIcon,
                   }));
+                  // Switch to URL tab if icon is from vault, otherwise icon tab
+                  if (newIcon.startsWith("http")) {
+                    setActiveTab("url");
+                  } else {
+                    setActiveTab("icon");
+                  }
                 }}
                 className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-white appearance-none"
               >

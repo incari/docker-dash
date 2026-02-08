@@ -10,7 +10,12 @@
     "dev": "concurrently \"pnpm dev:backend\" \"pnpm dev:frontend\"",
     "docker:build": "docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/incari/docker-dash:latest -t ghcr.io/incari/docker-dashboard:latest .",
     "docker:push": "docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/incari/docker-dash:latest -t ghcr.io/incari/docker-dashboard:latest --push .",
-    "docker:login": "gh auth token | docker login ghcr.io -u incari --password-stdin"
+    "docker:push:dev": "docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/incari/docker-dash:dev --push .",
+    "docker:push:dev:fast": "docker build -t ghcr.io/incari/docker-dash:dev . && docker push ghcr.io/incari/docker-dash:dev",
+    "docker:login": "gh auth token | docker login ghcr.io -u incari --password-stdin",
+    "release:patch": "npm version patch && git push && git push --tags",
+    "release:minor": "npm version minor && git push && git push --tags",
+    "release:major": "npm version major && git push && git push --tags"
   },
   "dependencies": {
     "better-sqlite3": "^9.4.3",

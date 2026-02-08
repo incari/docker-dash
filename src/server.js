@@ -7,6 +7,7 @@ const multer = require('multer');
 const fs = require('fs');
 const { exec } = require('child_process');
 const { promisify } = require('util');
+const { getContainerIcon, getDockerIconVaultData } = require('./utils/dockerIconVault');
 
 const execAsync = promisify(exec);
 
@@ -118,7 +119,7 @@ if (!tableInfo.find(c => c.name === 'container_id')) {
 // 3. Check for 'is_favorite' column
 if (!tableInfo.find(c => c.name === 'is_favorite')) {
   try {
-    db.exec('ALTER TABLE shortcuts ADD COLUMN is_favorite INTEGER DEFAULT 1');
+    db.exec('ALTER TABLE shortcuts ADD COLUMN is_favorite INTEGER DEFAULT 0');
     console.log("Migrated: Added is_favorite column");
   } catch (err) { console.error(err); }
 }
@@ -438,6 +439,11 @@ app.get('/api/containers', async (req, res) => {
     }).filter(Boolean);
     res.json(formatted);
   } catch (error) {
+    // Check if Docker is not running
+    if (error.code === 'ECONNREFUSED' || error.errno === -61) {
+      console.warn('Docker is not running. Returning empty container list.');
+      return res.json([]); // Return empty array instead of error
+    }
     console.error('Error fetching containers:', error);
     res.status(500).json({ error: 'Failed to fetch containers' });
   }
@@ -495,8 +501,76 @@ app.get('/api/shortcuts', (req, res) => {
   }
 });
 
+// Auto-sync containers to shortcuts (create shortcuts for containers that don't have them)
+app.post('/api/shortcuts/auto-sync', async (req, res) => {
+  try {
+    console.log('[AUTO-SYNC] Starting auto-sync of containers to shortcuts...');
+
+    // Get all running containers
+    const containers = await docker.listContainers({ all: true });
+    console.log('[AUTO-SYNC] Found', containers.length, 'containers');
+
+    // Get existing shortcuts with container_id
+    const existingShortcuts = db.prepare('SELECT container_id FROM shortcuts WHERE container_id IS NOT NULL').all();
+    const existingContainerIds = new Set(existingShortcuts.map(s => s.container_id));
+    console.log('[AUTO-SYNC] Found', existingContainerIds.size, 'existing shortcuts with container_id');
+
+    let createdCount = 0;
+    const stmt = db.prepare(
+      'INSERT INTO shortcuts (name, description, icon, port, container_id, is_favorite) VALUES (?, ?, ?, ?, ?, ?)'
+    );
+
+    for (const container of containers) {
+      if (!existingContainerIds.has(container.Id)) {
+        const containerName = container.Names[0].replace(/^\//, '');
+
+        // Get icon and description from docker-icon-vault
+        const iconData = await getDockerIconVaultData(containerName);
+        const icon = iconData ? iconData.iconUrl : 'Server';
+        const description = iconData ? iconData.description : '';
+        const port = container.Ports && container.Ports[0] ? container.Ports[0].PublicPort : null;
+
+        console.log('[AUTO-SYNC] Creating shortcut for container:', containerName);
+        console.log('[AUTO-SYNC]   Icon:', icon);
+        console.log('[AUTO-SYNC]   Description:', description);
+
+        stmt.run(
+          containerName,
+          description,
+          icon,
+          port,
+          container.Id,
+          0 // is_favorite = false by default
+        );
+        createdCount++;
+      }
+    }
+
+    console.log('[AUTO-SYNC] Auto-sync completed. Created', createdCount, 'new shortcuts');
+    res.json({
+      success: true,
+      created: createdCount,
+      total: containers.length,
+      message: `Created ${createdCount} new shortcuts from ${containers.length} containers`
+    });
+  } catch (error) {
+    // Check if Docker is not running
+    if (error.code === 'ECONNREFUSED' || error.errno === -61) {
+      console.warn('[AUTO-SYNC] Docker is not running. Skipping auto-sync.');
+      return res.json({
+        success: true,
+        created: 0,
+        total: 0,
+        message: 'Docker is not running. No containers to sync.'
+      });
+    }
+    console.error('[AUTO-SYNC] Auto-sync failed:', error);
+    res.status(500).json({ error: 'Failed to auto-sync containers' });
+  }
+});
+
 // Create a shortcut
-app.post('/api/shortcuts', upload.single('image'), (req, res) => {
+app.post('/api/shortcuts', upload.single('image'), async (req, res) => {
   const { name, description, icon, port, url, container_id, is_favorite, use_tailscale } = req.body;
 
   if (!name || !name.trim()) {
@@ -523,21 +597,45 @@ app.post('/api/shortcuts', upload.single('image'), (req, res) => {
   }
 
   // Validate and normalize icon URL if it's a URL
-  let iconValue = icon || 'cube';
+  let iconValue = icon || 'Server';
+
+  console.log('[CREATE SHORTCUT] Received icon:', icon);
+  console.log('[CREATE SHORTCUT] Container ID:', container_id);
+
+  // If no icon provided and container_id exists, try to get icon from docker-icon-vault
+  if (!icon && container_id) {
+    try {
+      const containers = await docker.listContainers({ all: true });
+      const container = containers.find(c => c.Id === container_id);
+      if (container) {
+        const containerName = container.Names[0].replace(/^\//, '');
+        iconValue = await getContainerIcon(containerName, 'Server');
+        console.log('[CREATE SHORTCUT] Auto-detected icon from container:', iconValue);
+      }
+    } catch (error) {
+      console.error('Failed to fetch container for icon:', error);
+      // Keep default 'Server' icon
+    }
+  }
+
   if (req.file) {
     iconValue = 'uploads/' + req.file.filename;
+    console.log('[CREATE SHORTCUT] Using uploaded file:', iconValue);
   } else if (icon && icon.includes('http')) {
     if (!isValidUrl(icon)) {
       return res.status(400).json({ error: 'Invalid icon URL format. Please enter a valid image URL like https://example.com/image.png' });
     }
     iconValue = normalizeUrl(icon);
+    console.log('[CREATE SHORTCUT] Using icon URL:', iconValue);
   }
+
+  console.log('[CREATE SHORTCUT] Final icon value to save:', iconValue);
 
   // Clean and validate description
   const cleanedDescription = cleanDescription(description);
 
   const finalPort = port ? parseInt(port) : null;
-  const finalFavorite = is_favorite === undefined ? 1 : (is_favorite === 'true' || is_favorite === true || is_favorite === 1 ? 1 : 0);
+  const finalFavorite = is_favorite === undefined ? 0 : (is_favorite === 'true' || is_favorite === true || is_favorite === 1 ? 1 : 0);
   const finalUseTailscale = use_tailscale === 'true' || use_tailscale === true || use_tailscale === 1 ? 1 : 0;
 
   try {
@@ -545,6 +643,14 @@ app.post('/api/shortcuts', upload.single('image'), (req, res) => {
       'INSERT INTO shortcuts (name, description, icon, port, url, container_id, is_favorite, use_tailscale) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
     );
     const result = stmt.run(name.trim(), cleanedDescription, iconValue, finalPort, finalUrl, container_id || null, finalFavorite, finalUseTailscale);
+
+    console.log('[CREATE SHORTCUT] Successfully saved to DB with ID:', result.lastInsertRowid);
+    console.log('[CREATE SHORTCUT] Saved icon value:', iconValue);
+
+    // Verify what was actually saved
+    const saved = db.prepare('SELECT id, name, icon FROM shortcuts WHERE id = ?').get(result.lastInsertRowid);
+    console.log('[CREATE SHORTCUT] Verification - DB contains:', saved);
+
     res.json({ id: result.lastInsertRowid, name: name.trim(), description: cleanedDescription, icon: iconValue, port: finalPort, url: finalUrl, container_id, is_favorite: finalFavorite, use_tailscale: finalUseTailscale });
   } catch (error) {
     console.error(error);
@@ -553,7 +659,7 @@ app.post('/api/shortcuts', upload.single('image'), (req, res) => {
 });
 
 // Update a shortcut
-app.put('/api/shortcuts/:id', upload.single('image'), (req, res) => {
+app.put('/api/shortcuts/:id', upload.single('image'), async (req, res) => {
   const { id } = req.params;
   const { name, description, icon, port, url, container_id, is_favorite, use_tailscale } = req.body;
 
@@ -577,6 +683,22 @@ app.put('/api/shortcuts/:id', upload.single('image'), (req, res) => {
 
   // Validate and normalize icon URL if it's a URL
   let iconValue = icon;
+
+  // If no icon provided and container_id exists, try to get icon from docker-icon-vault
+  if (!icon && container_id) {
+    try {
+      const containers = await docker.listContainers({ all: true });
+      const container = containers.find(c => c.Id === container_id);
+      if (container) {
+        const containerName = container.Names[0].replace(/^\//, '');
+        iconValue = getContainerIcon(containerName, 'Server');
+      }
+    } catch (error) {
+      console.error('Failed to fetch container for icon:', error);
+      // Keep existing icon
+    }
+  }
+
   if (req.file) {
     iconValue = 'uploads/' + req.file.filename;
   } else if (icon && icon.includes('http')) {
@@ -626,9 +748,14 @@ app.post('/api/shortcuts/:id/favorite', (req, res) => {
   const status = (is_favorite === true || is_favorite === 1) ? 1 : 0;
 
   try {
-    db.prepare('UPDATE shortcuts SET is_favorite = ? WHERE id = ?').run(status, id);
+    // Convert id to integer to ensure proper matching
+    const numericId = parseInt(id, 10);
+
+    const result = db.prepare('UPDATE shortcuts SET is_favorite = ? WHERE id = ?').run(status, numericId);
+
     res.json({ success: true, is_favorite: status });
   } catch (err) {
+    console.error('[TOGGLE FAVORITE] Error:', err);
     res.status(500).json({ error: 'Failed to update favorite status' });
   }
 });
@@ -665,6 +792,153 @@ app.delete('/api/shortcuts/:id', (req, res) => {
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: 'Failed to delete shortcut' });
+  }
+});
+
+// Check if migration is needed
+app.get('/api/shortcuts/check-migration', async (req, res) => {
+  try {
+    // Get all shortcuts that have a container_id but don't use docker-icon-vault URLs
+    const shortcuts = db.prepare(`
+      SELECT id, name, description, icon FROM shortcuts
+      WHERE container_id IS NOT NULL
+      AND (icon NOT LIKE 'https://incari.github.io/docker-icon-vault/%' OR icon IS NULL OR icon = 'Server')
+    `).all();
+
+    res.json({
+      needsMigration: shortcuts.length > 0,
+      count: shortcuts.length,
+      shortcuts: shortcuts.map(s => ({
+        id: s.id,
+        name: s.name,
+        description: s.description,
+        icon: s.icon
+      }))
+    });
+  } catch (error) {
+    console.error('Error checking migration:', error);
+    res.status(500).json({ error: 'Failed to check migration status' });
+  }
+});
+
+// Migrate shortcuts to use docker-icon-vault icons
+app.post('/api/shortcuts/migrate-icons', async (req, res) => {
+  try {
+    // Get selected shortcut IDs for icons and descriptions separately
+    const { iconIds, descriptionIds } = req.body;
+
+    // Get all shortcuts that have a container_id
+    let allShortcuts = db.prepare('SELECT * FROM shortcuts WHERE container_id IS NOT NULL').all();
+
+    // Determine which shortcuts to update for icons and descriptions
+    const iconIdsArray = Array.isArray(iconIds) ? iconIds : [];
+    const descriptionIdsArray = Array.isArray(descriptionIds) ? descriptionIds : [];
+
+    // Get unique IDs that need processing (union of both arrays)
+    const allIds = new Set([...iconIdsArray, ...descriptionIdsArray]);
+
+    if (allIds.size === 0) {
+      return res.json({
+        success: true,
+        message: 'No shortcuts selected for migration',
+        updated: 0,
+        total: 0
+      });
+    }
+
+    // Filter shortcuts to only those selected
+    const shortcuts = allShortcuts.filter(s => allIds.has(s.id));
+
+    // Get all containers from Docker
+    let containers = [];
+    try {
+      containers = await docker.listContainers({ all: true });
+    } catch (dockerError) {
+      // Check if Docker is not running
+      if (dockerError.code === 'ECONNREFUSED' || dockerError.errno === -61) {
+        console.warn('Migration: Docker is not running. Cannot migrate icons.');
+        return res.json({
+          success: false,
+          message: 'Docker is not running. Please start Docker Desktop and try again.',
+          updated: 0,
+          total: shortcuts.length
+        });
+      }
+      throw dockerError; // Re-throw if it's a different error
+    }
+
+    let updatedIconsCount = 0;
+    let updatedDescriptionsCount = 0;
+
+    // Process each shortcut
+    for (const shortcut of shortcuts) {
+      // Find the matching container
+      const container = containers.find(c => c.Id === shortcut.container_id);
+
+      if (container) {
+        // Get container name (remove leading slash)
+        const containerName = container.Names[0].replace(/^\//, '');
+
+        // Get the new icon and description from docker-icon-vault
+        const iconData = await getDockerIconVaultData(containerName);
+
+        let newIcon = shortcut.icon;
+        let newDescription = shortcut.description;
+        let iconChanged = false;
+        let descriptionChanged = false;
+
+        // Update icon if this shortcut is in the iconIds array and data is available
+        if (iconIdsArray.includes(shortcut.id) && iconData && iconData.iconUrl) {
+          newIcon = iconData.iconUrl;
+          if (newIcon !== shortcut.icon) {
+            iconChanged = true;
+          }
+        }
+
+        // Update description if this shortcut is in the descriptionIds array and data is available
+        if (descriptionIdsArray.includes(shortcut.id) && iconData && iconData.description) {
+          newDescription = iconData.description;
+          if (newDescription !== shortcut.description) {
+            descriptionChanged = true;
+          }
+        }
+
+        // Only update if something changed
+        if (iconChanged || descriptionChanged) {
+          const updateStmt = db.prepare('UPDATE shortcuts SET icon = ?, description = ? WHERE id = ?');
+          updateStmt.run(newIcon, newDescription, shortcut.id);
+
+          if (iconChanged) updatedIconsCount++;
+          if (descriptionChanged) updatedDescriptionsCount++;
+
+          console.log(`Updated shortcut "${shortcut.name}" (${containerName}): icon=${iconChanged}, description=${descriptionChanged}`);
+        }
+      }
+    }
+
+    // Build success message based on what was updated
+    const messages = [];
+    if (updatedIconsCount > 0) {
+      messages.push(`${updatedIconsCount} icon(s)`);
+    }
+    if (updatedDescriptionsCount > 0) {
+      messages.push(`${updatedDescriptionsCount} description(s)`);
+    }
+
+    const message = messages.length > 0
+      ? `Successfully updated ${messages.join(' and ')} from docker-icon-vault`
+      : 'No changes were made';
+
+    res.json({
+      success: true,
+      message,
+      updatedIcons: updatedIconsCount,
+      updatedDescriptions: updatedDescriptionsCount,
+      total: shortcuts.length
+    });
+  } catch (error) {
+    console.error('Error migrating icons:', error);
+    res.status(500).json({ error: 'Failed to migrate icons' });
   }
 });
 

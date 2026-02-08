@@ -6,51 +6,6 @@ A modern, responsive dashboard for managing your Docker containers. Create short
 
 ## Installation
 
-1.  **Clone the repository:**
-
-    ```bash
-    git clone https://github.com/incari/docker-dash.git
-    cd docker-dash
-    ```
-
-2.  **Install dependencies:**
-
-    Install root dependencies (backend) and frontend dependencies:
-
-    ```bash
-    # Root (Backend)
-    pnpm install
-
-    # Frontend
-    cd frontend
-    pnpm install
-    cd ..
-    ```
-
-## Running Locally
-
-To run the application in development mode (which starts both backend and frontend concurrently):
-
-```bash
-pnpm dev
-```
-
--   **Frontend**: [http://localhost:5173](http://localhost:5173)
--   **Backend API**: [http://localhost:3000](http://localhost:3000)
-
-> **Note**: The backend needs access to the Docker socket (`/var/run/docker.sock`) to fetch container information. Ensure your user has permissions or run with necessary privileges if needed.
-
-## Environment Variables
-
-You can configure the application using environment variables. Create a `.env` file in the root directory (see `.env.example`).
-
-| Variable | Description | Default |
-| :--- | :--- | :--- |
-| `PORT` | The port the backend server runs on. | `3000` |
-| `DOCKER_SOCKET` | Path to the Docker socket. | `/var/run/docker.sock` |
-| `DB_PATH` | Path to the SQLite database file. | `./data/dashboard.db` |
-| `UPLOAD_DIR` | Path to store uploaded images. | `./data/images` |
-| `NODE_ENV` | Environment mode (`development`/`production`). | `production` |
 
 ## Running with Docker
 
@@ -103,6 +58,54 @@ docker run -d \
   -e PORT=3000 \
   ghcr.io/incari/docker-dash:latest
 ```
+## Environment Variables
+
+You can configure the application using environment variables. Create a `.env` file in the root directory (see `.env.example`).
+
+| Variable | Description | Default |
+| :--- | :--- | :--- |
+| `PORT` | The port the backend server runs on. | `3000` |
+| `DOCKER_SOCKET` | Path to the Docker socket. | `/var/run/docker.sock` |
+| `DB_PATH` | Path to the SQLite database file. | `./data/dashboard.db` |
+| `UPLOAD_DIR` | Path to store uploaded images. | `./data/images` |
+| `NODE_ENV` | Environment mode (`development`/`production`). | `production` |
+
+
+## Running Locally
+
+1.  **Clone the repository:**
+
+    ```bash
+    git clone https://github.com/incari/docker-dash.git
+    cd docker-dash
+    ```
+
+2.  **Install dependencies:**
+
+    Install root dependencies (backend) and frontend dependencies:
+
+    ```bash
+    # Root (Backend)
+    pnpm install
+
+    # Frontend
+    cd frontend
+    pnpm install
+    cd ..
+    ```
+
+## Running Locally
+
+To run the application in development mode (which starts both backend and frontend concurrently):
+
+```bash
+pnpm dev
+```
+
+-   **Frontend**: [http://localhost:5173](http://localhost:5173)
+-   **Backend API**: [http://localhost:3000](http://localhost:3000)
+
+> **Note**: The backend needs access to the Docker socket (`/var/run/docker.sock`) to fetch container information. Ensure your user has permissions or run with necessary privileges if needed.
 
 ### Tailscale Support
 
@@ -213,3 +216,12 @@ Check out the [CHANGELOG.md](CHANGELOG.md) for detailed information about recent
 [Feedback and features requests](https://tally.so/r/aQ2zNE)
 
 Upcoming: New repo with standardized Icons URLS and auto-detect and use the container name and image for the shortcut. 
+
+
+### Roadmap
+
+- More flexible UI card to display more information from the container and shortcut
+- Integration with [Docker Icon Vault](https://incari.github.io/docker-icon-vault/) to auto-detect and use the container icon and description for the shortcut icon (BETA)
+- Add more filters to the management page
+- Group by docker images than run multiple containers from the same image (like docker desktop does)
+- Batch Creation: Efficiently creates multiple shortcuts in one operation

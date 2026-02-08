@@ -87,11 +87,25 @@ export function useDashboardDragDrop({
   }, [isEditMode, unsectionedList]);
 
   // Sync props to local state when unsectionedShortcuts change from parent
-  // BUT only when NOT in edit mode (during edit mode, local state is source of truth)
   useEffect(() => {
     if (!isEditMode) {
+      // Not in edit mode: fully replace the list
       setUnsectionedList(unsectionedShortcuts);
       prevUnsectionedListRef.current = unsectionedShortcuts;
+    } else {
+      // In edit mode: update properties (like is_favorite) without changing order
+      setUnsectionedList((currentList) => {
+        const updated = currentList.map((item) => {
+          const updatedItem = unsectionedShortcuts.find(
+            (s) => s.id === item.id,
+          );
+          if (updatedItem) {
+            return { ...updatedItem };
+          }
+          return item;
+        });
+        return updated;
+      });
     }
   }, [unsectionedShortcuts, isEditMode]);
 
@@ -129,17 +143,7 @@ export function useDashboardDragDrop({
 
   // Ensure the parent ref is properly initialized
   useEffect(() => {
-    console.log(
-      "[SECTIONS DND] sectionsParent.current:",
-      sectionsParent.current,
-    );
-    console.log("[SECTIONS DND] sections:", sections);
-    console.log("[SECTIONS DND] isEditMode:", isEditMode);
     if (sectionsParent.current) {
-      console.log(
-        "[SECTIONS DND] Parent element exists, children:",
-        sectionsParent.current.children,
-      );
       // Force a re-render to ensure FormKit picks up the DOM element
       setSectionsList([...sections]);
     }
@@ -147,28 +151,18 @@ export function useDashboardDragDrop({
 
   // Sync props to FormKit's internal state when sections change from parent
   useEffect(() => {
-    console.log("[SECTIONS DND] Syncing sections from props:", sections);
     setSectionsList(sections);
     prevSectionsListRef.current = sections;
   }, [sections, setSectionsList]);
 
   // Detect changes in FormKit's sections list and save them
   useEffect(() => {
-    console.log("[SECTIONS DND] sectionsList changed:", sectionsList);
-    console.log(
-      "[SECTIONS DND] prevSectionsListRef:",
-      prevSectionsListRef.current,
-    );
-
     // Check if there are any differences
     const hasChanges =
       sectionsList.length !== prevSectionsListRef.current.length ||
       sectionsList.some((s, i) => prevSectionsListRef.current[i]?.id !== s.id);
 
-    console.log("[SECTIONS DND] hasChanges:", hasChanges);
-
     if (hasChanges && isEditMode) {
-      console.log("[SECTIONS DND] Saving new order:", sectionsList);
       // Save the new order immediately
       handleReorderSections(sectionsList);
       prevSectionsListRef.current = [...sectionsList];

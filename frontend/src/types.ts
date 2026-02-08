@@ -104,8 +104,10 @@ export interface SectionDropZoneProps {
 
 export interface ErrorModalProps {
   isOpen: boolean;
+  title?: string;
   message: string;
   onClose: () => void;
+  type?: "error" | "success";
 }
 
 export interface ConfirmModalProps {
@@ -114,6 +116,7 @@ export interface ConfirmModalProps {
   message: string;
   onConfirm: () => void;
   onCancel: () => void;
+  type?: "danger" | "warning";
 }
 
 export interface SectionModalProps {

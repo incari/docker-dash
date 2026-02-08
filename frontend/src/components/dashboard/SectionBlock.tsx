@@ -77,13 +77,25 @@ export function SectionBlock({
   }, [isEditMode, list]); // Re-initialize when edit mode or list changes
 
   // Sync props to local state when shortcuts change from parent
-  // BUT only when NOT in edit mode (during edit mode, local state is source of truth)
   useEffect(() => {
     if (!isEditMode) {
+      // Not in edit mode: fully replace the list
       setList(shortcuts);
       prevListRef.current = shortcuts;
+    } else {
+      // In edit mode: update properties (like is_favorite) without changing order
+      setList((currentList) => {
+        const updated = currentList.map((item) => {
+          const updatedItem = shortcuts.find((s) => s.id === item.id);
+          if (updatedItem) {
+            return { ...updatedItem };
+          }
+          return item;
+        });
+        return updated;
+      });
     }
-  }, [shortcuts, isEditMode]);
+  }, [shortcuts, isEditMode, section.id]);
 
   // Detect changes in the list and report them
   useEffect(() => {

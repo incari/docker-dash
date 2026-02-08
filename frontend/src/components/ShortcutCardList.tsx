@@ -189,10 +189,10 @@ export const ShortcutCardList: React.FC<ExtendedShortcutCardProps> = ({
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      onStop();
+                      onStop?.();
                     }}
                     className="p-1.5 sm:p-2 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white transition-all"
-                    title="Stop"
+                    title={t("containers.stop")}
                   >
                     <Square
                       className="w-3.5 h-3.5 sm:w-4 sm:h-4"
@@ -202,10 +202,10 @@ export const ShortcutCardList: React.FC<ExtendedShortcutCardProps> = ({
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      onRestart();
+                      onRestart?.();
                     }}
                     className="p-1.5 sm:p-2 rounded-lg bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500 hover:text-white transition-all"
-                    title="Restart"
+                    title={t("containers.restart")}
                   >
                     <RefreshCw className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                   </button>
@@ -214,10 +214,10 @@ export const ShortcutCardList: React.FC<ExtendedShortcutCardProps> = ({
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    onStart();
+                    onStart?.();
                   }}
                   className="p-1.5 sm:p-2 rounded-lg bg-green-500/10 text-green-400 hover:bg-green-500 hover:text-white transition-all"
-                  title="Start"
+                  title={t("containers.start")}
                 >
                   <Play
                     className="w-3.5 h-3.5 sm:w-4 sm:h-4"

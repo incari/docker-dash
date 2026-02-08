@@ -12,7 +12,8 @@ RUN pnpm build
 # Stage 2: Build backend with native modules (better-sqlite3)
 FROM node:22-alpine AS backend-builder
 # Install build tools (only needed in this stage, not in final image)
-RUN apk add --no-cache build-base python3
+# Update package index and install with retry logic
+RUN apk update && apk add --no-cache build-base python3
 RUN corepack enable && corepack prepare pnpm@latest --activate
 WORKDIR /app
 COPY package*.json ./

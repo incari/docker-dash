@@ -1,5 +1,10 @@
 import { useState, useCallback } from "react";
-import { shortcutsApi, sectionsApi, containersApi, tailscaleApi } from "../services/api";
+import {
+  shortcutsApi,
+  sectionsApi,
+  containersApi,
+  tailscaleApi,
+} from "../services/api";
 import type { DockerContainer, Shortcut, Section } from "../types";
 import type { TailscaleInfoExtended } from "../appTypes";
 
@@ -28,7 +33,8 @@ export function useDashboardData(): DashboardData & DashboardDataActions {
   const [shortcuts, setShortcuts] = useState<Shortcut[]>([]);
   const [sections, setSections] = useState<Section[]>([]);
   const [containers, setContainers] = useState<DockerContainer[]>([]);
-  const [tailscaleInfo, setTailscaleInfo] = useState<TailscaleInfoExtended>(DEFAULT_TAILSCALE);
+  const [tailscaleInfo, setTailscaleInfo] =
+    useState<TailscaleInfoExtended>(DEFAULT_TAILSCALE);
   const [loading, setLoading] = useState(true);
 
   const fetchData = useCallback(async (showLoading = true) => {
@@ -41,11 +47,33 @@ export function useDashboardData(): DashboardData & DashboardDataActions {
         containersApi.getAll(),
         sectionsApi.getAll(),
       ]);
-      setShortcuts(shortcutsData);
-      setContainers(containersData);
-      setSections(sectionsData);
+
+      // Ensure data is in the correct format and create new array/object references
+      // to trigger React re-renders (deep copy to ensure all objects are new)
+      setShortcuts(
+        Array.isArray(shortcutsData)
+          ? shortcutsData.map((s) => ({ ...s }))
+          : [],
+      );
+      setContainers(
+        Array.isArray(containersData)
+          ? containersData.map((c) => ({ ...c }))
+          : [],
+      );
+      setSections(
+        Array.isArray(sectionsData) ? sectionsData.map((s) => ({ ...s })) : [],
+      );
+
+      // Debug logging
+      if (!Array.isArray(containersData)) {
+        console.error("Containers data is not an array:", containersData);
+      }
     } catch (err) {
       console.error("Failed to fetch data", err);
+      // Reset to empty arrays on error
+      setShortcuts([]);
+      setContainers([]);
+      setSections([]);
     } finally {
       if (showLoading) {
         setLoading(false);
@@ -74,4 +102,3 @@ export function useDashboardData(): DashboardData & DashboardDataActions {
     setSections,
   };
 }
-

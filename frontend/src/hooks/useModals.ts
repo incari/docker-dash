@@ -1,6 +1,10 @@
 import { useState, useCallback } from "react";
 import type { Section, Shortcut } from "../types";
-import type { ConfirmModalState, ErrorModalState, SectionModalState } from "../appTypes";
+import type {
+  ConfirmModalState,
+  ErrorModalState,
+  SectionModalState,
+} from "../appTypes";
 
 interface ShortcutModalState {
   isOpen: boolean;
@@ -16,11 +20,20 @@ interface ModalsState {
 
 interface ModalsActions {
   // Confirm modal
-  showConfirm: (title: string, message: string, onConfirm: () => void, type?: "danger" | "warning") => void;
+  showConfirm: (
+    title: string,
+    message: string,
+    onConfirm: () => void,
+    type?: "danger" | "warning",
+  ) => void;
   closeConfirm: () => void;
   confirmAndClose: () => void;
   // Error modal
-  showError: (title: string, message: string) => void;
+  showError: (
+    title: string,
+    message: string,
+    type?: "error" | "success",
+  ) => void;
   closeError: () => void;
   // Section modal
   openSectionModal: (section?: Section | null) => void;
@@ -42,6 +55,7 @@ const INITIAL_ERROR_MODAL: ErrorModalState = {
   isOpen: false,
   title: "",
   message: "",
+  type: "error",
 };
 
 const INITIAL_SECTION_MODAL: SectionModalState = {
@@ -55,23 +69,33 @@ const INITIAL_SHORTCUT_MODAL: ShortcutModalState = {
 };
 
 export function useModals(): ModalsState & ModalsActions {
-  const [confirmModal, setConfirmModal] = useState<ConfirmModalState>(INITIAL_CONFIRM_MODAL);
-  const [errorModal, setErrorModal] = useState<ErrorModalState>(INITIAL_ERROR_MODAL);
-  const [sectionModal, setSectionModal] = useState<SectionModalState>(INITIAL_SECTION_MODAL);
-  const [shortcutModal, setShortcutModal] = useState<ShortcutModalState>(INITIAL_SHORTCUT_MODAL);
+  const [confirmModal, setConfirmModal] = useState<ConfirmModalState>(
+    INITIAL_CONFIRM_MODAL,
+  );
+  const [errorModal, setErrorModal] =
+    useState<ErrorModalState>(INITIAL_ERROR_MODAL);
+  const [sectionModal, setSectionModal] = useState<SectionModalState>(
+    INITIAL_SECTION_MODAL,
+  );
+  const [shortcutModal, setShortcutModal] = useState<ShortcutModalState>(
+    INITIAL_SHORTCUT_MODAL,
+  );
 
   // Confirm modal actions
-  const showConfirm = useCallback((
-    title: string,
-    message: string,
-    onConfirm: () => void,
-    type: "danger" | "warning" = "danger"
-  ) => {
-    setConfirmModal({ isOpen: true, title, message, onConfirm, type });
-  }, []);
+  const showConfirm = useCallback(
+    (
+      title: string,
+      message: string,
+      onConfirm: () => void,
+      type: "danger" | "warning" = "danger",
+    ) => {
+      setConfirmModal({ isOpen: true, title, message, onConfirm, type });
+    },
+    [],
+  );
 
   const closeConfirm = useCallback(() => {
-    setConfirmModal(prev => ({ ...prev, isOpen: false }));
+    setConfirmModal((prev) => ({ ...prev, isOpen: false }));
   }, []);
 
   const confirmAndClose = useCallback(() => {
@@ -80,12 +104,15 @@ export function useModals(): ModalsState & ModalsActions {
   }, [confirmModal.onConfirm, closeConfirm]);
 
   // Error modal actions
-  const showError = useCallback((title: string, message: string) => {
-    setErrorModal({ isOpen: true, title, message });
-  }, []);
+  const showError = useCallback(
+    (title: string, message: string, type: "error" | "success" = "error") => {
+      setErrorModal({ isOpen: true, title, message, type });
+    },
+    [],
+  );
 
   const closeError = useCallback(() => {
-    setErrorModal(prev => ({ ...prev, isOpen: false }));
+    setErrorModal((prev) => ({ ...prev, isOpen: false }));
   }, []);
 
   // Section modal actions
@@ -124,4 +151,3 @@ export function useModals(): ModalsState & ModalsActions {
     closeShortcutModal,
   };
 }
-

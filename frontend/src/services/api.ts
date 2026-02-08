@@ -32,10 +32,11 @@ export const shortcutsApi = {
     await axios.delete(API_ENDPOINTS.SHORTCUT_BY_ID(id));
   },
 
-  toggleFavorite: async (id: number, isFavorite: boolean): Promise<void> => {
-    await axios.post(API_ENDPOINTS.SHORTCUT_FAVORITE(id), {
+  toggleFavorite: async (id: number, isFavorite: boolean): Promise<any> => {
+    const response = await axios.post(API_ENDPOINTS.SHORTCUT_FAVORITE(id), {
       is_favorite: isFavorite,
     });
+    return response.data;
   },
 
   updateSection: async (
@@ -53,6 +54,47 @@ export const shortcutsApi = {
     shortcuts: Array<{ id: number; position: number }>,
   ): Promise<void> => {
     await axios.put(API_ENDPOINTS.SHORTCUTS_REORDER, { shortcuts });
+  },
+
+  migrateIcons: async (
+    iconIds: number[],
+    descriptionIds: number[],
+  ): Promise<{
+    success: boolean;
+    updatedIcons: number;
+    updatedDescriptions: number;
+    total: number;
+    message: string;
+  }> => {
+    const response = await axios.post(`${API_BASE}/shortcuts/migrate-icons`, {
+      iconIds,
+      descriptionIds,
+    });
+    return response.data;
+  },
+
+  autoSync: async (): Promise<{
+    success: boolean;
+    created: number;
+    total: number;
+    message: string;
+  }> => {
+    const response = await axios.post(`${API_BASE}/shortcuts/auto-sync`);
+    return response.data;
+  },
+
+  checkMigration: async (): Promise<{
+    needsMigration: boolean;
+    count: number;
+    shortcuts: Array<{
+      id: number;
+      name: string;
+      description: string;
+      icon: string;
+    }>;
+  }> => {
+    const response = await axios.get(`${API_BASE}/shortcuts/check-migration`);
+    return response.data;
   },
 };
 

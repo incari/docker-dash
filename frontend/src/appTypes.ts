@@ -12,6 +12,7 @@ export interface ErrorModalState {
   isOpen: boolean;
   title: string;
   message: string;
+  type: "error" | "success";
 }
 
 export interface SectionModalState {

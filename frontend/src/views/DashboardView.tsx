@@ -102,9 +102,10 @@ export function DashboardView({
    * Render a single shortcut card with all necessary props
    */
   const renderShortcutCard = (shortcut: Shortcut) => {
-    const container = shortcut.container_id
-      ? containers.find((c) => c.id === shortcut.container_id)
-      : null;
+    const container =
+      shortcut.container_id && Array.isArray(containers)
+        ? containers.find((c) => c.id === shortcut.container_id)
+        : null;
 
     return (
       <CardComponent

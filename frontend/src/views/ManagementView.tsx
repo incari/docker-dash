@@ -26,7 +26,9 @@ interface ManagementViewProps {
   handleDelete: (id: number) => void;
   handleStart: (id: string) => void;
   handleStop: (id: string) => void;
+  handleRestart?: (id: string) => void;
   handleQuickAdd: (container: DockerContainer) => void;
+  handleQuickAddAsFavorite: (container: DockerContainer) => void;
   handleToggleFavorite: (id: number, currentStatus: boolean | number) => void;
   viewMode: ViewMode;
   mobileColumns: MobileColumns;
@@ -84,7 +86,9 @@ export function ManagementView({
   handleDelete,
   handleStart,
   handleStop,
+  handleRestart,
   handleQuickAdd,
+  handleQuickAddAsFavorite,
   handleToggleFavorite,
   viewMode,
   mobileColumns,
@@ -238,6 +242,11 @@ export function ManagementView({
                   }
                   onStart={() => handleStart(container.id)}
                   onStop={() => handleStop(container.id)}
+                  onRestart={
+                    handleRestart
+                      ? () => handleRestart(container.id)
+                      : undefined
+                  }
                   onToggleFavorite={
                     existingShortcut
                       ? () =>
@@ -245,7 +254,7 @@ export function ManagementView({
                             existingShortcut.id,
                             existingShortcut.is_favorite,
                           )
-                      : () => {} // No-op for containers without shortcuts
+                      : () => handleQuickAddAsFavorite(container)
                   }
                   alwaysShowStar={true}
                 />
