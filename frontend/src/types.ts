@@ -18,13 +18,14 @@ export interface DockerContainer {
 // Shortcut Types
 export interface Shortcut {
   id: number;
-  name: string;
+  display_name: string;
   description: string | null;
   url: string | null;
   port: number | null;
   icon: string | null;
   icon_type: "lucide" | "image" | "upload" | null;
   container_id: string | null;
+  container_name: string | null;
   position: number;
   is_favorite: boolean;
   section_id: number | null;
@@ -53,13 +54,14 @@ export interface ModalState {
 
 // Form Data Types
 export interface ShortcutFormData {
-  name: string;
+  display_name: string;
   description: string;
   url: string;
   port: string;
   icon: string;
   icon_type: "lucide" | "image" | "upload";
   container_id: string;
+  container_name: string;
   section_id: string;
 }
 

@@ -47,15 +47,25 @@ export function useShortcutActions(
     [onRefresh, showDeleteConfirm],
   );
 
+  // Helper to get container base name (without instance number suffix)
+  // e.g., "jellyfin-1" → "jellyfin", "supabase-spinmania-vector-1" → "supabase-spinmania-vector"
+  const getContainerBaseName = (name: string): string => {
+    if (!name) return name;
+    return name.replace(/-\d+$/, "").toLowerCase();
+  };
+
   const handleQuickAdd = useCallback(
     async (container: DockerContainer) => {
       const ports = container.ports.map((p) => p.public).filter(Boolean);
       const port = ports[0] || "";
 
+      // Use container base name for stable matching (removes instance number suffix)
+      const containerBaseName = getContainerBaseName(container.name);
+
       const formData = new FormData();
-      formData.append("name", container.name);
+      formData.append("display_name", container.name);
       if (port) formData.append("port", String(port));
-      formData.append("container_id", container.id);
+      formData.append("container_name", containerBaseName); // Use container_name for stable matching
       // Auto-select icon from docker-icon-vault based on container name
       const icon = getContainerIcon(container.name, "Server");
       formData.append("icon", icon);
@@ -82,10 +92,13 @@ export function useShortcutActions(
       const ports = container.ports.map((p) => p.public).filter(Boolean);
       const port = ports[0] || "";
 
+      // Use container base name for stable matching (removes instance number suffix)
+      const containerBaseName = getContainerBaseName(container.name);
+
       const formData = new FormData();
-      formData.append("name", container.name);
+      formData.append("display_name", container.name);
       if (port) formData.append("port", String(port));
-      formData.append("container_id", container.id);
+      formData.append("container_name", containerBaseName); // Use container_name for stable matching
       // Auto-select icon from docker-icon-vault based on container name
       const icon = getContainerIcon(container.name, "Server");
       formData.append("icon", icon);

@@ -1,5 +1,5 @@
 import React from "react";
-import { Link, Dock } from "lucide-react";
+import { LinkIcon, Dock } from "../constants/icons";
 import { DynamicIcon } from "../components/DynamicIcon";
 import type { Shortcut, Container } from "../types";
 
@@ -21,7 +21,7 @@ export const getLinkIcon = (
   };
 
   if (shortcut.url) {
-    return <Link className={`${sizeClasses[size]} shrink-0`} />;
+    return <LinkIcon className={`${sizeClasses[size]} shrink-0`} />;
   } else if (shortcut.port) {
     return <Dock className={`${sizeClasses[size]} shrink-0`} />;
   }
@@ -42,7 +42,7 @@ export const renderShortcutIcon = (shortcut: Shortcut) => {
     return (
       <img
         src={src}
-        alt={shortcut.name}
+        alt={shortcut.display_name}
         className="w-full h-full object-contain"
       />
     );

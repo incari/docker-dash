@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Plus, ArrowLeft, Link as LinkIcon, Server } from "lucide-react";
+import { Plus, ArrowLeft, LinkIcon, Server } from "../constants/icons";
 import { useTranslation } from "react-i18next";
 import {
   ShortcutCard,
@@ -94,7 +94,11 @@ export function ManagementView({
   mobileColumns,
 }: ManagementViewProps) {
   const { t } = useTranslation();
-  const customShortcuts = shortcuts.filter((s) => !s.container_id);
+  // Custom shortcuts are those NOT linked to any container
+  // A shortcut is linked to a container if it has container_name (primary) or container_id (legacy)
+  const customShortcuts = shortcuts.filter(
+    (s) => !s.container_name && !s.container_id,
+  );
   const CardComponent = getCardComponentForViewMode(viewMode);
   const gridClasses = getGridLayoutClasses(viewMode, mobileColumns);
 
@@ -205,15 +209,27 @@ export function ManagementView({
         ) : (
           <div className={gridClasses}>
             {containers.map((container) => {
+              // Get container base name (without instance number suffix)
+              // e.g., "jellyfin-1" → "jellyfin", "postgres-adminer-1" → "postgres-adminer"
+              const containerBaseName = container.name
+                .replace(/-\d+$/, "")
+                .toLowerCase();
+
+              // Match by container_name (base name) for stable matching
+              // This handles container recreation scenarios
               const existingShortcut = shortcuts.find(
-                (s) => s.container_id === container.id,
+                (s) =>
+                  s.container_name?.toLowerCase() === containerBaseName ||
+                  s.container_name?.toLowerCase() ===
+                    container.name.toLowerCase(),
               );
 
               // If no shortcut exists, create a temporary one for display
               const displayShortcut = existingShortcut || {
                 id: -1, // Temporary ID
-                name: container.name,
+                display_name: container.name,
                 container_id: container.id,
+                container_name: containerBaseName,
                 port: null,
                 url: null,
                 icon: null,

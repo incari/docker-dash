@@ -102,9 +102,17 @@ export function DashboardView({
    * Render a single shortcut card with all necessary props
    */
   const renderShortcutCard = (shortcut: Shortcut) => {
+    // Match container by container_name (base name) for stable matching
+    // This handles container recreation scenarios where container_id changes
     const container =
-      shortcut.container_id && Array.isArray(containers)
-        ? containers.find((c) => c.id === shortcut.container_id)
+      shortcut.container_name && Array.isArray(containers)
+        ? containers.find((c) => {
+            const containerBaseName = c.name.replace(/-\d+$/, "").toLowerCase();
+            return (
+              containerBaseName === shortcut.container_name?.toLowerCase() ||
+              c.name.toLowerCase() === shortcut.container_name?.toLowerCase()
+            );
+          })
         : null;
 
     return (
@@ -114,9 +122,9 @@ export function DashboardView({
         tailscaleIP={tailscaleInfo.ip}
         onEdit={() => openEditModal(shortcut)}
         onDelete={() => handleDelete(shortcut.id)}
-        onStart={() => handleStart(shortcut.container_id!)}
-        onStop={() => handleStop(shortcut.container_id!)}
-        onRestart={() => handleRestart(shortcut.container_id!)}
+        onStart={() => container && handleStart(container.id)}
+        onStop={() => container && handleStop(container.id)}
+        onRestart={() => container && handleRestart(container.id)}
         onToggleFavorite={() =>
           handleToggleFavorite(shortcut.id, shortcut.is_favorite)
         }

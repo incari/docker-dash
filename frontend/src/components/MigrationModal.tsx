@@ -1,22 +1,22 @@
 import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { RefreshCw, X, CheckSquare, Square } from "lucide-react";
+import { RefreshCw, X, CheckSquare, Square } from "../constants/icons";
 import { useTranslation } from "react-i18next";
 
 interface MigrationModalProps {
   isOpen: boolean;
   shortcuts: Array<{
     id: number;
-    name: string;
+    display_name: string;
     description: string;
     icon: string;
   }>;
-  onConfirm: (selectedIcons: number[], selectedDescriptions: number[]) => void;
+  onConfirm: (selectedIcons: number[]) => void;
   onCancel: () => void;
 }
 
 /**
- * Migration modal component with separate checkbox selection for icons and descriptions
+ * Migration modal component for icon migration
  */
 export const MigrationModal: React.FC<MigrationModalProps> = ({
   isOpen,
@@ -26,33 +26,17 @@ export const MigrationModal: React.FC<MigrationModalProps> = ({
 }) => {
   const { t } = useTranslation();
   const [selectedIcons, setSelectedIcons] = useState<Set<number>>(new Set());
-  const [selectedDescriptions, setSelectedDescriptions] = useState<Set<number>>(
-    new Set(),
-  );
 
-  // Initialize with all shortcuts selected for both icons and descriptions
+  // Initialize with all shortcuts selected for icons
   useEffect(() => {
     if (isOpen) {
       const allIds = new Set(shortcuts.map((s) => s.id));
       setSelectedIcons(allIds);
-      setSelectedDescriptions(allIds);
     }
   }, [isOpen, shortcuts]);
 
   const toggleIcon = (id: number) => {
     setSelectedIcons((prev) => {
-      const newSet = new Set(prev);
-      if (newSet.has(id)) {
-        newSet.delete(id);
-      } else {
-        newSet.add(id);
-      }
-      return newSet;
-    });
-  };
-
-  const toggleDescription = (id: number) => {
-    setSelectedDescriptions((prev) => {
       const newSet = new Set(prev);
       if (newSet.has(id)) {
         newSet.delete(id);
@@ -71,16 +55,8 @@ export const MigrationModal: React.FC<MigrationModalProps> = ({
     }
   };
 
-  const toggleAllDescriptions = () => {
-    if (selectedDescriptions.size === shortcuts.length) {
-      setSelectedDescriptions(new Set());
-    } else {
-      setSelectedDescriptions(new Set(shortcuts.map((s) => s.id)));
-    }
-  };
-
   const handleConfirm = () => {
-    onConfirm(Array.from(selectedIcons), Array.from(selectedDescriptions));
+    onConfirm(Array.from(selectedIcons));
   };
 
   // Add ESC key handler
@@ -103,10 +79,7 @@ export const MigrationModal: React.FC<MigrationModalProps> = ({
   if (!isOpen) return null;
 
   const allIconsSelected = selectedIcons.size === shortcuts.length;
-  const allDescriptionsSelected =
-    selectedDescriptions.size === shortcuts.length;
-  const noneSelected =
-    selectedIcons.size === 0 && selectedDescriptions.size === 0;
+  const noneSelected = selectedIcons.size === 0;
 
   return (
     <div className="fixed inset-0 z-[300] flex items-center justify-center p-4">
@@ -170,21 +143,6 @@ export const MigrationModal: React.FC<MigrationModalProps> = ({
                     </span>
                   </button>
                 </th>
-                <th className="p-3 text-center">
-                  <button
-                    onClick={toggleAllDescriptions}
-                    className="flex flex-col items-center gap-1 text-slate-300 hover:text-white transition-colors mx-auto"
-                  >
-                    {allDescriptionsSelected ? (
-                      <CheckSquare className="w-5 h-5 text-blue-400" />
-                    ) : (
-                      <Square className="w-5 h-5" />
-                    )}
-                    <span className="text-xs font-semibold">
-                      {t("modals.migration.description")}
-                    </span>
-                  </button>
-                </th>
               </tr>
             </thead>
             <tbody>
@@ -193,25 +151,15 @@ export const MigrationModal: React.FC<MigrationModalProps> = ({
                   key={shortcut.id}
                   className="border-t border-slate-700 hover:bg-slate-800/30 transition-colors"
                 >
-                  <td className="p-3 text-slate-200">{shortcut.name}</td>
+                  <td className="p-3 text-slate-200">
+                    {shortcut.display_name}
+                  </td>
                   <td className="p-3 text-center">
                     <button
                       onClick={() => toggleIcon(shortcut.id)}
                       className="mx-auto block"
                     >
                       {selectedIcons.has(shortcut.id) ? (
-                        <CheckSquare className="w-5 h-5 text-blue-400" />
-                      ) : (
-                        <Square className="w-5 h-5 text-slate-500" />
-                      )}
-                    </button>
-                  </td>
-                  <td className="p-3 text-center">
-                    <button
-                      onClick={() => toggleDescription(shortcut.id)}
-                      className="mx-auto block"
-                    >
-                      {selectedDescriptions.has(shortcut.id) ? (
                         <CheckSquare className="w-5 h-5 text-blue-400" />
                       ) : (
                         <Square className="w-5 h-5 text-slate-500" />
@@ -228,10 +176,6 @@ export const MigrationModal: React.FC<MigrationModalProps> = ({
           <p className="text-sm text-slate-400">
             {t("modals.migration.iconCount")
               .replace("{{selected}}", selectedIcons.size.toString())
-              .replace("{{total}}", shortcuts.length.toString())}{" "}
-            •{" "}
-            {t("modals.migration.descriptionCount")
-              .replace("{{selected}}", selectedDescriptions.size.toString())
               .replace("{{total}}", shortcuts.length.toString())}
           </p>
         </div>

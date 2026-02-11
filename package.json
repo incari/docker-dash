@@ -3,10 +3,12 @@
   "version": "0.2.0",
   "description": "Docker Dashboard for managing containers and shortcuts",
   "type": "module",
-  "main": "src/server.js",
+  "main": "dist/server.js",
   "scripts": {
-    "start": "node src/server.js",
-    "dev:backend": "node --watch src/server.js",
+    "build:backend": "tsc -p src/tsconfig.json",
+    "start": "node dist/server.js",
+    "dev:backend": "tsx watch src/server.ts",
+    "type-check": "tsc -p src/tsconfig.json --noEmit",
     "dev:frontend": "pnpm --dir frontend dev",
     "dev": "concurrently \"pnpm dev:backend\" \"pnpm dev:frontend\"",
     "docker:build": "docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/incari/docker-dash:latest -t ghcr.io/incari/docker-dashboard:latest .",
@@ -29,6 +31,14 @@
     "node": ">=18.0.0"
   },
   "devDependencies": {
-    "concurrently": "^9.2.1"
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/cors": "^2.8.19",
+    "@types/dockerode": "^4.0.1",
+    "@types/express": "^5.0.6",
+    "@types/multer": "^2.0.0",
+    "@types/node": "^25.2.3",
+    "concurrently": "^9.2.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
   }
 }

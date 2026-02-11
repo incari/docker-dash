@@ -8,7 +8,7 @@ import {
   Square,
   RefreshCw,
   MoreVertical,
-} from "lucide-react";
+} from "../constants/icons";
 import { useTranslation } from "react-i18next";
 import type { ShortcutCardProps } from "../types";
 import {
@@ -130,7 +130,7 @@ export const ShortcutCardIcon: React.FC<ExtendedShortcutCardProps> = ({
           className="font-bold text-[10px] truncate flex-1"
           style={{ color: "var(--color-background-contrast)" }}
         >
-          {shortcut.name}
+          {shortcut.display_name}
         </h3>
 
         {/* Star and Menu button */}

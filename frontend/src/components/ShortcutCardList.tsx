@@ -7,7 +7,7 @@ import {
   RefreshCw,
   Star,
   GripVertical,
-} from "lucide-react";
+} from "../constants/icons";
 import { useTranslation } from "react-i18next";
 import type { ShortcutCardProps } from "../types";
 import {
@@ -129,7 +129,7 @@ export const ShortcutCardList: React.FC<ExtendedShortcutCardProps> = ({
               className="font-bold text-sm sm:text-base leading-tight truncate"
               style={{ color: "var(--color-background-contrast)" }}
             >
-              {shortcut.name}
+              {shortcut.display_name}
             </h3>
           </div>
           <div className="flex items-center gap-2 mt-1">

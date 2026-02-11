@@ -1,4 +1,12 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  useRef,
+  lazy,
+  Suspense,
+} from "react";
 import { AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
 
@@ -7,8 +15,14 @@ import { Footer } from "./components/Footer";
 import { ConfirmModal } from "./components/ConfirmModal";
 import { ErrorModal } from "./components/ErrorModal";
 import { MigrationModal } from "./components/MigrationModal";
-import { ShortcutModal } from "./components/ShortcutModal";
 import { SectionModal } from "./components/SectionModal";
+
+// Lazy-loaded components for better initial bundle size
+const ShortcutModal = lazy(() =>
+  import("./components/ShortcutModal").then((module) => ({
+    default: module.ShortcutModal,
+  })),
+);
 import { DashboardView } from "./views/DashboardView";
 import { ManagementView } from "./views/ManagementView";
 import { useTheme } from "./hooks/useTheme";
@@ -31,7 +45,12 @@ function App() {
   // Migration modal state
   const [migrationModalOpen, setMigrationModalOpen] = useState(false);
   const [migrationShortcuts, setMigrationShortcuts] = useState<
-    Array<{ id: number; name: string; description: string; icon: string }>
+    Array<{
+      id: number;
+      display_name: string;
+      description: string;
+      icon: string;
+    }>
   >([]);
 
   // ==================== Custom Hooks ====================
@@ -109,8 +128,8 @@ function App() {
       const containerShortcuts = shortcuts.filter((s) => s.container_id);
       const allIds = containerShortcuts.map((s) => s.id);
 
-      // Migrate all shortcuts (both icons and descriptions)
-      const migrationResult = await shortcutsApi.migrateIcons(allIds, allIds);
+      // Migrate all shortcuts (icons only)
+      const migrationResult = await shortcutsApi.migrateIcons(allIds);
 
       // Refresh data to show updated icons
       await fetchData();
@@ -135,7 +154,7 @@ function App() {
     (
       shortcuts: Array<{
         id: number;
-        name: string;
+        display_name: string;
         description: string;
         icon: string;
       }>,
@@ -155,16 +174,13 @@ function App() {
 
   // Handle migration confirmation with selected shortcuts
   const handleMigrationConfirm = useCallback(
-    async (iconIds: number[], descriptionIds: number[]) => {
+    async (iconIds: number[]) => {
       setMigrationModalOpen(false);
       // Mark migration as dismissed so it doesn't auto-show again
       setMigrationDismissed(true);
 
       try {
-        const migrationResult = await shortcutsApi.migrateIcons(
-          iconIds,
-          descriptionIds,
-        );
+        const migrationResult = await shortcutsApi.migrateIcons(iconIds);
 
         // Check if migration was successful
         if (migrationResult.success === false) {
@@ -221,19 +237,22 @@ function App() {
     hasRunStartupTasks.current = true;
 
     // Run auto-sync and check for migration on app startup
+    // Optimized: Run independent operations in parallel for faster startup
     const runStartupTasks = async () => {
       try {
-        // Step 1: Auto-sync containers to shortcuts
-        console.log("Running auto-sync...");
-        const syncResult = await shortcutsApi.autoSync();
+        // Run auto-sync and container fetch in parallel (they're independent)
+        console.log("Running startup tasks in parallel...");
+        const [syncResult, containersData] = await Promise.all([
+          shortcutsApi.autoSync(),
+          containersApi.getAll(),
+        ]);
         console.log("Auto-sync completed:", syncResult);
 
-        // Step 2: Refresh data to show all shortcuts
+        // Refresh data to show all shortcuts (depends on autoSync completing)
         await fetchData();
 
-        // Step 3: Check if migration is needed (only if Docker is running)
+        // Check if migration is needed (only if Docker is running)
         // If Docker is not running, containers will be empty, so skip migration check
-        const containersData = await containersApi.getAll();
         const isDockerRunning =
           Array.isArray(containersData) && containersData.length > 0;
 
@@ -565,15 +584,17 @@ function App() {
 
       <AnimatePresence>
         {modals.shortcutModal.isOpen && (
-          <ShortcutModal
-            isOpen={modals.shortcutModal.isOpen}
-            shortcut={modals.shortcutModal.shortcut}
-            containers={containers}
-            tailscaleInfo={tailscaleInfo}
-            onSave={fetchData}
-            onClose={modals.closeShortcutModal}
-            onError={modals.showError}
-          />
+          <Suspense fallback={null}>
+            <ShortcutModal
+              isOpen={modals.shortcutModal.isOpen}
+              shortcut={modals.shortcutModal.shortcut}
+              containers={containers}
+              tailscaleInfo={tailscaleInfo}
+              onSave={fetchData}
+              onClose={modals.closeShortcutModal}
+              onError={modals.showError}
+            />
+          </Suspense>
         )}
       </AnimatePresence>
 

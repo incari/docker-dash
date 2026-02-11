@@ -5,7 +5,7 @@ import {
   Zap,
   MessageSquare,
   RefreshCw,
-} from "lucide-react";
+} from "../constants/icons";
 import { useTranslation } from "react-i18next";
 import { LanguageSelector } from "./LanguageSelector";
 import { ThemeSelector } from "./ThemeSelector";
@@ -19,7 +19,7 @@ interface FooterProps {
   onShowMigrationModal: (
     shortcuts: Array<{
       id: number;
-      name: string;
+      display_name: string;
       description: string;
       icon: string;
     }>,

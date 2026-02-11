@@ -1,4 +1,4 @@
-import { Bookmark } from "lucide-react";
+import { Bookmark } from "../../constants/icons";
 
 interface EmptyDashboardStateProps {
   setView: (view: "dashboard" | "add") => void;
@@ -8,10 +8,7 @@ interface EmptyDashboardStateProps {
 /**
  * Empty state component when no favorites exist
  */
-export function EmptyDashboardState({
-  setView,
-  t,
-}: EmptyDashboardStateProps) {
+export function EmptyDashboardState({ setView, t }: EmptyDashboardStateProps) {
   return (
     <div className="text-center py-20 border-2 border-dashed border-white/5 rounded-3xl bg-white/2">
       <div
@@ -48,4 +45,3 @@ export function EmptyDashboardState({
     </div>
   );
 }
-

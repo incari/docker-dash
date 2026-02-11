@@ -58,17 +58,15 @@ export const shortcutsApi = {
 
   migrateIcons: async (
     iconIds: number[],
-    descriptionIds: number[],
   ): Promise<{
     success: boolean;
-    updatedIcons: number;
-    updatedDescriptions: number;
+    updated: number;
+    skipped: number;
     total: number;
     message: string;
   }> => {
     const response = await axios.post(`${API_BASE}/shortcuts/migrate-icons`, {
       iconIds,
-      descriptionIds,
     });
     return response.data;
   },
@@ -88,7 +86,7 @@ export const shortcutsApi = {
     count: number;
     shortcuts: Array<{
       id: number;
-      name: string;
+      display_name: string;
       description: string;
       icon: string;
     }>;

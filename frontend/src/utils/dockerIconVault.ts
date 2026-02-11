@@ -63,21 +63,47 @@ export function normalizeContainerName(containerName: string): string {
 /**
  * Get the Homarr Dashboard Icons URL for a container name
  * Returns the icon URL based on the normalized container name
- * Checks custom mappings first, then falls back to Homarr Dashboard Icons
+ * Priority: 1) Custom mappings (raw lowercase), 2) Custom mappings (without instance number), 3) Custom mappings (normalized), 4) Homarr Dashboard Icons
  */
 export function getDockerIconVaultUrl(containerName: string): string | null {
+  if (!containerName) {
+    return null;
+  }
+
+  // Step 1: Convert to lowercase and remove leading slash and version tags
+  // This handles: "Docker-Controller-Bot" -> "docker-controller-bot"
+  const rawLowercase =
+    containerName.toLowerCase().replace(/^\//, "").split(":")[0] || "";
+
+  // Step 2: Check custom mappings FIRST with the raw lowercase name (before normalization)
+  // This allows exact matches like "docker-controller-bot" before normalization strips it to "docker"
+  if (rawLowercase && CUSTOM_ICON_MAPPINGS[rawLowercase]) {
+    return CUSTOM_ICON_MAPPINGS[rawLowercase];
+  }
+
+  // Step 3: Remove Docker Compose instance numbers and check custom mappings again
+  // This handles: "docker-controller-bot-1" -> "docker-controller-bot"
+  const withoutInstanceNumber = rawLowercase.replace(/-\d+$/, "");
+  if (
+    withoutInstanceNumber !== rawLowercase &&
+    CUSTOM_ICON_MAPPINGS[withoutInstanceNumber]
+  ) {
+    return CUSTOM_ICON_MAPPINGS[withoutInstanceNumber];
+  }
+
+  // Step 4: Normalize the container name (strips vendor prefixes, instance numbers, etc.)
   const normalized = normalizeContainerName(containerName);
 
   if (!normalized) {
     return null;
   }
 
-  // Check if there's a custom icon mapping for this container
+  // Step 5: Check custom mappings again with the normalized name
   if (CUSTOM_ICON_MAPPINGS[normalized]) {
     return CUSTOM_ICON_MAPPINGS[normalized];
   }
 
-  // Fall back to Homarr Dashboard Icons
+  // Step 6: Fall back to Homarr Dashboard Icons
   return `${HOMARR_ICONS_BASE_URL}/png/${normalized}.png`;
 }
 

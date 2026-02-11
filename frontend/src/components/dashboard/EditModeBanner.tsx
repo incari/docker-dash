@@ -1,4 +1,4 @@
-import { Plus, Edit2 } from "lucide-react";
+import { Plus, Edit2 } from "../../constants/icons";
 
 interface EditModeBannerProps {
   handleCreateSection: () => void;
@@ -45,4 +45,3 @@ export function EditModeBanner({
     </div>
   );
 }
-

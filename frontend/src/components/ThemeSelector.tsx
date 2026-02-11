@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Palette, Check } from "lucide-react";
+import { Palette, Check } from "../constants/icons";
 import { useTranslation } from "react-i18next";
 import { PRESET_THEMES } from "../types/themeTypes";
 import type { ThemeColors } from "../types/themeTypes";
@@ -19,7 +19,9 @@ export const ThemeSelector: React.FC<ThemeSelectorProps> = ({
   const [isOpen, setIsOpen] = useState(false);
   const [showCustom, setShowCustom] = useState(false);
   const [customPrimary, setCustomPrimary] = useState(currentTheme.primary);
-  const [customBackground, setCustomBackground] = useState(currentTheme.background);
+  const [customBackground, setCustomBackground] = useState(
+    currentTheme.background,
+  );
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -32,7 +34,8 @@ export const ThemeSelector: React.FC<ThemeSelectorProps> = ({
 
     if (isOpen) {
       document.addEventListener("mousedown", handleClickOutside);
-      return () => document.removeEventListener("mousedown", handleClickOutside);
+      return () =>
+        document.removeEventListener("mousedown", handleClickOutside);
     }
   }, [isOpen]);
 
@@ -59,7 +62,10 @@ export const ThemeSelector: React.FC<ThemeSelectorProps> = ({
   };
 
   return (
-    <div className="relative" ref={menuRef}>
+    <div
+      className="relative"
+      ref={menuRef}
+    >
       <button
         onClick={() => setIsOpen(!isOpen)}
         className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm font-medium transition-colors px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
@@ -70,13 +76,17 @@ export const ThemeSelector: React.FC<ThemeSelectorProps> = ({
       </button>
 
       {isOpen && (
-        <div className={`absolute right-0 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-[100] min-w-[280px] max-w-[320px] overflow-hidden ${
-          dropdownDirection === "up" ? "bottom-full mb-2" : "top-full mt-2"
-        }`}>
+        <div
+          className={`absolute right-0 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-[100] min-w-[280px] max-w-[320px] overflow-hidden ${
+            dropdownDirection === "up" ? "bottom-full mb-2" : "top-full mt-2"
+          }`}
+        >
           {!showCustom ? (
             <>
               <div className="px-3 py-2 border-b border-slate-700">
-                <h3 className="text-sm font-semibold text-white">{t("theme.chooseTheme")}</h3>
+                <h3 className="text-sm font-semibold text-white">
+                  {t("theme.chooseTheme")}
+                </h3>
               </div>
               <div className="max-h-[400px] overflow-y-auto p-2">
                 {PRESET_THEMES.map((theme) => (
@@ -96,7 +106,9 @@ export const ThemeSelector: React.FC<ThemeSelectorProps> = ({
                           style={{ backgroundColor: theme.colors.background }}
                         />
                       </div>
-                      <span className="text-sm text-slate-200">{theme.name}</span>
+                      <span className="text-sm text-slate-200">
+                        {theme.name}
+                      </span>
                     </div>
                     {isThemeActive(theme.colors) && (
                       <Check className="w-4 h-4 text-green-400" />
@@ -116,7 +128,9 @@ export const ThemeSelector: React.FC<ThemeSelectorProps> = ({
           ) : (
             <>
               <div className="px-3 py-2 border-b border-slate-700">
-                <h3 className="text-sm font-semibold text-white">{t("theme.customTheme")}</h3>
+                <h3 className="text-sm font-semibold text-white">
+                  {t("theme.customTheme")}
+                </h3>
               </div>
               <div className="p-4 space-y-4">
                 <div>
@@ -181,4 +195,3 @@ export const ThemeSelector: React.FC<ThemeSelectorProps> = ({
     </div>
   );
 };
-

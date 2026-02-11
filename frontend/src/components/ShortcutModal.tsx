@@ -6,13 +6,13 @@ import { useTranslation } from "react-i18next";
 import {
   X,
   Bookmark,
-  Link as LinkIcon,
+  LinkIcon,
   Upload,
-  Image as ImageIcon,
+  ImageIcon,
   CheckCircle,
   ChevronDown,
   Trash2,
-} from "lucide-react";
+} from "../constants/icons";
 import type { ShortcutModalProps } from "../types";
 import { DynamicIcon } from "./DynamicIcon";
 import { AVAILABLE_ICONS } from "../constants/icons";
@@ -27,7 +27,7 @@ import { uploadsApi, type UploadedImage } from "../services/api";
 import { getContainerIcon } from "../utils/dockerIconVault";
 
 interface FormData {
-  name: string;
+  display_name: string;
   description: string;
   port: string;
   url: string;
@@ -51,7 +51,7 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
 }) => {
   const { t } = useTranslation();
   const [formData, setFormData] = useState<FormData>({
-    name: "",
+    display_name: "",
     description: "",
     port: "",
     url: "",
@@ -69,7 +69,7 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
   useEffect(() => {
     if (shortcut) {
       setFormData({
-        name: shortcut.name || "",
+        display_name: shortcut.display_name || "",
         description: shortcut.description || "",
         port: shortcut.port?.toString() || "",
         url: shortcut.url || "",
@@ -87,7 +87,7 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
       setHasManuallySelectedIcon(true);
     } else {
       setFormData({
-        name: "",
+        display_name: "",
         description: "",
         port: "",
         url: "",
@@ -205,7 +205,7 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
       }
 
       const data = new window.FormData();
-      data.append("name", formData.name.trim());
+      data.append("display_name", formData.display_name.trim());
       const cleanedDesc = cleanDescription(formData.description);
       if (cleanedDesc) {
         data.append("description", cleanedDesc);
@@ -296,7 +296,7 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
                   setFormData((prev) => ({
                     ...prev,
                     container_id: e.target.value,
-                    name: c ? c.name : prev.name,
+                    display_name: c ? c.name : prev.display_name,
                     port: c ? c.ports[0]?.public?.toString() || "" : prev.port,
                     // Auto-select icon from docker-icon-vault based on container name
                     icon: newIcon,
@@ -338,9 +338,9 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
               <input
                 id="display-name"
                 required
-                value={formData.name}
+                value={formData.display_name}
                 onChange={(e) =>
-                  setFormData({ ...formData, name: e.target.value })
+                  setFormData({ ...formData, display_name: e.target.value })
                 }
                 placeholder={t("shortcuts.displayNamePlaceholder")}
                 className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-white placeholder-slate-600"
@@ -701,7 +701,7 @@ const IconDropdown: React.FC<IconDropdownProps> = ({ icon, setIcon }) => {
     isOpen: boolean;
     filename: string;
     displayName: string;
-    shortcuts: Array<{ id: number; name: string }>;
+    shortcuts: Array<{ id: number; display_name: string }>;
   }>({
     isOpen: false,
     filename: "",
@@ -1053,7 +1053,7 @@ const IconDropdown: React.FC<IconDropdownProps> = ({ icon, setIcon }) => {
                       className="text-slate-300 flex items-center gap-2"
                     >
                       <span className="w-1.5 h-1.5 bg-blue-400 rounded-full"></span>
-                      {shortcut.name}
+                      {shortcut.display_name}
                     </li>
                   ))}
                 </ul>

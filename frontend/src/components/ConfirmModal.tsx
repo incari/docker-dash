@@ -1,6 +1,6 @@
 import React, { useEffect } from "react";
 import { motion } from "framer-motion";
-import { AlertTriangle, X } from "lucide-react";
+import { AlertTriangle, X } from "../constants/icons";
 import { useTranslation } from "react-i18next";
 import type { ConfirmModalProps } from "../types";
 

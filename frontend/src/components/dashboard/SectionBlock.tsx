@@ -5,7 +5,7 @@ import {
   ChevronDown,
   ChevronRight,
   GripVertical,
-} from "lucide-react";
+} from "../../constants/icons";
 import { dragAndDrop } from "@formkit/drag-and-drop/react";
 import { animations } from "@formkit/drag-and-drop";
 import type { Section, Shortcut } from "../../types";

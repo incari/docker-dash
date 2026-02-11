@@ -6,7 +6,7 @@ import {
   Play,
   Square,
   Settings,
-} from "lucide-react";
+} from "../constants/icons";
 import type { ContainerCardProps } from "../types";
 
 /**
