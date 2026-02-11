@@ -64,6 +64,7 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [urlError, setUrlError] = useState("");
   const [iconUrlError, setIconUrlError] = useState("");
+  const [hasManuallySelectedIcon, setHasManuallySelectedIcon] = useState(false);
 
   useEffect(() => {
     if (shortcut) {
@@ -82,6 +83,8 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
       if (shortcut.icon?.startsWith("http")) setActiveTab("url");
       else if (shortcut.icon?.includes("/")) setActiveTab("upload");
       else setActiveTab("icon");
+      // Mark as manually selected if editing existing shortcut
+      setHasManuallySelectedIcon(true);
     } else {
       setFormData({
         name: "",
@@ -94,6 +97,7 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
         use_tailscale: false,
       });
       setActiveTab("icon");
+      setHasManuallySelectedIcon(false);
     }
     setSelectedFile(null);
   }, [shortcut, isOpen]);
@@ -114,6 +118,42 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
       document.removeEventListener("keydown", handleEscape);
     };
   }, [isOpen, onClose]);
+
+  // Auto-fetch favicon for website URLs
+  useEffect(() => {
+    // Only auto-fetch if:
+    // 1. Type is "url" (custom URL, not port)
+    // 2. User hasn't manually selected an icon
+    // 3. URL is valid
+    if (
+      formData.type === "url" &&
+      !hasManuallySelectedIcon &&
+      formData.url &&
+      isValidUrl(formData.url)
+    ) {
+      try {
+        const urlObj = new URL(
+          formData.url.startsWith("http")
+            ? formData.url
+            : `https://${formData.url}`,
+        );
+        // Use the website's native favicon.ico
+        const faviconUrl = `${urlObj.protocol}//${urlObj.hostname}/favicon.ico`;
+
+        // Set the favicon as the icon
+        setFormData((prev) => ({
+          ...prev,
+          icon: faviconUrl,
+        }));
+
+        // Set active tab to URL since we're using a URL-based icon
+        setActiveTab("url");
+      } catch (error) {
+        // Invalid URL, do nothing
+        console.error("Failed to extract domain for favicon:", error);
+      }
+    }
+  }, [formData.type, formData.url, hasManuallySelectedIcon]);
 
   if (!isOpen) return null;
 
@@ -261,6 +301,10 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
                     // Auto-select icon from docker-icon-vault based on container name
                     icon: newIcon,
                   }));
+                  // Mark as manually selected when selecting a container
+                  if (c) {
+                    setHasManuallySelectedIcon(true);
+                  }
                   // Switch to URL tab if icon is from vault, otherwise icon tab
                   if (newIcon.startsWith("http")) {
                     setActiveTab("url");
@@ -320,7 +364,12 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
                 </button>
                 <button
                   type="button"
-                  onClick={() => setFormData({ ...formData, type: "url" })}
+                  onClick={() => {
+                    setFormData({ ...formData, type: "url" });
+                    // Reset manual selection flag when switching to URL type
+                    // This allows auto-fetch of favicon
+                    setHasManuallySelectedIcon(false);
+                  }}
                   className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
                     formData.type === "url"
                       ? "bg-slate-800 text-white shadow-lg"
@@ -409,9 +458,17 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
             activeTab={activeTab}
             setActiveTab={setActiveTab}
             icon={formData.icon}
-            setIcon={(icon) => setFormData({ ...formData, icon })}
+            setIcon={(icon) => {
+              setFormData({ ...formData, icon });
+              setHasManuallySelectedIcon(true);
+            }}
             selectedFile={selectedFile}
-            setSelectedFile={setSelectedFile}
+            setSelectedFile={(file) => {
+              setSelectedFile(file);
+              if (file) {
+                setHasManuallySelectedIcon(true);
+              }
+            }}
             iconUrlError={iconUrlError}
             setIconUrlError={setIconUrlError}
             t={t}
@@ -494,9 +551,10 @@ const PortSelector: React.FC<PortSelectorProps> = ({
         <p className="text-xs text-slate-500 pl-1">
           {availablePorts.length === 1
             ? t("shortcuts.containerHasOnePort")
-            : t("shortcuts.containerHasPorts", {
-                count: availablePorts.length,
-              })}
+            : t("shortcuts.containerHasPorts").replace(
+                "{{count}}",
+                availablePorts.length.toString(),
+              )}
         </p>
       </div>
     );
@@ -722,9 +780,18 @@ const IconDropdown: React.FC<IconDropdownProps> = ({ icon, setIcon }) => {
 
   // Check if current icon is an uploaded image
   const isUploadedImage = icon.startsWith("uploads/");
+
+  // Check if the current icon is a valid Lucide icon
+  const isValidLucideIcon = AVAILABLE_ICONS.hasOwnProperty(icon);
+
+  // Determine display name and actual icon to use
+  // If icon is a URL (not uploaded, not Lucide), show "Server" but don't change the actual value
+  const displayIcon = isUploadedImage || isValidLucideIcon ? icon : "Server";
   const displayName = isUploadedImage
     ? icon.split("/").pop()?.split("-").slice(1).join("-") || icon
-    : icon;
+    : isValidLucideIcon
+      ? icon
+      : "Server";
 
   // Handle delete image with confirmation
   const handleDeleteImage = async (filename: string, displayName: string) => {
@@ -805,7 +872,7 @@ const IconDropdown: React.FC<IconDropdownProps> = ({ icon, setIcon }) => {
               />
             ) : (
               <DynamicIcon
-                name={icon}
+                name={displayIcon}
                 className="w-5 h-5 text-white"
               />
             )}
@@ -1050,12 +1117,22 @@ const IconSelector: React.FC<IconSelectorProps> = ({
   t,
 }) => {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
+  const [urlPreview, setUrlPreview] = useState<string | null>(null);
+  const [urlPreviewError, setUrlPreviewError] = useState(false);
 
   const tabLabels: Record<"icon" | "url" | "upload", string> = {
     icon: t("shortcuts.iconTab"),
     url: t("shortcuts.urlTab"),
     upload: t("shortcuts.uploadTab"),
   };
+
+  // Fetch uploaded images when component mounts or upload tab is active
+  useEffect(() => {
+    if (activeTab === "upload") {
+      uploadsApi.getAll().then(setUploadedImages).catch(console.error);
+    }
+  }, [activeTab]);
 
   // Create and cleanup preview URL for selected file
   useEffect(() => {
@@ -1070,6 +1147,26 @@ const IconSelector: React.FC<IconSelectorProps> = ({
       setPreviewUrl(null);
     }
   }, [selectedFile]);
+
+  // Handle URL preview
+  useEffect(() => {
+    if (activeTab === "url" && icon.startsWith("http")) {
+      setUrlPreviewError(false);
+      setUrlPreview(null);
+
+      // Debounce the preview loading
+      const timer = setTimeout(() => {
+        if (isValidUrl(icon)) {
+          setUrlPreview(icon);
+        }
+      }, 500);
+
+      return () => clearTimeout(timer);
+    } else {
+      setUrlPreview(null);
+      setUrlPreviewError(false);
+    }
+  }, [icon, activeTab]);
 
   return (
     <div className="space-y-4 pt-2">
@@ -1106,22 +1203,36 @@ const IconSelector: React.FC<IconSelectorProps> = ({
 
         {activeTab === "url" && (
           <div className="w-full space-y-3">
+            {/* URL Input with inline preview */}
             <div
               className={`flex items-center gap-3 bg-slate-800 border ${
                 iconUrlError ? "border-red-500" : "border-white/10"
               } rounded-xl px-4 py-3`}
             >
-              <LinkIcon className="w-5 h-5 text-slate-500" />
+              {/* Inline preview icon */}
+              <div className="w-8 h-8 rounded-lg bg-slate-700 flex items-center justify-center overflow-hidden shrink-0">
+                {urlPreview && !urlPreviewError ? (
+                  <img
+                    src={urlPreview}
+                    alt="Preview"
+                    className="w-full h-full object-contain p-1"
+                    onError={() => {
+                      setUrlPreviewError(true);
+                    }}
+                  />
+                ) : (
+                  <LinkIcon className="w-5 h-5 text-slate-500" />
+                )}
+              </div>
               <input
                 type="text"
                 className="bg-transparent flex-1 focus:outline-none text-white text-sm"
                 placeholder={t("shortcuts.imageUrlPlaceholder")}
-                value={
-                  activeTab === "url" && icon.startsWith("http") ? icon : ""
-                }
+                value={icon.startsWith("http") ? icon : ""}
                 onChange={(e) => {
                   setIcon(e.target.value);
                   setIconUrlError("");
+                  setUrlPreviewError(false);
                 }}
                 onBlur={(e) => {
                   if (e.target.value && !isValidUrl(e.target.value)) {
@@ -1132,7 +1243,7 @@ const IconSelector: React.FC<IconSelectorProps> = ({
                 }}
               />
             </div>
-            {!iconUrlError && (
+            {!iconUrlError && !urlPreview && (
               <p className="text-[10px] text-slate-500 pl-1 italic">
                 {t("shortcuts.imageUrlHint")}
               </p>
@@ -1142,17 +1253,30 @@ const IconSelector: React.FC<IconSelectorProps> = ({
                 <span>⚠</span> {iconUrlError}
               </p>
             )}
+            {urlPreviewError && (
+              <p className="text-xs text-red-400 pl-1 flex items-center gap-1">
+                <span>⚠</span> Failed to load image
+              </p>
+            )}
           </div>
         )}
 
         {activeTab === "upload" && (
-          <div className="w-full space-y-3">
-            <label className="w-full h-24 border-2 border-dashed border-white/10 rounded-2xl flex flex-col items-center justify-center cursor-pointer hover:bg-white/[0.02] transition-colors group">
+          <div className="w-full space-y-4">
+            {/* Upload new image button */}
+            <label className="w-full h-20 border-2 border-dashed border-white/10 rounded-2xl flex flex-col items-center justify-center cursor-pointer hover:bg-white/5 transition-colors group">
               <input
                 type="file"
                 accept="image/png,image/jpeg,image/jpg,image/gif,image/webp,image/svg+xml,image/x-icon"
                 className="hidden"
-                onChange={(e) => setSelectedFile(e.target.files?.[0] ?? null)}
+                onChange={(e) => {
+                  const file = e.target.files?.[0] ?? null;
+                  setSelectedFile(file);
+                  // Clear icon selection when uploading new file
+                  if (file) {
+                    setIcon("");
+                  }
+                }}
               />
               {selectedFile ? (
                 <div className="flex flex-col items-center text-green-400">
@@ -1163,19 +1287,18 @@ const IconSelector: React.FC<IconSelectorProps> = ({
                 </div>
               ) : (
                 <>
-                  <ImageIcon className="w-6 h-6 text-slate-500 group-hover:text-blue-500 mb-1 transition-colors" />
+                  <Upload className="w-5 h-5 text-slate-500 group-hover:text-blue-500 mb-1 transition-colors" />
                   <span className="text-xs text-slate-500 group-hover:text-slate-300">
-                    Choose image file
-                  </span>
-                  <span className="text-[10px] text-slate-600 mt-1">
-                    PNG, JPG, GIF, WebP, SVG, ICO
+                    Upload new image
                   </span>
                 </>
               )}
             </label>
+
+            {/* Preview of selected file */}
             {selectedFile && previewUrl && (
               <div className="w-full flex items-center justify-center">
-                <div className="w-16 h-16 rounded-lg bg-slate-700 flex items-center justify-center overflow-hidden">
+                <div className="w-16 h-16 rounded-lg bg-slate-700 flex items-center justify-center overflow-hidden border border-white/10">
                   <img
                     src={previewUrl}
                     alt="Preview"
@@ -1183,6 +1306,60 @@ const IconSelector: React.FC<IconSelectorProps> = ({
                   />
                 </div>
               </div>
+            )}
+
+            {/* Divider if there are uploaded images */}
+            {uploadedImages.length > 0 && (
+              <div className="flex items-center gap-3">
+                <div className="flex-1 h-px bg-white/10"></div>
+                <span className="text-[10px] text-slate-500 uppercase tracking-wider">
+                  Or select existing
+                </span>
+                <div className="flex-1 h-px bg-white/10"></div>
+              </div>
+            )}
+
+            {/* List of uploaded images */}
+            {uploadedImages.length > 0 && (
+              <div className="grid grid-cols-4 gap-2 max-h-48 overflow-y-auto custom-scrollbar p-1">
+                {uploadedImages.map((image) => {
+                  const isSelected = icon === image.url;
+                  return (
+                    <button
+                      key={image.url}
+                      type="button"
+                      onClick={() => {
+                        setIcon(image.url);
+                        setSelectedFile(null);
+                      }}
+                      className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-all ${
+                        isSelected
+                          ? "border-blue-500 ring-2 ring-blue-500/50"
+                          : "border-white/10 hover:border-white/30"
+                      }`}
+                      title={image.filename}
+                    >
+                      <img
+                        src={`/${image.url}`}
+                        alt={image.filename}
+                        className="w-full h-full object-cover"
+                      />
+                      {isSelected && (
+                        <div className="absolute inset-0 bg-blue-500/20 flex items-center justify-center">
+                          <CheckCircle className="w-6 h-6 text-blue-400" />
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Empty state */}
+            {uploadedImages.length === 0 && !selectedFile && (
+              <p className="text-[10px] text-slate-500 text-center italic">
+                No uploaded images yet. Upload one above.
+              </p>
             )}
           </div>
         )}

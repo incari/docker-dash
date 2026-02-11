@@ -1,157 +1,31 @@
 /**
- * Utility functions for docker-icon-vault integration
- * Maps container names to curated Docker icons from https://incari.github.io/docker-icon-vault/
+ * Utility functions for Homarr Dashboard Icons integration
+ * Maps container names to curated Docker icons from https://github.com/homarr-labs/dashboard-icons
+ * All icons are available via CDN at: https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons
  */
 
-const DOCKER_ICON_VAULT_BASE_URL =
-  "https://incari.github.io/docker-icon-vault/icons";
+import customIconMappings from "../../../customIconMappings.json";
+
+const HOMARR_ICONS_BASE_URL =
+  "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons";
 
 /**
- * List of available icons in docker-icon-vault
- * This list should be kept in sync with the vault repository
+ * Custom icon mappings for specific Docker images
+ * These take priority over the Homarr Dashboard Icons
+ * Loaded from shared customIconMappings.json file
  */
-const AVAILABLE_DOCKER_ICONS = [
-  "memcached",
-  "nginx",
-  "busybox",
-  "alpine",
-  "redis",
-  "postgres",
-  "ubuntu",
-  "python",
-  "node",
-  "mysql",
-  "mongo",
-  "httpd",
-  "rabbitmq",
-  "traefik",
-  "docker",
-  "hello-world",
-  "mariadb",
-  "openjdk",
-  "golang",
-  "debian",
-  "ruby",
-  "wordpress",
-  "php",
-  "sonarqube",
-  "haproxy",
-  "influxdb",
-  "consul",
-  "nextcloud",
-  "amazonlinux",
-  "elasticsearch",
-  "tomcat",
-  "maven",
-  "caddy",
-  "eclipse-mosquitto",
-  "telegraf",
-  "vault",
-  "bash",
-  "adminer",
-  "ghost",
-  "solr",
-  "kong",
-  "zookeeper",
-  "neo4j",
-  "gradle",
-  "perl",
-  "buildpack-deps",
-  "eclipse-temurin",
-  "cassandra",
-  "nats",
-  "kibana",
-  "percona",
-  "drupal",
-  "composer",
-  "logstash",
-  "couchdb",
-  "chronograf",
-  "matomo",
-  "fedora",
-  "amazoncorretto",
-  "rust",
-  "flink",
-  "couchbase",
-  "joomla",
-  "phpmyadmin",
-  "groovy",
-  "rethinkdb",
-  "rocket.chat",
-  "redmine",
-  "erlang",
-  "elixir",
-  "kapacitor",
-  "jruby",
-  "odoo",
-  "mediawiki",
-  "jetty",
-  "oraclelinux",
-  "pypy",
-  "rockylinux",
-  "clojure",
-  "arangodb",
-  "xwiki",
-  "ros",
-  "archlinux",
-  "swift",
-  "znc",
-  "hylang",
-  "gcc",
-  "tomee",
-  "haxe",
-  "websphere-liberty",
-  "sapmachine",
-  "yourls",
-  "varnish",
-  "crate",
-  "aerospike",
-  "photon",
-  "julia",
-  "orientdb",
-  "open-liberty",
-  "bonita",
-  "ibmjava",
-  "monica",
-  "almalinux",
-  "fluentd",
-  "r-base",
-  "ibm-semeru-runtimes",
-  "neurodebian",
-  "storm",
-  "irssi",
-  "haskell",
-  "backdrop",
-  "cirros",
-  "lightstreamer",
-  "geonetwork",
-  "friendica",
-  "postfixadmin",
-  "convertigo",
-  "gazebo",
-  "dart",
-  "swipl",
-  "eggdrop",
-  "rakudo-star",
-  "silverpeas",
-  "mageia",
-  "spark",
-  "clickhouse",
-  "alt",
-  "hitch",
-  "satosa",
-  "krakend",
-  "api-firewall",
-];
+const CUSTOM_ICON_MAPPINGS: Record<string, string> = customIconMappings;
 
 /**
- * Normalize container name to match docker-icon-vault naming convention
+ * Normalize container name to match Homarr Dashboard Icons naming convention
  * Examples:
- * - "python" -> "python"
- * - "python/pytorch" -> "python-pytorch"
- * - "my-nginx-container" -> "my-nginx-container" (matching happens in getDockerIconVaultUrl)
- * - "postgres:latest" -> "postgres"
- * - "postgres-db-1" -> "postgres-db-1" (will match "postgres" icon)
+ * - "plex" -> "plex"
+ * - "plex:latest" -> "plex"
+ * - "linuxserver/transmission" -> "transmission" (strip vendor prefix)
+ * - "linuxserver/transmission:latest" -> "transmission"
+ * - "mysql-db-1" -> "mysql" (extract first part before hyphen-number)
+ * - "postgres-adminer-1" -> "postgres" (extract first part)
+ * - "supabase-kong" -> "supabase-kong" (keep if no number suffix)
  */
 export function normalizeContainerName(containerName: string): string {
   if (!containerName) return "";
@@ -159,67 +33,57 @@ export function normalizeContainerName(containerName: string): string {
   // Remove version tags (e.g., ":latest", ":14.2")
   let normalized = containerName.split(":")[0] || "";
 
-  // Convert slashes to hyphens (e.g., "python/pytorch" -> "python-pytorch")
-  normalized = normalized.replace(/\//g, "-");
-
   // Convert to lowercase
   normalized = normalized.toLowerCase();
+
+  // Strip vendor prefixes (e.g., "linuxserver/", "lscr.io/linuxserver/")
+  // Common vendor prefixes: linuxserver, lscr.io, ghcr.io, etc.
+  const vendorPrefixPattern = /^(?:[^\/]+\/)*([^\/]+)$/;
+  const match = normalized.match(vendorPrefixPattern);
+  if (match && match[1]) {
+    normalized = match[1];
+  }
+
+  // Remove Docker Compose instance numbers (e.g., "mysql-db-1" -> "mysql-db", "postgres-1" -> "postgres")
+  // Pattern: ends with hyphen followed by one or more digits
+  normalized = normalized.replace(/-\d+$/, "");
+
+  // If the name still contains hyphens, try to extract the first meaningful part
+  // This handles cases like "mysql-db" -> "mysql", "postgres-adminer" -> "postgres"
+  if (normalized.includes("-")) {
+    const firstPart = normalized.split("-")[0];
+    if (firstPart) {
+      return firstPart;
+    }
+  }
 
   return normalized;
 }
 
 /**
- * Get the docker-icon-vault URL for a container name
- * Returns the icon URL if available, otherwise returns null
+ * Get the Homarr Dashboard Icons URL for a container name
+ * Returns the icon URL based on the normalized container name
+ * Checks custom mappings first, then falls back to Homarr Dashboard Icons
  */
 export function getDockerIconVaultUrl(containerName: string): string | null {
   const normalized = normalizeContainerName(containerName);
 
-  // Check if the normalized name exists in the vault
-  if (AVAILABLE_DOCKER_ICONS.includes(normalized)) {
-    return `${DOCKER_ICON_VAULT_BASE_URL}/${normalized}.png`;
+  if (!normalized) {
+    return null;
   }
 
-  // Try to find a match with priority:
-  // 1. Icon name at the start (e.g., "postgres-db-1" matches "postgres")
-  // 2. Icon name as a word boundary (e.g., "my-nginx-app" matches "nginx")
-  // 3. Icon name anywhere in the string
-
-  // Priority 1: Starts with icon name followed by hyphen or end
-  let partialMatch = AVAILABLE_DOCKER_ICONS.find((icon) => {
-    const pattern = new RegExp(`^${icon}(-|$)`);
-    return pattern.test(normalized);
-  });
-
-  if (partialMatch) {
-    return `${DOCKER_ICON_VAULT_BASE_URL}/${partialMatch}.png`;
+  // Check if there's a custom icon mapping for this container
+  if (CUSTOM_ICON_MAPPINGS[normalized]) {
+    return CUSTOM_ICON_MAPPINGS[normalized];
   }
 
-  // Priority 2: Icon name appears as a complete word (surrounded by hyphens or at boundaries)
-  partialMatch = AVAILABLE_DOCKER_ICONS.find((icon) => {
-    const pattern = new RegExp(`(^|-)${icon}(-|$)`);
-    return pattern.test(normalized);
-  });
-
-  if (partialMatch) {
-    return `${DOCKER_ICON_VAULT_BASE_URL}/${partialMatch}.png`;
-  }
-
-  // Priority 3: Icon name appears anywhere in the container name
-  partialMatch = AVAILABLE_DOCKER_ICONS.find((icon) =>
-    normalized.includes(icon),
-  );
-
-  if (partialMatch) {
-    return `${DOCKER_ICON_VAULT_BASE_URL}/${partialMatch}.png`;
-  }
-
-  return null;
+  // Fall back to Homarr Dashboard Icons
+  return `${HOMARR_ICONS_BASE_URL}/png/${normalized}.png`;
 }
 
 /**
  * Get the appropriate icon for a container
- * Returns docker-icon-vault URL if available, otherwise returns the default icon name
+ * Returns Homarr Dashboard Icons URL if available, otherwise returns the default icon name
  */
 export function getContainerIcon(
   containerName: string,

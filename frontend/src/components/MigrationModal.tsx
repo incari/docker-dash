@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { RefreshCw, X, CheckSquare, Square } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 interface MigrationModalProps {
   isOpen: boolean;
@@ -23,6 +24,7 @@ export const MigrationModal: React.FC<MigrationModalProps> = ({
   onConfirm,
   onCancel,
 }) => {
+  const { t } = useTranslation();
   const [selectedIcons, setSelectedIcons] = useState<Set<number>>(new Set());
   const [selectedDescriptions, setSelectedDescriptions] = useState<Set<number>>(
     new Set(),
@@ -133,14 +135,16 @@ export const MigrationModal: React.FC<MigrationModalProps> = ({
             <RefreshCw className="w-8 h-8 text-blue-400" />
           </div>
           <h2 className="text-2xl font-bold text-white">
-            Update Container Icons & Descriptions
+            {t("modals.migration.title")}
           </h2>
         </div>
 
         <p className="text-slate-300 mb-6 leading-relaxed">
-          Select which icons and descriptions you want to update from the
-          docker-icon-vault. You can choose to update icons, descriptions, or
-          both for each shortcut.
+          {t("modals.migration.description")}{" "}
+          <span className="font-semibold text-blue-400">
+            {t("modals.migration.homarrLibrary")}
+          </span>
+          {t("modals.migration.descriptionContinued")}
         </p>
 
         {/* Table */}
@@ -149,7 +153,7 @@ export const MigrationModal: React.FC<MigrationModalProps> = ({
             <thead className="bg-slate-800/50 sticky top-0">
               <tr>
                 <th className="p-3 text-left text-sm font-semibold text-slate-300">
-                  Name
+                  {t("modals.migration.name")}
                 </th>
                 <th className="p-3 text-center">
                   <button
@@ -161,7 +165,9 @@ export const MigrationModal: React.FC<MigrationModalProps> = ({
                     ) : (
                       <Square className="w-5 h-5" />
                     )}
-                    <span className="text-xs font-semibold">Icon</span>
+                    <span className="text-xs font-semibold">
+                      {t("modals.migration.icon")}
+                    </span>
                   </button>
                 </th>
                 <th className="p-3 text-center">
@@ -174,7 +180,9 @@ export const MigrationModal: React.FC<MigrationModalProps> = ({
                     ) : (
                       <Square className="w-5 h-5" />
                     )}
-                    <span className="text-xs font-semibold">Description</span>
+                    <span className="text-xs font-semibold">
+                      {t("modals.migration.description")}
+                    </span>
                   </button>
                 </th>
               </tr>
@@ -218,8 +226,13 @@ export const MigrationModal: React.FC<MigrationModalProps> = ({
 
         <div className="flex items-center justify-between mb-6">
           <p className="text-sm text-slate-400">
-            Icons: {selectedIcons.size} / {shortcuts.length} • Descriptions:{" "}
-            {selectedDescriptions.size} / {shortcuts.length}
+            {t("modals.migration.iconCount")
+              .replace("{{selected}}", selectedIcons.size.toString())
+              .replace("{{total}}", shortcuts.length.toString())}{" "}
+            •{" "}
+            {t("modals.migration.descriptionCount")
+              .replace("{{selected}}", selectedDescriptions.size.toString())
+              .replace("{{total}}", shortcuts.length.toString())}
           </p>
         </div>
 
@@ -228,7 +241,7 @@ export const MigrationModal: React.FC<MigrationModalProps> = ({
             onClick={onCancel}
             className="flex-1 py-3 px-6 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-xl transition-all duration-200"
           >
-            Cancel
+            {t("common.cancel")}
           </button>
           <button
             onClick={handleConfirm}
@@ -239,7 +252,7 @@ export const MigrationModal: React.FC<MigrationModalProps> = ({
                 : "bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 shadow-blue-500/30"
             }`}
           >
-            Update Selected
+            {t("modals.migration.updateSelected")}
           </button>
         </div>
       </motion.div>

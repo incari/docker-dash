@@ -1,15 +1,20 @@
-const express = require('express');
-const cors = require('cors');
-const Docker = require('dockerode');
-const Database = require('better-sqlite3');
-const path = require('path');
-const multer = require('multer');
-const fs = require('fs');
-const { exec } = require('child_process');
-const { promisify } = require('util');
-const { getContainerIcon, getDockerIconVaultData } = require('./utils/dockerIconVault');
+import express from 'express';
+import cors from 'cors';
+import Docker from 'dockerode';
+import Database from 'better-sqlite3';
+import path from 'path';
+import multer from 'multer';
+import fs from 'fs';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+import { fileURLToPath } from 'url';
+import { getContainerIcon, normalizeContainerName } from './utils/dockerIconVault.js';
 
 const execAsync = promisify(exec);
+
+// ES module equivalents of __dirname and __filename
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Validation helpers
 const normalizeUrl = (url) => {
@@ -93,6 +98,7 @@ db.exec(`
     theme_background TEXT DEFAULT '#0f172a',
     view_mode TEXT DEFAULT 'default',
     mobile_columns INTEGER DEFAULT 2,
+    migration_dismissed INTEGER DEFAULT 0,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )
 `);
@@ -148,6 +154,253 @@ if (!tableInfo.find(c => c.name === 'position')) {
 if (!tableInfo.find(c => c.name === 'section_id')) {
   try {
     db.exec('ALTER TABLE shortcuts ADD COLUMN section_id INTEGER');
+  } catch (err) { console.error(err); }
+}
+
+// 7. Check for 'migration_dismissed' column in settings table
+const settingsTableInfo = db.pragma('table_info(settings)');
+if (!settingsTableInfo.find(c => c.name === 'migration_dismissed')) {
+  try {
+    db.exec('ALTER TABLE settings ADD COLUMN migration_dismissed INTEGER DEFAULT 0');
+    console.log("Migrated: Added migration_dismissed column to settings");
+  } catch (err) { console.error(err); }
+}
+
+// 8. Check for 'display_name' column in shortcuts table
+if (!tableInfo.find(c => c.name === 'display_name')) {
+  try {
+    db.exec('ALTER TABLE shortcuts ADD COLUMN display_name TEXT');
+    console.log("Migrated: Added display_name column to shortcuts");
+
+    // Migrate existing data: copy 'name' to 'display_name' for all existing shortcuts
+    // This preserves user's current display names
+    const migrateDisplayNames = db.prepare('UPDATE shortcuts SET display_name = name WHERE display_name IS NULL');
+    const result = migrateDisplayNames.run();
+    console.log(`Migrated: Copied ${result.changes} names to display_name`);
+  } catch (err) {
+    console.error('Failed to add display_name column:', err);
+  }
+}
+
+// 9. Check for 'container_name' column in shortcuts table
+// This stores the ACTUAL Docker container name for matching (stable across restarts/updates)
+// Example: Docker="supabase-kong-1", display_name="My App SB", container_name="supabase-kong-1"
+// We match by container_name instead of container_id because:
+// - container_id changes on every restart/update/recreation
+// - container_name is stable and predictable
+if (!tableInfo.find(c => c.name === 'container_name')) {
+  try {
+    db.exec('ALTER TABLE shortcuts ADD COLUMN container_name TEXT');
+    console.log("Migrated: Added container_name column to shortcuts");
+
+    // Helper function for fuzzy matching (same as auto-sync)
+    const normalizeForMatching = (name) => {
+      if (!name) return '';
+      return name.toLowerCase().replace(/[^a-z0-9]/g, '').trim();
+    };
+
+    // Migrate existing data: For shortcuts with container_id, try to find the actual Docker container
+    // Uses fuzzy matching to handle cases like "Home Assistant Kitchen" → "homeassistant"
+    try {
+      const shortcutsWithContainerId = db.prepare('SELECT id, name, container_id FROM shortcuts WHERE container_id IS NOT NULL AND container_name IS NULL').all();
+
+      if (shortcutsWithContainerId.length > 0) {
+        console.log(`[MIGRATION] Found ${shortcutsWithContainerId.length} shortcuts with container_id but no container_name`);
+
+        // Try to get current containers from Docker
+        let dockerContainers = [];
+        try {
+          dockerContainers = await docker.listContainers({ all: true });
+          console.log(`[MIGRATION] Found ${dockerContainers.length} Docker containers for matching`);
+        } catch (dockerErr) {
+          console.log('[MIGRATION] Docker not running, cannot auto-detect container names');
+          console.log('[MIGRATION] Users will need to manually fix shortcuts or restart when Docker is running');
+        }
+
+        // Build a map of normalized container names for fuzzy matching
+        const dockerContainerMap = new Map();
+        for (const container of dockerContainers) {
+          const containerName = container.Names[0].replace(/^\//, '');
+          const normalized = normalizeForMatching(containerName);
+          dockerContainerMap.set(normalized, containerName);
+          dockerContainerMap.set(container.Id, containerName); // Also map by ID
+        }
+
+        const updateStmt = db.prepare('UPDATE shortcuts SET container_name = ? WHERE id = ?');
+        let migratedCount = 0;
+        let fuzzyMatchCount = 0;
+        let fallbackCount = 0;
+
+        for (const shortcut of shortcutsWithContainerId) {
+          let containerName = null;
+          let matchMethod = '';
+
+          // Method 1: Try to find by container_id (exact match)
+          if (dockerContainerMap.has(shortcut.container_id)) {
+            containerName = dockerContainerMap.get(shortcut.container_id);
+            matchMethod = 'exact container_id';
+          }
+
+          // Method 2: Try fuzzy matching by name
+          // "Home Assistant Kitchen" → "homeassistantkitchen" → matches "homeassistant"
+          if (!containerName) {
+            const normalizedShortcutName = normalizeForMatching(shortcut.name);
+
+            // Try exact normalized match first
+            if (dockerContainerMap.has(normalizedShortcutName)) {
+              containerName = dockerContainerMap.get(normalizedShortcutName);
+              matchMethod = 'exact normalized name';
+            } else {
+              // Try partial match: find Docker container whose normalized name is contained in shortcut name
+              // or vice versa
+              for (const [normalized, dockerName] of dockerContainerMap) {
+                if (typeof normalized === 'string') {
+                  if (normalizedShortcutName.includes(normalized) || normalized.includes(normalizedShortcutName)) {
+                    containerName = dockerName;
+                    matchMethod = 'fuzzy name match';
+                    fuzzyMatchCount++;
+                    break;
+                  }
+                }
+              }
+            }
+          }
+
+          // Method 3: Fallback - use the shortcut's current name
+          // This will be wrong for custom names, but auto-sync will try to fix it later
+          if (!containerName) {
+            containerName = shortcut.name;
+            matchMethod = 'fallback (may need manual fix)';
+            fallbackCount++;
+          }
+
+          console.log(`[MIGRATION] ID ${shortcut.id}: "${shortcut.name}" → container_name="${containerName}" (${matchMethod})`);
+          updateStmt.run(containerName, shortcut.id);
+          migratedCount++;
+        }
+
+        console.log(`[MIGRATION] Set container_name for ${migratedCount} shortcuts:`);
+        console.log(`[MIGRATION]   - ${migratedCount - fuzzyMatchCount - fallbackCount} exact matches`);
+        console.log(`[MIGRATION]   - ${fuzzyMatchCount} fuzzy matches`);
+        console.log(`[MIGRATION]   - ${fallbackCount} fallbacks (may need manual correction)`);
+
+        if (fallbackCount > 0) {
+          console.log(`[MIGRATION] ⚠️  ${fallbackCount} shortcuts may have incorrect container_name`);
+          console.log(`[MIGRATION] ⚠️  These will be auto-corrected when you delete duplicates and run auto-sync`);
+        }
+      }
+    } catch (migrationErr) {
+      console.error('[MIGRATION] Failed to migrate container_name from Docker:', migrationErr);
+      // Fallback: Just copy 'name' to 'container_name' for all shortcuts with container_id
+      const fallbackStmt = db.prepare('UPDATE shortcuts SET container_name = name WHERE container_id IS NOT NULL AND container_name IS NULL');
+      const result = fallbackStmt.run();
+      console.log(`Migrated: Set container_name (fallback) for ${result.changes} shortcuts`);
+    }
+  } catch (err) {
+    console.error('Failed to add container_name column:', err);
+  }
+}
+
+// 10. Automatic duplicate cleanup and merge
+// This runs after migrations to clean up duplicates caused by:
+// - Moving database between machines (different container_ids)
+// - Renaming containers in UI (name mismatch with Docker)
+// - Docker restarts (new container_ids)
+// Uses original_container_name for matching (if available), falls back to fuzzy name matching
+try {
+  console.log('[DUPLICATE-CLEANUP] Checking for duplicate shortcuts...');
+
+  // Helper function for fuzzy name matching (defined here to avoid hoisting issues)
+  const normalizeForMatching = (name) => {
+    if (!name) return '';
+    return name.toLowerCase().replace(/[^a-z0-9]/g, '').trim();
+  };
+
+  // Find all shortcuts with container_id
+  const allShortcuts = db.prepare('SELECT id, name, display_name, original_container_name, container_id, is_favorite, icon, description FROM shortcuts WHERE container_id IS NOT NULL ORDER BY id ASC').all();
+
+  // Group by original_container_name (if available) or normalized name (fuzzy matching)
+  // Priority: original_container_name > normalized name
+  const nameGroups = new Map();
+  for (const shortcut of allShortcuts) {
+    // Use original_container_name if available, otherwise fall back to normalized name
+    const matchKey = shortcut.original_container_name
+      ? normalizeForMatching(shortcut.original_container_name)
+      : normalizeForMatching(shortcut.name);
+
+    if (!nameGroups.has(matchKey)) {
+      nameGroups.set(matchKey, []);
+    }
+    nameGroups.get(matchKey).push(shortcut);
+  }
+
+  // Find groups with duplicates
+  let mergedCount = 0;
+  let deletedCount = 0;
+
+  for (const [matchKey, shortcuts] of nameGroups) {
+    if (shortcuts.length > 1) {
+      console.log(`[DUPLICATE-CLEANUP] Found ${shortcuts.length} duplicates for "${matchKey}":`, shortcuts.map(s => `ID ${s.id} (display: "${s.display_name || s.name}")`).join(', '));
+
+      // Determine which one to keep (priority order):
+      // 1. Favorite shortcuts (is_favorite = 1)
+      // 2. Shortcuts with custom icons (not 'Server')
+      // 3. Shortcuts with descriptions
+      // 4. Oldest shortcut (lowest ID)
+
+      const sortedShortcuts = [...shortcuts].sort((a, b) => {
+        // Priority 1: Favorites first
+        if (a.is_favorite !== b.is_favorite) return b.is_favorite - a.is_favorite;
+
+        // Priority 2: Custom icons (not 'Server')
+        const aHasCustomIcon = a.icon && a.icon !== 'Server' ? 1 : 0;
+        const bHasCustomIcon = b.icon && b.icon !== 'Server' ? 1 : 0;
+        if (aHasCustomIcon !== bHasCustomIcon) return bHasCustomIcon - aHasCustomIcon;
+
+        // Priority 3: Has description
+        const aHasDesc = a.description && a.description.trim() ? 1 : 0;
+        const bHasDesc = b.description && b.description.trim() ? 1 : 0;
+        if (aHasDesc !== bHasDesc) return bHasDesc - aHasDesc;
+
+        // Priority 4: Oldest (lowest ID)
+        return a.id - b.id;
+      });
+
+      const keepShortcut = sortedShortcuts[0];
+      const deleteShortcuts = sortedShortcuts.slice(1);
+
+      console.log(`[DUPLICATE-CLEANUP] Keeping ID ${keepShortcut.id} (display: "${keepShortcut.display_name || keepShortcut.name}"), deleting:`, deleteShortcuts.map(s => `ID ${s.id}`).join(', '));
+
+      // Delete duplicates
+      const deleteStmt = db.prepare('DELETE FROM shortcuts WHERE id = ?');
+      for (const shortcut of deleteShortcuts) {
+        deleteStmt.run(shortcut.id);
+        deletedCount++;
+      }
+
+      mergedCount++;
+    }
+  }
+
+  if (mergedCount > 0) {
+    console.log(`[DUPLICATE-CLEANUP] Cleanup complete: Merged ${mergedCount} duplicate groups, deleted ${deletedCount} duplicate shortcuts`);
+  } else {
+    console.log('[DUPLICATE-CLEANUP] No duplicates found');
+  }
+} catch (err) {
+  console.error('[DUPLICATE-CLEANUP] Failed to clean up duplicates:', err);
+}
+
+// 8. Check for 'display_name' column in shortcuts table
+if (!tableInfo.find(c => c.name === 'display_name')) {
+  try {
+    db.exec('ALTER TABLE shortcuts ADD COLUMN display_name TEXT');
+    console.log("Migrated: Added display_name column to shortcuts");
+
+    // Migrate existing data: copy 'name' to 'display_name' for all existing shortcuts
+    const migrateDisplayNames = db.prepare('UPDATE shortcuts SET display_name = name WHERE display_name IS NULL');
+    const result = migrateDisplayNames.run();
+    console.log(`Migrated: Copied ${result.changes} names to display_name`);
   } catch (err) { console.error(err); }
 }
 
@@ -501,7 +754,25 @@ app.get('/api/shortcuts', (req, res) => {
   }
 });
 
+/**
+ * Normalize container name for fuzzy matching
+ * Handles variations like:
+ * - "Home Assistant" vs "homeassistant"
+ * - "n8n" vs "N8N"
+ * - "mysql-db" vs "MySQL DB"
+ */
+function normalizeContainerNameForMatching(name) {
+  if (!name) return '';
+  return name
+    .toLowerCase()           // Convert to lowercase
+    .replace(/[^a-z0-9]/g, '') // Remove all non-alphanumeric characters (spaces, hyphens, underscores)
+    .trim();
+}
+
 // Auto-sync containers to shortcuts (create shortcuts for containers that don't have them)
+// NEW APPROACH: Match by container_name instead of container_id
+// - container_name is stable across restarts/updates
+// - container_id changes frequently and causes duplicates
 app.post('/api/shortcuts/auto-sync', async (req, res) => {
   try {
     console.log('[AUTO-SYNC] Starting auto-sync of containers to shortcuts...');
@@ -510,48 +781,90 @@ app.post('/api/shortcuts/auto-sync', async (req, res) => {
     const containers = await docker.listContainers({ all: true });
     console.log('[AUTO-SYNC] Found', containers.length, 'containers');
 
-    // Get existing shortcuts with container_id
-    const existingShortcuts = db.prepare('SELECT container_id FROM shortcuts WHERE container_id IS NOT NULL').all();
-    const existingContainerIds = new Set(existingShortcuts.map(s => s.container_id));
-    console.log('[AUTO-SYNC] Found', existingContainerIds.size, 'existing shortcuts with container_id');
+    // Get all existing shortcuts that are linked to containers
+    // Match by container_name (stable) instead of container_id (changes frequently)
+    const existingShortcuts = db.prepare('SELECT id, container_name, name, display_name, container_id FROM shortcuts WHERE container_name IS NOT NULL').all();
+    const existingContainerNames = new Set(existingShortcuts.map(s => s.container_name));
+    console.log('[AUTO-SYNC] Found', existingContainerNames.size, 'existing container shortcuts');
+
+    // Build a map of container names from Docker
+    const dockerContainerMap = new Map();
+    for (const container of containers) {
+      const containerName = container.Names[0].replace(/^\//, '');
+      dockerContainerMap.set(containerName, {
+        id: container.Id,
+        name: containerName,
+        port: container.Ports && container.Ports[0] ? container.Ports[0].PublicPort : null
+      });
+    }
 
     let createdCount = 0;
-    const stmt = db.prepare(
-      'INSERT INTO shortcuts (name, description, icon, port, container_id, is_favorite) VALUES (?, ?, ?, ?, ?, ?)'
+    let updatedCount = 0;
+
+    const insertStmt = db.prepare(
+      'INSERT INTO shortcuts (name, display_name, container_name, description, icon, port, container_id, is_favorite) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    );
+    const updateStmt = db.prepare(
+      'UPDATE shortcuts SET container_id = ?, port = ? WHERE id = ?'
     );
 
-    for (const container of containers) {
-      if (!existingContainerIds.has(container.Id)) {
-        const containerName = container.Names[0].replace(/^\//, '');
+    // First pass: Update existing shortcuts with current container_id and port
+    for (const shortcut of existingShortcuts) {
+      const dockerContainer = dockerContainerMap.get(shortcut.container_name);
 
-        // Get icon and description from docker-icon-vault
-        const iconData = await getDockerIconVaultData(containerName);
-        const icon = iconData ? iconData.iconUrl : 'Server';
-        const description = iconData ? iconData.description : '';
-        const port = container.Ports && container.Ports[0] ? container.Ports[0].PublicPort : null;
+      if (dockerContainer) {
+        // Container exists in Docker - update container_id and port if changed
+        if (shortcut.container_id !== dockerContainer.id) {
+          console.log('[AUTO-SYNC] Updating container_id for:', shortcut.display_name || shortcut.name);
+          console.log('[AUTO-SYNC]   Container name:', shortcut.container_name);
+          console.log('[AUTO-SYNC]   Old container_id:', shortcut.container_id?.substring(0, 12) || 'none');
+          console.log('[AUTO-SYNC]   New container_id:', dockerContainer.id.substring(0, 12));
 
-        console.log('[AUTO-SYNC] Creating shortcut for container:', containerName);
-        console.log('[AUTO-SYNC]   Icon:', icon);
-        console.log('[AUTO-SYNC]   Description:', description);
+          updateStmt.run(dockerContainer.id, dockerContainer.port, shortcut.id);
+          updatedCount++;
+        }
 
-        stmt.run(
-          containerName,
-          description,
-          icon,
-          port,
-          container.Id,
-          0 // is_favorite = false by default
-        );
-        createdCount++;
+        // Mark as processed
+        dockerContainerMap.delete(shortcut.container_name);
+      } else {
+        console.log('[AUTO-SYNC] Container no longer exists in Docker:', shortcut.container_name);
       }
     }
 
-    console.log('[AUTO-SYNC] Auto-sync completed. Created', createdCount, 'new shortcuts');
+    // Second pass: Create shortcuts for new containers (remaining in dockerContainerMap)
+    for (const [containerName, containerData] of dockerContainerMap) {
+      // Create new shortcut
+      // Get icon from Homarr Dashboard Icons (via dockerIconVault utility)
+      const icon = getContainerIcon(containerName, 'Server');
+      const description = ''; // No description by default
+
+      console.log('[AUTO-SYNC] Creating shortcut for container:', containerName);
+      console.log('[AUTO-SYNC]   Icon:', icon);
+
+      // Insert with:
+      // - name: containerName (for backward compatibility)
+      // - display_name: containerName (user can customize later)
+      // - container_name: containerName (for stable matching)
+      insertStmt.run(
+        containerName,        // name
+        containerName,        // display_name
+        containerName,        // container_name
+        description,          // description
+        icon,                 // icon
+        containerData.port,   // port
+        containerData.id,     // container_id
+        0                     // is_favorite = false by default
+      );
+      createdCount++;
+    }
+
+    console.log('[AUTO-SYNC] Auto-sync completed. Created', createdCount, 'new shortcuts, updated', updatedCount, 'existing shortcuts');
     res.json({
       success: true,
       created: createdCount,
+      updated: updatedCount,
       total: containers.length,
-      message: `Created ${createdCount} new shortcuts from ${containers.length} containers`
+      message: `Created ${createdCount} new shortcuts, updated ${updatedCount} existing shortcuts from ${containers.length} containers`
     });
   } catch (error) {
     // Check if Docker is not running
@@ -798,11 +1111,11 @@ app.delete('/api/shortcuts/:id', (req, res) => {
 // Check if migration is needed
 app.get('/api/shortcuts/check-migration', async (req, res) => {
   try {
-    // Get all shortcuts that have a container_id but don't use docker-icon-vault URLs
+    // Get all shortcuts that have a container_id but don't use Homarr Dashboard Icons URLs
     const shortcuts = db.prepare(`
       SELECT id, name, description, icon FROM shortcuts
       WHERE container_id IS NOT NULL
-      AND (icon NOT LIKE 'https://incari.github.io/docker-icon-vault/%' OR icon IS NULL OR icon = 'Server')
+      AND (icon NOT LIKE 'https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/%' OR icon IS NULL OR icon = 'Server')
     `).all();
 
     res.json({
@@ -821,33 +1134,19 @@ app.get('/api/shortcuts/check-migration', async (req, res) => {
   }
 });
 
-// Migrate shortcuts to use docker-icon-vault icons
+// Migrate shortcuts to use Homarr Dashboard Icons
 app.post('/api/shortcuts/migrate-icons', async (req, res) => {
   try {
-    // Get selected shortcut IDs for icons and descriptions separately
-    const { iconIds, descriptionIds } = req.body;
-
     // Get all shortcuts that have a container_id
-    let allShortcuts = db.prepare('SELECT * FROM shortcuts WHERE container_id IS NOT NULL').all();
+    const shortcuts = db.prepare('SELECT * FROM shortcuts WHERE container_id IS NOT NULL').all();
 
-    // Determine which shortcuts to update for icons and descriptions
-    const iconIdsArray = Array.isArray(iconIds) ? iconIds : [];
-    const descriptionIdsArray = Array.isArray(descriptionIds) ? descriptionIds : [];
-
-    // Get unique IDs that need processing (union of both arrays)
-    const allIds = new Set([...iconIdsArray, ...descriptionIdsArray]);
-
-    if (allIds.size === 0) {
+    if (shortcuts.length === 0) {
       return res.json({
         success: true,
-        message: 'No shortcuts selected for migration',
-        updated: 0,
-        total: 0
+        message: 'No shortcuts with containers found',
+        updated: 0
       });
     }
-
-    // Filter shortcuts to only those selected
-    const shortcuts = allShortcuts.filter(s => allIds.has(s.id));
 
     // Get all containers from Docker
     let containers = [];
@@ -856,7 +1155,7 @@ app.post('/api/shortcuts/migrate-icons', async (req, res) => {
     } catch (dockerError) {
       // Check if Docker is not running
       if (dockerError.code === 'ECONNREFUSED' || dockerError.errno === -61) {
-        console.warn('Migration: Docker is not running. Cannot migrate icons.');
+        console.warn('[HOMARR-ICONS] Migration: Docker is not running. Cannot migrate icons.');
         return res.json({
           success: false,
           message: 'Docker is not running. Please start Docker Desktop and try again.',
@@ -867,8 +1166,23 @@ app.post('/api/shortcuts/migrate-icons', async (req, res) => {
       throw dockerError; // Re-throw if it's a different error
     }
 
-    let updatedIconsCount = 0;
-    let updatedDescriptionsCount = 0;
+    let updatedCount = 0;
+    let skippedCount = 0;
+    const updateStmt = db.prepare('UPDATE shortcuts SET icon = ? WHERE id = ?');
+
+    console.log('\n[HOMARR-ICONS] Starting icon migration...');
+    console.log('[HOMARR-ICONS] =====================================');
+
+    // Helper function to check if a URL exists (HEAD request)
+    const urlExists = async (url) => {
+      try {
+        const response = await fetch(url, { method: 'HEAD' });
+        return response.ok; // Returns true if status is 200-299
+      } catch (error) {
+        console.log(`[HOMARR-ICONS]   ⚠ Error checking URL: ${error.message}`);
+        return false;
+      }
+    };
 
     // Process each shortcut
     for (const shortcut of shortcuts) {
@@ -879,65 +1193,76 @@ app.post('/api/shortcuts/migrate-icons', async (req, res) => {
         // Get container name (remove leading slash)
         const containerName = container.Names[0].replace(/^\//, '');
 
-        // Get the new icon and description from docker-icon-vault
-        const iconData = await getDockerIconVaultData(containerName);
+        // Get the normalized name
+        const normalizedName = normalizeContainerName(containerName);
 
-        let newIcon = shortcut.icon;
-        let newDescription = shortcut.description;
-        let iconChanged = false;
-        let descriptionChanged = false;
+        console.log(`[HOMARR-ICONS] Processing: "${containerName}" → Normalized: "${normalizedName}"`);
 
-        // Update icon if this shortcut is in the iconIds array and data is available
-        if (iconIdsArray.includes(shortcut.id) && iconData && iconData.iconUrl) {
-          newIcon = iconData.iconUrl;
-          if (newIcon !== shortcut.icon) {
-            iconChanged = true;
+        // Priority 1: Check custom icon mappings first (guaranteed to exist)
+        let newIcon = null;
+        let iconSource = null;
+
+        if (CUSTOM_ICON_MAPPINGS[normalizedName]) {
+          newIcon = CUSTOM_ICON_MAPPINGS[normalizedName];
+          iconSource = 'Custom Mapping';
+          console.log(`[HOMARR-ICONS]   ✓ Found in Custom Mappings: ${newIcon}`);
+        } else {
+          // Priority 2: Check if icon exists in Homarr Dashboard Icons
+          const homarrIconUrl = `${HOMARR_ICONS_BASE_URL}/png/${normalizedName}.png`;
+
+          console.log(`[HOMARR-ICONS]   → Checking Homarr: ${homarrIconUrl}`);
+
+          const exists = await urlExists(homarrIconUrl);
+
+          if (exists) {
+            newIcon = homarrIconUrl;
+            iconSource = 'Homarr Dashboard Icons';
+            console.log(`[HOMARR-ICONS]   ✓ Icon exists in Homarr`);
+          } else {
+            // Icon doesn't exist in Homarr - preserve existing icon
+            skippedCount++;
+            console.log(`[HOMARR-ICONS]   ✗ Icon NOT found in Homarr`);
+            console.log(`[HOMARR-ICONS]   ⊘ Preserving existing icon: ${shortcut.icon}`);
+            continue;
           }
         }
 
-        // Update description if this shortcut is in the descriptionIds array and data is available
-        if (descriptionIdsArray.includes(shortcut.id) && iconData && iconData.description) {
-          newDescription = iconData.description;
-          if (newDescription !== shortcut.description) {
-            descriptionChanged = true;
-          }
+        // Update the icon if we found a new one and it's different
+        if (newIcon && newIcon !== shortcut.icon) {
+          updateStmt.run(newIcon, shortcut.id);
+          updatedCount++;
+          console.log(`[HOMARR-ICONS]   ✓ Updated "${shortcut.name}": ${shortcut.icon} → ${newIcon} (${iconSource})`);
+        } else if (newIcon === shortcut.icon) {
+          console.log(`[HOMARR-ICONS]   - No change needed for "${shortcut.name}" (already using ${iconSource})`);
         }
-
-        // Only update if something changed
-        if (iconChanged || descriptionChanged) {
-          const updateStmt = db.prepare('UPDATE shortcuts SET icon = ?, description = ? WHERE id = ?');
-          updateStmt.run(newIcon, newDescription, shortcut.id);
-
-          if (iconChanged) updatedIconsCount++;
-          if (descriptionChanged) updatedDescriptionsCount++;
-
-          console.log(`Updated shortcut "${shortcut.name}" (${containerName}): icon=${iconChanged}, description=${descriptionChanged}`);
-        }
+      } else {
+        console.log(`[HOMARR-ICONS]   ✗ Container not found for shortcut "${shortcut.name}"`);
       }
     }
 
-    // Build success message based on what was updated
-    const messages = [];
-    if (updatedIconsCount > 0) {
-      messages.push(`${updatedIconsCount} icon(s)`);
-    }
-    if (updatedDescriptionsCount > 0) {
-      messages.push(`${updatedDescriptionsCount} description(s)`);
-    }
+    console.log('[HOMARR-ICONS] =====================================');
+    console.log(`[HOMARR-ICONS] Migration complete: ${updatedCount} updated, ${skippedCount} skipped (preserved existing icons)\n`);
 
-    const message = messages.length > 0
-      ? `Successfully updated ${messages.join(' and ')} from docker-icon-vault`
-      : 'No changes were made';
+    let message = '';
+    if (updatedCount > 0 && skippedCount > 0) {
+      message = `Updated ${updatedCount} icon(s) from Homarr Dashboard Icons. Preserved ${skippedCount} custom icon(s) with no Homarr match.`;
+    } else if (updatedCount > 0) {
+      message = `Successfully updated ${updatedCount} icon(s) from Homarr Dashboard Icons`;
+    } else if (skippedCount > 0) {
+      message = `No updates made. ${skippedCount} shortcut(s) already have custom icons or no Homarr match found.`;
+    } else {
+      message = 'No changes were made';
+    }
 
     res.json({
       success: true,
       message,
-      updatedIcons: updatedIconsCount,
-      updatedDescriptions: updatedDescriptionsCount,
+      updated: updatedCount,
+      skipped: skippedCount,
       total: shortcuts.length
     });
   } catch (error) {
-    console.error('Error migrating icons:', error);
+    console.error('[HOMARR-ICONS] Error migrating icons:', error);
     res.status(500).json({ error: 'Failed to migrate icons' });
   }
 });
@@ -1080,8 +1405,8 @@ app.get('/api/settings', (req, res) => {
     // If no settings exist, create default settings
     if (!settings) {
       db.prepare(`
-        INSERT INTO settings (id, theme_primary, theme_background, view_mode, mobile_columns)
-        VALUES (1, '#3b82f6', '#0f172a', 'default', 2)
+        INSERT INTO settings (id, theme_primary, theme_background, view_mode, mobile_columns, migration_dismissed)
+        VALUES (1, '#3b82f6', '#0f172a', 'default', 2, 0)
       `).run();
       settings = db.prepare('SELECT * FROM settings WHERE id = 1').get();
     }
@@ -1095,7 +1420,7 @@ app.get('/api/settings', (req, res) => {
 
 // Update user settings
 app.put('/api/settings', (req, res) => {
-  const { theme_primary, theme_background, view_mode, mobile_columns } = req.body;
+  const { theme_primary, theme_background, view_mode, mobile_columns, migration_dismissed } = req.body;
 
   try {
     // Ensure settings row exists
@@ -1103,13 +1428,14 @@ app.put('/api/settings', (req, res) => {
 
     if (!existing) {
       db.prepare(`
-        INSERT INTO settings (id, theme_primary, theme_background, view_mode, mobile_columns)
-        VALUES (1, ?, ?, ?, ?)
+        INSERT INTO settings (id, theme_primary, theme_background, view_mode, mobile_columns, migration_dismissed)
+        VALUES (1, ?, ?, ?, ?, ?)
       `).run(
         theme_primary || '#3b82f6',
         theme_background || '#0f172a',
         view_mode || 'default',
-        mobile_columns || 2
+        mobile_columns || 2,
+        migration_dismissed || 0
       );
     } else {
       const updates = [];
@@ -1133,6 +1459,11 @@ app.put('/api/settings', (req, res) => {
       if (mobile_columns !== undefined) {
         updates.push('mobile_columns = ?');
         values.push(mobile_columns);
+      }
+
+      if (migration_dismissed !== undefined) {
+        updates.push('migration_dismissed = ?');
+        values.push(migration_dismissed);
       }
 
       if (updates.length > 0) {

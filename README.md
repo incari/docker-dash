@@ -2,10 +2,7 @@
 
 A modern, responsive dashboard for managing your Docker containers. Create shortcuts (favorites) for your most used containers, organize them into sections, and access them quickly.
 
-
-
 ## Installation
-
 
 ## Running with Docker
 
@@ -58,18 +55,18 @@ docker run -d \
   -e PORT=3000 \
   ghcr.io/incari/docker-dash:latest
 ```
+
 ## Environment Variables
 
 You can configure the application using environment variables. Create a `.env` file in the root directory (see `.env.example`).
 
-| Variable | Description | Default |
-| :--- | :--- | :--- |
-| `PORT` | The port the backend server runs on. | `3000` |
-| `DOCKER_SOCKET` | Path to the Docker socket. | `/var/run/docker.sock` |
-| `DB_PATH` | Path to the SQLite database file. | `./data/dashboard.db` |
-| `UPLOAD_DIR` | Path to store uploaded images. | `./data/images` |
-| `NODE_ENV` | Environment mode (`development`/`production`). | `production` |
-
+| Variable        | Description                                    | Default                |
+| :-------------- | :--------------------------------------------- | :--------------------- |
+| `PORT`          | The port the backend server runs on.           | `3000`                 |
+| `DOCKER_SOCKET` | Path to the Docker socket.                     | `/var/run/docker.sock` |
+| `DB_PATH`       | Path to the SQLite database file.              | `./data/dashboard.db`  |
+| `UPLOAD_DIR`    | Path to store uploaded images.                 | `./data/images`        |
+| `NODE_ENV`      | Environment mode (`development`/`production`). | `production`           |
 
 ## Running Locally
 
@@ -102,8 +99,8 @@ To run the application in development mode (which starts both backend and fronte
 pnpm dev
 ```
 
--   **Frontend**: [http://localhost:5173](http://localhost:5173)
--   **Backend API**: [http://localhost:3000](http://localhost:3000)
+- **Frontend**: [http://localhost:5173](http://localhost:5173)
+- **Backend API**: [http://localhost:3000](http://localhost:3000)
 
 > **Note**: The backend needs access to the Docker socket (`/var/run/docker.sock`) to fetch container information. Ensure your user has permissions or run with necessary privileges if needed.
 
@@ -117,7 +114,7 @@ services:
     image: ghcr.io/incari/docker-dash:latest
     container_name: docker-dash
     restart: unless-stopped
-    network_mode: host  # Use host network for Tailscale detection
+    network_mode: host # Use host network for Tailscale detection
 
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
@@ -132,96 +129,97 @@ services:
 
 > **Note**: With `network_mode: host`, the app will be available at `http://HOST_IP:3000` (not 3080).
 
-
-
 ## Features
 
 ### Container Management
--   **Real-time Container Discovery**: Automatically detects and displays all running Docker containers on your server.
--   **Container Controls**: Start, Stop, and Restart containers directly from the dashboard *note* Editing the container to use a URL will still track the container to start/stop the container.
--   **Quick Add from Containers**: Star icon on running containers to instantly create shortcuts
--   **Port Detection**: Automatically detects exposed ports from running containers. *note* Some container can use multiple ports, in this case you can select the port you want to use when you create the shortcut.
 
+- **Real-time Container Discovery**: Automatically detects and displays all running Docker containers on your server.
+- **Container Controls**: Start, Stop, and Restart containers directly from the dashboard _note_ Editing the container to use a URL will still track the container to start/stop the container.
+- **Quick Add from Containers**: Star icon on running containers to instantly create shortcuts
+- **Port Detection**: Automatically detects exposed ports from running containers. _note_ Some container can use multiple ports, in this case you can select the port you want to use when you create the shortcut.
+- **Auto-Icon Detection**: Automatically fetches container icons from [Homarr Dashboard Icons](https://github.com/homarr-labs/dashboard-icons) library based on container name
+- **Custom Icon Mappings**: Support for custom icons for specific containers (see [CUSTOM_DOCKER_ICONS.md](CUSTOM_DOCKER_ICONS.md))
 
 ### Smart Shortcuts System
--   **Flexible URL Options**:
-    -   Link to container ports (auto-detects server IP)
-    -   Use custom URLs for external services
-    -   Tailscale IP detection for secure remote access
--   **Customizable Appearance**:
-    -   Choose from icon library (Lucide React icons)
-    -   Use custom image URLs
-    -   **Upload your own images** with built-in image management
-    -   **Delete uploaded images** with confirmation dialog
-    -   Custom names and descriptions
--   **Organization**: Group shortcuts into collapsible sections with drag-and-drop support
--   **Multiple View Modes**: Switch between Compact, Icon, List, and Table views in Management page
- -   Upload your own images with built-in image management
-        - After uploading the image, it will be available in the icon selector, you can use it for multiple bookmarks.
-        - Delete uploaded images with confirmation dialog
-        - Support to gifs and svg images
-        ![Animated gift support](/public/gifs-support.gif "Gifs support")
 
+- **Flexible URL Options**:
+  - Link to container ports (auto-detects server IP)
+  - Use custom URLs for external services
+  - Tailscale IP detection for secure remote access
+- **Customizable Appearance**:
+  - Choose from icon library (Lucide React icons)
+  - Use custom image URLs
+  - **Upload your own images** with built-in image management
+  - **Delete uploaded images** with confirmation dialog
+  - Custom names and descriptions
+  - Support for GIFs and SVG images
+    ![Animated gift support](/public/gifs-support.gif "Gifs support")
+- **Organization**: Group shortcuts into collapsible sections with drag-and-drop support
+- **Multiple View Modes**: Switch between Compact, Icon, List, and Table views in Management page
+- **Icon Migration Tool**: Bulk update container icons and descriptions from Homarr Dashboard Icons library
 
+### Bookmarks
 
-### Bookmarks 
--   **Bookmark your favorite websites**:
-    -   Add a name, description, url and icon
-    -   Choose from icon library (Lucide React icons)
-    -   Use custom image URLs
-    -   Same image management as shortcuts
-   
+- **Bookmark your favorite websites**:
+  - Add a name, description, url and icon
+  - Choose from icon library (Lucide React icons)
+  - Use custom image URLs
+  - Same image management as shortcuts
+
 ### Advanced Features
--   **Tailscale Integration**:
-    -   Automatically detects Tailscale IP addresses when using host network mode
-    -   Perfect for secure remote access to your homelab/server
-    -   Works seamlessly with Unraid and other Linux hosts
--   **Drag & Drop Interface**:
-    -   Reorder shortcuts within sections
-    -   Move shortcuts between sections
-    -   Reorganize sections
-    -   Optimized for both mobile touch and desktop mouse interactions
--   **Responsive Design**:
-    -   Mobile-first design with touch-friendly controls
-    -   Desktop hover actions for quick access
-    -   Adaptive layouts for all screen sizes
--   **PWA Support**: Install as a Progressive Web App on mobile devices or desktop
--   **Persistent Storage**: SQLite database for reliable data persistence across restarts
+
+- **Tailscale Integration**:
+  - Automatically detects Tailscale IP addresses when using host network mode
+  - Perfect for secure remote access to your homelab/server
+  - Works seamlessly with Unraid and other Linux hosts
+- **Drag & Drop Interface**:
+  - Reorder shortcuts within sections
+  - Move shortcuts between sections
+  - Reorganize sections
+  - Optimized for both mobile touch and desktop mouse interactions
+- **Responsive Design**:
+  - Mobile-first design with touch-friendly controls
+  - Desktop hover actions for quick access
+  - Adaptive layouts for all screen sizes
+- **PWA Support**: Install as a Progressive Web App on mobile devices or desktop
+- **Persistent Storage**: SQLite database for reliable data persistence across restarts
 
 ## Prerequisites
 
--   [Node.js](https://nodejs.org/) (v18 or higher)
--   [pnpm](https://pnpm.io/) (Package manager)
--   [Docker](https://www.docker.com/) (Running locally for backend access)
+- [Node.js](https://nodejs.org/) (v18 or higher)
+- [pnpm](https://pnpm.io/) (Package manager)
+- [Docker](https://www.docker.com/) (Running locally for backend access)
 
 ## Tech Stack
 
--   **Frontend**: React, Vite, Tailwind CSS, Framer Motion, @dnd-kit (Drag & Drop), i18next (Internationalization)
--   **Backend**: Node.js, Express, Better-SQLite3 (for persistent data), Multer (file uploads)
--   **Icons**: Lucide React
+- **Frontend**: React, Vite, Tailwind CSS, Framer Motion, @dnd-kit (Drag & Drop), i18next (Internationalization)
+- **Backend**: Node.js, Express, Better-SQLite3 (for persistent data), Multer (file uploads)
+- **Icons**: Lucide React
 
 ## Recent Updates
 
-Check out the [CHANGELOG.md](CHANGELOG.md) for detailed information about recent features and improvements, including:
-- Image upload and management functionality
-- Multiple view modes (Compact, Icon, List, Table)
-- Enhanced drag-and-drop with visual feedback
-- Internationalization support (English/Spanish)
-- Performance optimizations with React hooks
-- Improved dashboard organization and UX
-- Fixed bugs and improved stability
-- New features implemented 
+Check out the [CHANGELOG.md](CHANGELOG.md) for detailed information about recent features and improvements.
 
+### Latest Features (2024)
+
+- ✅ **Homarr Dashboard Icons Integration**: Automatic icon detection from the [Homarr Dashboard Icons](https://github.com/homarr-labs/dashboard-icons) library
+- ✅ **Custom Icon Mappings**: Support for custom container icons with priority over default library (see [CUSTOM_DOCKER_ICONS.md](CUSTOM_DOCKER_ICONS.md))
+- ✅ **Icon Migration Tool**: Bulk update existing shortcuts with new icons and descriptions from Homarr library
+- ✅ **Internationalization**: Full i18n support with English and Spanish translations
+- ✅ **Image Upload & Management**: Upload custom images (PNG, JPG, GIF, SVG) with deletion support
+- ✅ **Multiple View Modes**: Compact, Icon, List, and Table views in Management page
+- ✅ **Enhanced Drag & Drop**: Improved visual feedback and touch support for mobile and desktop
+- ✅ **Performance Optimizations**: React hooks optimization and better state management
+- ✅ **TypeScript Improvements**: Better type safety and error handling
+- ✅ **UI/UX Enhancements**: Improved dashboard organization and responsive design
 
 [Feedback and features requests](https://tally.so/r/aQ2zNE)
-
-Upcoming: New repo with standardized Icons URLS and auto-detect and use the container name and image for the shortcut. 
-
 
 ### Roadmap
 
 - More flexible UI card to display more information from the container and shortcut
-- Integration with [Docker Icon Vault](https://incari.github.io/docker-icon-vault/) to auto-detect and use the container icon and description for the shortcut icon (BETA)
 - Add more filters to the management page
-- Group by docker images than run multiple containers from the same image (like docker desktop does)
-- Batch Creation: Efficiently creates multiple shortcuts in one operation
+- Group by docker images that run multiple containers from the same image (like Docker Desktop does)
+- Batch Creation: Efficiently create multiple shortcuts in one operation
+- Dark/Light theme toggle
+- Export/Import dashboard configuration

@@ -10,11 +10,14 @@ import type { Shortcut, Container } from "../types";
 /**
  * Get the appropriate icon for the link type
  */
-export const getLinkIcon = (shortcut: Shortcut, size: "sm" | "md" | "lg" = "md") => {
+export const getLinkIcon = (
+  shortcut: Shortcut,
+  size: "sm" | "md" | "lg" = "md",
+) => {
   const sizeClasses = {
     sm: "w-3 h-3",
     md: "w-3 h-3 sm:w-3.5 sm:h-3.5",
-    lg: "w-3.5 h-3.5"
+    lg: "w-3.5 h-3.5",
   };
 
   if (shortcut.url) {
@@ -40,7 +43,7 @@ export const renderShortcutIcon = (shortcut: Shortcut) => {
       <img
         src={src}
         alt={shortcut.name}
-        className="w-full h-full object-cover"
+        className="w-full h-full object-contain"
       />
     );
   }
@@ -57,9 +60,9 @@ export const renderShortcutIcon = (shortcut: Shortcut) => {
  */
 export const renderContainerStatus = (container: Container | undefined) => {
   if (!container) return null;
-  
+
   const isRunning = container.state === "running";
-  
+
   return (
     <div
       className={`w-1.5 h-1.5 rounded-full shrink-0 ${
@@ -78,16 +81,17 @@ export const getShortcutLink = (
   shortcut: Shortcut,
   container: Container | undefined,
   tailscaleIP: string | null,
-  maxLength: number = 40
+  maxLength: number = 40,
 ): { link: string | null; subtitle: string } => {
   let link: string | null = null;
   let subtitle = "No Link";
 
   if (shortcut.url) {
     link = shortcut.url;
-    subtitle = shortcut.url.length > maxLength
-      ? shortcut.url.substring(0, maxLength) + "..."
-      : shortcut.url;
+    subtitle =
+      shortcut.url.length > maxLength
+        ? shortcut.url.substring(0, maxLength) + "..."
+        : shortcut.url;
   } else if (shortcut.port) {
     if ((shortcut as any).use_tailscale && tailscaleIP) {
       link = `http://${tailscaleIP}:${shortcut.port}`;
@@ -102,4 +106,3 @@ export const getShortcutLink = (
 
   return { link, subtitle };
 };
-

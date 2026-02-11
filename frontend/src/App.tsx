@@ -19,6 +19,7 @@ import { useSectionActions } from "./hooks/useSectionActions";
 import { useModals } from "./hooks/useModals";
 import { useInstallPrompt } from "./hooks/useInstallPrompt";
 import { useViewSettings } from "./hooks/useViewSettings";
+import { useMigrationSettings } from "./hooks/useMigrationSettings";
 import { shortcutsApi, containersApi } from "./services/api";
 import type { Section, Shortcut } from "./types";
 
@@ -38,6 +39,11 @@ function App() {
   const { theme, updateTheme } = useTheme();
   const { viewMode, mobileColumns, setViewMode, setMobileColumns } =
     useViewSettings();
+  const {
+    migrationDismissed,
+    isLoaded: migrationSettingsLoaded,
+    setMigrationDismissed,
+  } = useMigrationSettings();
   const { showInstallPrompt, handleInstallClick } = useInstallPrompt();
   const {
     shortcuts,
@@ -133,17 +139,26 @@ function App() {
         description: string;
         icon: string;
       }>,
+      isManualTrigger = false,
     ) => {
+      // If it's an automatic trigger and user has dismissed it before, don't show
+      if (!isManualTrigger && migrationDismissed) {
+        console.log("Migration modal dismissed previously, skipping auto-show");
+        return;
+      }
+
       setMigrationShortcuts(shortcuts);
       setMigrationModalOpen(true);
     },
-    [],
+    [migrationDismissed],
   );
 
   // Handle migration confirmation with selected shortcuts
   const handleMigrationConfirm = useCallback(
     async (iconIds: number[], descriptionIds: number[]) => {
       setMigrationModalOpen(false);
+      // Mark migration as dismissed so it doesn't auto-show again
+      setMigrationDismissed(true);
 
       try {
         const migrationResult = await shortcutsApi.migrateIcons(
@@ -179,19 +194,26 @@ function App() {
         );
       }
     },
-    [modals, fetchData],
+    [modals, fetchData, setMigrationDismissed],
   );
 
   // Handle migration cancel
   const handleMigrationCancel = useCallback(() => {
     setMigrationModalOpen(false);
-  }, []);
+    // Mark migration as dismissed so it doesn't auto-show again
+    setMigrationDismissed(true);
+  }, [setMigrationDismissed]);
 
   // ==================== Effects ====================
   // Use ref to ensure startup tasks only run once
   const hasRunStartupTasks = useRef(false);
 
   useEffect(() => {
+    // Wait for migration settings to load before running startup tasks
+    if (!migrationSettingsLoaded) {
+      return;
+    }
+
     // Only run startup tasks once
     if (hasRunStartupTasks.current) {
       return;
@@ -235,7 +257,12 @@ function App() {
 
     runStartupTasks();
     fetchTailscaleInfo();
-  }, [fetchData, fetchTailscaleInfo, showMigrationModal]);
+  }, [
+    fetchData,
+    fetchTailscaleInfo,
+    showMigrationModal,
+    migrationSettingsLoaded,
+  ]);
 
   // Redirect to add view if no shortcuts
   useEffect(() => {

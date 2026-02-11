@@ -138,6 +138,18 @@
       "savingShortcut": "Error al Guardar Acceso Directo",
       "unexpectedError": "Ocurrió un error inesperado al guardar el acceso directo.",
       "portUrlOrContainerRequired": "Se debe especificar Puerto, URL o Contenedor"
+    },
+    "migration": {
+      "title": "Actualizar Iconos y Descripciones de Contenedores",
+      "description": "Mejora tus accesos directos con iconos y descripciones mejorados de la biblioteca",
+      "homarrLibrary": "Homarr Dashboard Icons",
+      "descriptionContinued": ". Esta migración obtendrá automáticamente iconos optimizados y descripciones detalladas para tus contenedores. Selecciona qué iconos y descripciones deseas actualizar para cada acceso directo.",
+      "name": "Nombre",
+      "icon": "Icono",
+      "description": "Descripción",
+      "iconCount": "Iconos: {{selected}} / {{total}}",
+      "descriptionCount": "Descripciones: {{selected}} / {{total}}",
+      "updateSelected": "Actualizar Seleccionados"
     }
   },
   "validation": {

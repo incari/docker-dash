@@ -3,6 +3,8 @@
 # Stage 1: Build the React frontend
 FROM node:22-alpine AS frontend-builder
 RUN corepack enable && corepack prepare pnpm@latest --activate
+WORKDIR /app
+COPY customIconMappings.json ./
 WORKDIR /app/frontend
 COPY frontend/package.json frontend/pnpm-lock.yaml* ./
 RUN pnpm install --frozen-lockfile || pnpm install
@@ -41,6 +43,9 @@ WORKDIR /app
 # Copy pre-built node_modules (with compiled native modules)
 COPY --from=backend-builder /app/node_modules ./node_modules
 COPY package*.json ./
+
+# Copy custom icon mappings (shared between backend and frontend)
+COPY customIconMappings.json ./
 
 # Copy backend source
 COPY src ./src

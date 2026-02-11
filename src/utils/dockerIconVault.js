@@ -1,166 +1,126 @@
 /**
- * Docker Icon Vault Integration for Backend
- * Provides utilities to map container names to docker-icon-vault icon URLs and descriptions
+ * Homarr Dashboard Icons Integration for Backend
+ * Provides utilities to map container names to Homarr Dashboard Icons URLs
  *
- * Uses the JSON list from: https://incari.github.io/docker-icon-vault/list.json
+ * Uses icons from: https://github.com/homarr-labs/dashboard-icons
+ * All icons are available via CDN at: https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons
  */
 
-const https = require('https');
+import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 
-const DOCKER_ICON_VAULT_BASE_URL = "https://incari.github.io/docker-icon-vault";
-const DOCKER_ICON_VAULT_LIST_URL = "https://incari.github.io/docker-icon-vault/list.json";
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
-// Cache for the icon list (fetched once and reused)
-let iconListCache = null;
-let iconListCacheTime = null;
-const CACHE_DURATION = 1000 * 60 * 60; // 1 hour
+const HOMARR_ICONS_BASE_URL = "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons";
 
 /**
- * Fetch the list of available Docker icons from the vault
- * Returns array of {name, description, logo_url}
+ * Custom icon mappings for specific Docker images
+ * These take priority over the Homarr Dashboard Icons
+ * Loaded from shared customIconMappings.json file
  */
-async function fetchIconList() {
-  // Return cached list if available and not expired
-  if (iconListCache && iconListCacheTime && (Date.now() - iconListCacheTime < CACHE_DURATION)) {
-    return iconListCache;
-  }
-
-  try {
-    const response = await new Promise((resolve, reject) => {
-      https.get(DOCKER_ICON_VAULT_LIST_URL, (res) => {
-        let data = '';
-        res.on('data', (chunk) => data += chunk);
-        res.on('end', () => resolve(data));
-      }).on('error', reject);
-    });
-
-    iconListCache = JSON.parse(response);
-    iconListCacheTime = Date.now();
-    console.log('[DOCKER-ICON-VAULT] Fetched icon list:', iconListCache.length, 'icons');
-    return iconListCache;
-  } catch (error) {
-    console.error('[DOCKER-ICON-VAULT] Failed to fetch icon list:', error);
-    return [];
-  }
-}
+const CUSTOM_ICON_MAPPINGS = JSON.parse(
+  readFileSync(join(__dirname, '../../customIconMappings.json'), 'utf-8')
+);
 
 /**
- * Normalize container name to match docker-icon-vault naming convention
+ * Normalize container name to match Homarr Dashboard Icons naming convention
+ * Examples:
+ * - "plex" -> "plex"
+ * - "plex:latest" -> "plex"
+ * - "linuxserver/transmission" -> "transmission" (strip vendor prefix)
+ * - "linuxserver/transmission:latest" -> "transmission"
+ * - "mysql-db-1" -> "mysql" (extract first part before hyphen-number)
+ * - "postgres-adminer-1" -> "postgres" (extract first part)
+ * - "supabase-kong" -> "supabase-kong" (keep if no number suffix)
+ * - "immich_postgres" -> "immich" (extract base name before underscore)
+ * - "immich_redis" -> "immich" (extract base name before underscore)
  * @param {string} containerName - The container name to normalize
  * @returns {string} Normalized container name
  */
 function normalizeContainerName(containerName) {
+  if (!containerName) return "";
+
   // Remove leading slash if present (Docker adds this)
   let normalized = containerName.replace(/^\//, "");
 
   // Remove version tags (e.g., :latest, :14.2, :3.11-alpine)
   normalized = normalized.split(":")[0] || "";
 
-  // Convert slashes to hyphens (e.g., python/pytorch -> python-pytorch)
-  normalized = normalized.replace(/\//g, "-");
-
   // Convert to lowercase
   normalized = normalized.toLowerCase();
+
+  // Strip vendor prefixes (e.g., "linuxserver/", "lscr.io/linuxserver/")
+  // Common vendor prefixes: linuxserver, lscr.io, ghcr.io, etc.
+  const vendorPrefixPattern = /^(?:[^\/]+\/)*([^\/]+)$/;
+  const match = normalized.match(vendorPrefixPattern);
+  if (match && match[1]) {
+    normalized = match[1];
+  }
+
+  // Remove Docker Compose instance numbers (e.g., "mysql-db-1" -> "mysql-db", "postgres-1" -> "postgres")
+  // Pattern: ends with hyphen followed by one or more digits
+  normalized = normalized.replace(/-\d+$/, "");
+
+  // Handle underscores: extract base name before underscore
+  // This handles cases like "immich_postgres" -> "immich", "immich_redis" -> "immich"
+  if (normalized.includes("_")) {
+    const firstPart = normalized.split("_")[0];
+    if (firstPart) {
+      return firstPart;
+    }
+  }
+
+  // If the name still contains hyphens, try to extract the first meaningful part
+  // This handles cases like "mysql-db" -> "mysql", "postgres-adminer" -> "postgres"
+  if (normalized.includes("-")) {
+    const firstPart = normalized.split("-")[0];
+    if (firstPart) {
+      return firstPart;
+    }
+  }
 
   return normalized;
 }
 
 /**
- * Get the docker-icon-vault icon data for a container name
- * Returns {iconUrl, description} if available, otherwise returns null
+ * Get the Homarr Dashboard Icons URL for a container name
+ * Returns the icon URL based on the normalized container name
+ * Checks custom mappings first, then falls back to Homarr Dashboard Icons
  * @param {string} containerName - The container name
- * @returns {Promise<{iconUrl: string, description: string}|null>} The icon data or null
+ * @returns {string} The icon URL
  */
-async function getDockerIconVaultData(containerName) {
-  const iconList = await fetchIconList();
-  if (!iconList || iconList.length === 0) {
+function getDockerIconVaultUrl(containerName) {
+  const normalized = normalizeContainerName(containerName);
+
+  if (!normalized) {
     return null;
   }
 
-  const normalized = normalizeContainerName(containerName);
-
-  // Check if the normalized name exists exactly in the vault
-  let exactMatch = iconList.find(icon => icon.name === normalized);
-  if (exactMatch) {
-    return {
-      iconUrl: `${DOCKER_ICON_VAULT_BASE_URL}/${exactMatch.logo_url.replace('./', '')}`,
-      description: exactMatch.description
-    };
+  // Check if there's a custom icon mapping for this container
+  if (CUSTOM_ICON_MAPPINGS[normalized]) {
+    return CUSTOM_ICON_MAPPINGS[normalized];
   }
 
-  // Try to find a match with priority:
-  // 1. Icon name at the start (e.g., "postgres-db-1" matches "postgres")
-  // 2. Icon name as a word boundary (e.g., "my-nginx-app" matches "nginx")
-  // 3. Icon name anywhere in the string
-
-  // Priority 1: Starts with icon name followed by hyphen or end
-  let partialMatch = iconList.find((iconData) => {
-    const pattern = new RegExp(`^${iconData.name}(-|$)`);
-    return pattern.test(normalized);
-  });
-
-  if (partialMatch) {
-    return {
-      iconUrl: `${DOCKER_ICON_VAULT_BASE_URL}/${partialMatch.logo_url.replace('./', '')}`,
-      description: partialMatch.description
-    };
-  }
-
-  // Priority 2: Icon name appears as a complete word (surrounded by hyphens or at boundaries)
-  partialMatch = iconList.find((iconData) => {
-    const pattern = new RegExp(`(^|-)${iconData.name}(-|$)`);
-    return pattern.test(normalized);
-  });
-
-  if (partialMatch) {
-    return {
-      iconUrl: `${DOCKER_ICON_VAULT_BASE_URL}/${partialMatch.logo_url.replace('./', '')}`,
-      description: partialMatch.description
-    };
-  }
-
-  // Priority 3: Icon name appears anywhere in the container name
-  partialMatch = iconList.find((iconData) =>
-    normalized.includes(iconData.name)
-  );
-
-  if (partialMatch) {
-    return {
-      iconUrl: `${DOCKER_ICON_VAULT_BASE_URL}/${partialMatch.logo_url.replace('./', '')}`,
-      description: partialMatch.description
-    };
-  }
-
-  return null;
-}
-
-/**
- * Get the docker-icon-vault URL for a container name
- * Returns the icon URL if available, otherwise returns null
- * @param {string} containerName - The container name
- * @returns {Promise<string|null>} The icon URL or null
- */
-async function getDockerIconVaultUrl(containerName) {
-  const data = await getDockerIconVaultData(containerName);
-  return data ? data.iconUrl : null;
+  // Fall back to Homarr Dashboard Icons
+  return `${HOMARR_ICONS_BASE_URL}/png/${normalized}.png`;
 }
 
 /**
  * Get the appropriate icon for a container
- * Returns either the docker-icon-vault URL or the default icon
+ * Returns either the Homarr Dashboard Icons URL or the default icon
  * @param {string} containerName - The container name
  * @param {string} defaultIcon - The default icon to use if no match found (default: "Server")
- * @returns {Promise<string>} The icon URL or default icon
+ * @returns {string} The icon URL or default icon
  */
-async function getContainerIcon(containerName, defaultIcon = "Server") {
-  const vaultUrl = await getDockerIconVaultUrl(containerName);
+function getContainerIcon(containerName, defaultIcon = "Server") {
+  const vaultUrl = getDockerIconVaultUrl(containerName);
   return vaultUrl || defaultIcon;
 }
 
-module.exports = {
+export {
   normalizeContainerName,
-  fetchIconList,
-  getDockerIconVaultData,
   getDockerIconVaultUrl,
   getContainerIcon
 };

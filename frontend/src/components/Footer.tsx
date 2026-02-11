@@ -23,6 +23,7 @@ interface FooterProps {
       description: string;
       icon: string;
     }>,
+    isManualTrigger?: boolean,
   ) => void;
 }
 
@@ -39,8 +40,8 @@ export function Footer({
     try {
       const migrationCheck = await shortcutsApi.checkMigration();
       if (migrationCheck.needsMigration) {
-        // Show the modal with the list of shortcuts
-        onShowMigrationModal(migrationCheck.shortcuts);
+        // Show the modal with the list of shortcuts (manual trigger)
+        onShowMigrationModal(migrationCheck.shortcuts, true);
       } else {
         // Show info that no migration is needed
         alert("All shortcuts are already using docker-icon-vault icons!");

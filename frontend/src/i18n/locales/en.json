@@ -138,6 +138,18 @@
       "savingShortcut": "Error Saving Shortcut",
       "unexpectedError": "An unexpected error occurred while saving the shortcut.",
       "portUrlOrContainerRequired": "Either Port, URL, or Container must be specified"
+    },
+    "migration": {
+      "title": "Update Container Icons & Descriptions",
+      "description": "Upgrade your shortcuts with enhanced icons and descriptions from the",
+      "homarrLibrary": "Homarr Dashboard Icons",
+      "descriptionContinued": "library. This migration will automatically fetch optimized icons and detailed descriptions for your containers. Select which icons and descriptions you want to update for each shortcut.",
+      "name": "Name",
+      "icon": "Icon",
+      "description": "Description",
+      "iconCount": "Icons: {{selected}} / {{total}}",
+      "descriptionCount": "Descriptions: {{selected}} / {{total}}",
+      "updateSelected": "Update Selected"
     }
   },
   "validation": {
