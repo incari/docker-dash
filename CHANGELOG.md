@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+#### Toast Notifications (2026-02-13)
+
+- **Toast Notifications**: Success and error messages now appear as non-blocking toast notifications in the bottom-right corner
+  - Toasts auto-dismiss after a few seconds
+  - Can be manually dismissed by clicking the X button
+  - Different colors for success (green), error (red), info (blue), and warning (yellow)
+- **Confirmation Modals**: Modals are now reserved for important actions that require user approval (delete, stop containers, etc.)
+
+#### Icon Migration Improvements (2026-02-13)
+
+- **Side-by-Side Icon Preview**: Migration modal now shows both current and new icons
+  - See exactly what will change before applying
+  - Arrow indicator between current and new icons for clarity
+- **Per-Row Loading**: Each icon loads independently with its own spinner
+  - No more waiting for all icons to load before seeing the list
+  - Faster modal opening experience
+- **Editable URLs**: All icon URLs are now editable, even for shortcuts that already have icons set
+- **Smart Selection**: Only shortcuts that need updating are pre-selected
+  - Shortcuts already using the correct icon show "Already set" but remain unchecked
+  - You can still select them if you want to update anyway
+
+### Fixed
+
+#### Icon Migration Fixes (2026-02-13)
+
+- **Cached Image Spinner**: Fixed issue where spinners would persist when reopening the migration modal with cached images
+- **Custom Links Visibility**: Fixed issue where custom links (non-container shortcuts) were incorrectly hidden from the dashboard
+
 ## [0.2.0] - 2026-02-11
 
 ### Added

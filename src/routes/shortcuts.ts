@@ -3,6 +3,7 @@
  */
 
 import { Router, Request, Response } from "express";
+import type { Router as RouterType } from "express";
 import { db } from "../config/database.js";
 import { docker } from "../config/docker.js";
 import { upload } from "../config/multer.js";
@@ -13,44 +14,23 @@ import {
   isValidPort,
 } from "../utils/validators.js";
 import {
-  getContainerIcon,
-  normalizeContainerName,
-  HOMARR_ICONS_BASE_URL,
-  CUSTOM_ICON_MAPPINGS,
+  getDockerIconVaultUrl,
+  getValidatedIconUrl,
+  urlExists,
+  isCustomMappingIcon,
 } from "../utils/dockerIconVault.js";
+import {
+  getContainerBaseName,
+  extractImageName,
+  generateContainerMatchName,
+} from "../utils/containerMatching.js";
+import {
+  isDockerUnavailable,
+  logDockerUnavailable,
+} from "../utils/dockerErrors.js";
 import type { ShortcutRow, ReorderItem } from "../types/index.js";
 
-const router = Router();
-
-/**
- * Normalize container name for fuzzy matching
- */
-function normalizeContainerNameForMatching(name: string | null): string {
-  if (!name) return "";
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, "")
-    .trim();
-}
-
-/**
- * Extract base image name from Docker image string for icon matching
- */
-function extractImageName(imageString: string | null): string | null {
-  if (!imageString) return null;
-  const withoutTag = imageString.split(":")[0];
-  const parts = withoutTag.split("/");
-  const imageName = parts[parts.length - 1];
-  return imageName || null;
-}
-
-/**
- * Get container base name (without instance number suffix)
- */
-function getContainerBaseName(name: string | null): string {
-  if (!name) return "";
-  return name.replace(/-\d+$/, "").toLowerCase();
-}
+const router: RouterType = Router();
 
 // Get all shortcuts
 router.get("/api/shortcuts", (_req: Request, res: Response) => {
@@ -85,17 +65,21 @@ router.post(
 
       const existingShortcuts = db
         .prepare(
-          "SELECT id, container_name, display_name, container_id FROM shortcuts WHERE container_name IS NOT NULL",
+          "SELECT id, container_name, container_match_name, display_name, container_id FROM shortcuts WHERE container_name IS NOT NULL",
         )
         .all() as Array<{
         id: number;
         container_name: string;
+        container_match_name: string | null;
         display_name: string;
         container_id: string | null;
       }>;
 
+      // Use container_match_name for stable matching, fall back to container_name
       const existingContainerNames = new Set(
-        existingShortcuts.map((s) => s.container_name),
+        existingShortcuts.map(
+          (s) => s.container_match_name || s.container_name,
+        ),
       );
       console.log(
         "[AUTO-SYNC] Found",
@@ -135,11 +119,12 @@ router.post(
       let createdCount = 0;
       let updatedCount = 0;
 
+      // Include container_match_name for stable matching across container restarts
       const insertStmt = db.prepare(
-        "INSERT INTO shortcuts (display_name, container_name, description, icon, port, is_favorite) VALUES (?, ?, ?, ?, ?, ?)",
+        "INSERT INTO shortcuts (display_name, container_name, container_match_name, description, icon, port, is_favorite) VALUES (?, ?, ?, ?, ?, ?, ?)",
       );
       const updateStmt = db.prepare(
-        "UPDATE shortcuts SET port = ?, container_name = ? WHERE id = ?",
+        "UPDATE shortcuts SET port = ?, container_name = ?, container_match_name = ? WHERE id = ?",
       );
 
       // Build a reverse lookup: imageName → containerBaseName (for legacy matching)
@@ -152,19 +137,19 @@ router.post(
 
       // First pass: Update existing shortcuts
       for (const shortcut of existingShortcuts) {
-        let dockerContainer = dockerContainerMap.get(shortcut.container_name);
-        let matchKey = shortcut.container_name;
+        // Use container_match_name for stable matching, fall back to container_name
+        const matchName =
+          shortcut.container_match_name || shortcut.container_name;
+        let dockerContainer = dockerContainerMap.get(matchName);
+        let matchKey = matchName;
 
-        if (
-          !dockerContainer &&
-          imageNameToBaseName.has(shortcut.container_name)
-        ) {
-          matchKey = imageNameToBaseName.get(shortcut.container_name)!;
+        if (!dockerContainer && imageNameToBaseName.has(matchName)) {
+          matchKey = imageNameToBaseName.get(matchName)!;
           dockerContainer = dockerContainerMap.get(matchKey);
           if (dockerContainer) {
             console.log(
               "[AUTO-SYNC] Found legacy match by image name:",
-              shortcut.container_name,
+              matchName,
               "→",
               matchKey,
             );
@@ -172,13 +157,20 @@ router.post(
         }
 
         if (dockerContainer) {
-          const needsUpdate = shortcut.container_name !== matchKey;
+          const needsUpdate = matchName !== matchKey;
           if (needsUpdate) {
             console.log(
               "[AUTO-SYNC] Updating shortcut:",
               shortcut.display_name,
             );
-            updateStmt.run(dockerContainer.port, matchKey, shortcut.id);
+            // Also update container_match_name for stable matching
+            const matchName = generateContainerMatchName(matchKey);
+            updateStmt.run(
+              dockerContainer.port,
+              matchKey,
+              matchName,
+              shortcut.id,
+            );
             updatedCount++;
           }
           dockerContainerMap.delete(matchKey);
@@ -187,16 +179,24 @@ router.post(
 
       // Second pass: Create shortcuts for new containers
       for (const [baseName, containerData] of dockerContainerMap) {
-        const icon = getContainerIcon(containerData.imageName, "Server");
+        // Use validated icon URL (checks if Homarr URL exists before using)
+        const icon = await getValidatedIconUrl(
+          containerData.imageName,
+          "Server",
+        );
         console.log(
           "[AUTO-SYNC] Creating shortcut for container:",
           containerData.name,
+          "with icon:",
+          icon.startsWith("http") ? icon.substring(0, 50) + "..." : icon,
         );
 
+        // Generate stable match name for container matching across restarts
+        const matchName = generateContainerMatchName(containerData.name);
         insertStmt.run(
           containerData.name,
           baseName,
-          "",
+          matchName,
           icon,
           containerData.port,
           0,
@@ -218,9 +218,8 @@ router.post(
         message: `Created ${createdCount} new shortcuts, updated ${updatedCount} existing shortcuts from ${containers.length} containers`,
       });
     } catch (error: unknown) {
-      const err = error as { code?: string; errno?: number };
-      if (err.code === "ECONNREFUSED" || err.errno === -61) {
-        console.warn("[AUTO-SYNC] Docker is not running. Skipping auto-sync.");
+      if (isDockerUnavailable(error)) {
+        logDockerUnavailable("POST /api/shortcuts/auto-sync");
         res.json({
           success: true,
           created: 0,
@@ -249,6 +248,7 @@ router.post(
       container_name: reqContainerName,
       is_favorite,
       use_tailscale,
+      compose_project,
     } = req.body;
 
     if (!display_name || !display_name.trim()) {
@@ -258,7 +258,9 @@ router.post(
       return;
     }
 
-    if (!port && !url && !req.body.container_id) {
+    // Allow shortcuts with just a container name (no port/URL required)
+    // This enables adding containers as favorites even if they don't expose ports
+    if (!port && !url && !reqContainerName && !req.body.container_id) {
       res
         .status(400)
         .json({ error: "Either Port, URL, or Container must be specified" });
@@ -300,7 +302,8 @@ router.post(
 
         if (container) {
           const dockerName = container.Names[0].replace(/^\//, "");
-          iconValue = getContainerIcon(dockerName, "Server");
+          // Use validated icon URL to ensure Homarr icons exist
+          iconValue = await getValidatedIconUrl(dockerName, "Server");
           if (!finalContainerName) {
             finalContainerName = getContainerBaseName(dockerName);
           }
@@ -336,9 +339,15 @@ router.post(
         ? 1
         : 0;
 
+    const finalComposeProject = compose_project || null;
+    // Generate stable match name for container matching
+    const finalMatchName = finalContainerName
+      ? generateContainerMatchName(finalContainerName)
+      : null;
+
     try {
       const stmt = db.prepare(
-        "INSERT INTO shortcuts (display_name, description, icon, port, url, container_name, is_favorite, use_tailscale) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO shortcuts (display_name, description, icon, port, url, container_name, container_match_name, is_favorite, use_tailscale, compose_project) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       );
       const result = stmt.run(
         display_name.trim(),
@@ -347,8 +356,10 @@ router.post(
         finalPort,
         finalUrl,
         finalContainerName,
+        finalMatchName,
         finalFavorite,
         finalUseTailscale,
+        finalComposeProject,
       );
 
       res.json({
@@ -359,8 +370,10 @@ router.post(
         port: finalPort,
         url: finalUrl,
         container_name: finalContainerName,
+        container_match_name: finalMatchName,
         is_favorite: finalFavorite,
         use_tailscale: finalUseTailscale,
+        compose_project: finalComposeProject,
       });
     } catch (error) {
       console.error(error);
@@ -386,6 +399,7 @@ router.put(
       container_name: reqContainerName,
       is_favorite,
       use_tailscale,
+      compose_project,
     } = req.body;
 
     if (display_name && !display_name.trim()) {
@@ -426,7 +440,8 @@ router.put(
 
         if (container) {
           const dockerName = container.Names[0].replace(/^\//, "");
-          iconValue = getContainerIcon(dockerName, "Server");
+          // Use validated icon URL to ensure Homarr icons exist
+          iconValue = await getValidatedIconUrl(dockerName, "Server");
         }
       } catch (error) {
         console.error("Failed to fetch container for icon:", error);
@@ -463,6 +478,14 @@ router.put(
           ? 1
           : 0;
 
+    // Generate stable match name if container_name is being updated
+    const matchName =
+      reqContainerName !== undefined
+        ? reqContainerName
+          ? generateContainerMatchName(reqContainerName)
+          : null
+        : undefined;
+
     try {
       let sql =
         "UPDATE shortcuts SET display_name=?, description=?, icon=?, port=?, url=?, updated_at=CURRENT_TIMESTAMP";
@@ -475,8 +498,9 @@ router.put(
       ];
 
       if (reqContainerName !== undefined) {
-        sql += ", container_name=?";
+        sql += ", container_name=?, container_match_name=?";
         params.push(reqContainerName);
+        params.push(matchName as string | null);
       }
 
       if (finalFavorite !== undefined) {
@@ -487,6 +511,11 @@ router.put(
       if (finalUseTailscale !== undefined) {
         sql += ", use_tailscale=?";
         params.push(finalUseTailscale);
+      }
+
+      if (compose_project !== undefined) {
+        sql += ", compose_project=?";
+        params.push(compose_project || null);
       }
 
       sql += " WHERE id=?";
@@ -502,8 +531,10 @@ router.put(
         port: finalPort,
         url: finalUrl,
         container_name: reqContainerName,
+        container_match_name: matchName,
         is_favorite: finalFavorite,
         use_tailscale: finalUseTailscale,
+        compose_project: compose_project || null,
       });
     } catch (error) {
       console.error(error);
@@ -613,104 +644,153 @@ router.get(
   },
 );
 
-// Migrate shortcuts to use Homarr Dashboard Icons
+// Preview icon URLs for all container-linked shortcuts
+router.get(
+  "/api/shortcuts/preview-icons",
+  async (_req: Request, res: Response) => {
+    try {
+      // Get ALL shortcuts with container_name (not just those needing migration)
+      const shortcuts = db
+        .prepare(
+          `SELECT id, display_name, description, icon, container_name, container_match_name
+           FROM shortcuts WHERE container_name IS NOT NULL`,
+        )
+        .all() as Array<{
+        id: number;
+        display_name: string;
+        description: string;
+        icon: string | null;
+        container_name: string;
+        container_match_name: string | null;
+      }>;
+
+      // Get running containers for better icon resolution
+      let containers: Awaited<ReturnType<typeof docker.listContainers>> = [];
+      try {
+        containers = await docker.listContainers({ all: true });
+      } catch (dockerError: unknown) {
+        if (isDockerUnavailable(dockerError)) {
+          logDockerUnavailable("GET /api/shortcuts/preview-icons");
+          // Continue without container info - we can still suggest icons
+        } else {
+          throw dockerError;
+        }
+      }
+
+      // Build preview data for each shortcut (synchronous - no URL validation)
+      const previews = shortcuts.map((shortcut) => {
+        const matchName =
+          shortcut.container_match_name || shortcut.container_name;
+
+        // Find matching container
+        const container = containers.find((c) => {
+          const containerName = c.Names[0].replace(/^\//, "");
+          const baseName = getContainerBaseName(containerName);
+          return baseName === matchName;
+        });
+
+        // Determine source name for icon resolution
+        let sourceName: string;
+        if (container) {
+          sourceName =
+            extractImageName(container.Image) ||
+            container.Names[0].replace(/^\//, "");
+        } else {
+          sourceName = shortcut.container_name || shortcut.display_name;
+        }
+
+        // Get suggested icon URL
+        const suggestedIcon = getDockerIconVaultUrl(sourceName);
+
+        // Note: We don't validate URLs here to keep the response fast.
+        // The frontend handles invalid URLs visually with onError fallback.
+
+        return {
+          id: shortcut.id,
+          display_name: shortcut.display_name,
+          container_name: shortcut.container_name,
+          current_icon: shortcut.icon,
+          suggested_icon: suggestedIcon,
+          is_custom_mapping: suggestedIcon
+            ? isCustomMappingIcon(suggestedIcon)
+            : false,
+        };
+      });
+
+      res.json({
+        count: previews.length,
+        shortcuts: previews,
+      });
+    } catch (error) {
+      console.error("Error previewing icons:", error);
+      res.status(500).json({ error: "Failed to preview icons" });
+    }
+  },
+);
+
+// Apply icon updates from the migration modal
+// Accepts an array of {id, icon_url} objects with custom URLs per shortcut
 router.post(
   "/api/shortcuts/migrate-icons",
-  async (_req: Request, res: Response): Promise<void> => {
+  async (req: Request, res: Response): Promise<void> => {
     try {
-      const shortcuts = db
-        .prepare("SELECT * FROM shortcuts WHERE container_name IS NOT NULL")
-        .all() as ShortcutRow[];
+      const { updates } = req.body as {
+        updates: Array<{ id: number; icon_url: string }>;
+      };
 
-      if (shortcuts.length === 0) {
+      if (!Array.isArray(updates) || updates.length === 0) {
         res.json({
           success: true,
-          message: "No shortcuts with containers found",
+          message: "No updates provided",
           updated: 0,
         });
         return;
       }
 
-      let containers: Awaited<ReturnType<typeof docker.listContainers>> = [];
-      try {
-        containers = await docker.listContainers({ all: true });
-      } catch (dockerError: unknown) {
-        const err = dockerError as { code?: string; errno?: number };
-        if (err.code === "ECONNREFUSED" || err.errno === -61) {
-          console.warn("[HOMARR-ICONS] Migration: Docker is not running.");
-          res.json({
-            success: false,
-            message:
-              "Docker is not running. Please start Docker Desktop and try again.",
-            updated: 0,
-            total: shortcuts.length,
-          });
-          return;
-        }
-        throw dockerError;
-      }
+      const updateStmt = db.prepare(
+        "UPDATE shortcuts SET icon = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+      );
 
       let updatedCount = 0;
       let skippedCount = 0;
-      const updateStmt = db.prepare(
-        "UPDATE shortcuts SET icon = ? WHERE id = ?",
-      );
 
-      const urlExists = async (url: string): Promise<boolean> => {
-        try {
-          const response = await fetch(url, { method: "HEAD" });
-          return response.ok;
-        } catch {
-          return false;
-        }
-      };
-
-      for (const shortcut of shortcuts) {
-        const container = containers.find((c) => {
-          const containerName = c.Names[0].replace(/^\//, "");
-          const baseName = getContainerBaseName(containerName);
-          return baseName === shortcut.container_name;
-        });
-
-        let imageName: string;
-        if (container) {
-          imageName =
-            extractImageName(container.Image) ||
-            container.Names[0].replace(/^\//, "");
-        } else {
-          imageName = shortcut.container_name || shortcut.display_name;
+      for (const update of updates) {
+        if (!update.id || !update.icon_url) {
+          skippedCount++;
+          continue;
         }
 
-        const normalizedName = normalizeContainerName(imageName);
-        let newIcon: string | null = null;
-
-        if (CUSTOM_ICON_MAPPINGS[normalizedName]) {
-          newIcon = CUSTOM_ICON_MAPPINGS[normalizedName];
-        } else {
-          const homarrIconUrl = `${HOMARR_ICONS_BASE_URL}/png/${normalizedName}.png`;
-          const exists = await urlExists(homarrIconUrl);
-
-          if (exists) {
-            newIcon = homarrIconUrl;
-          } else {
+        // Validate URL if it's a Homarr CDN URL (custom URLs are trusted)
+        if (update.icon_url.includes("homarr-labs/dashboard-icons")) {
+          const exists = await urlExists(update.icon_url);
+          if (!exists) {
+            console.log(
+              `[MIGRATE-ICONS] Skipping invalid Homarr URL for shortcut ${update.id}: ${update.icon_url}`,
+            );
             skippedCount++;
             continue;
           }
         }
 
-        if (newIcon && newIcon !== shortcut.icon) {
-          updateStmt.run(newIcon, shortcut.id);
+        try {
+          updateStmt.run(update.icon_url, update.id);
           updatedCount++;
+        } catch (err) {
+          console.error(
+            `[MIGRATE-ICONS] Failed to update shortcut ${update.id}:`,
+            err,
+          );
+          skippedCount++;
         }
       }
 
       let message = "";
       if (updatedCount > 0 && skippedCount > 0) {
-        message = `Updated ${updatedCount} icon(s) from Homarr Dashboard Icons. Preserved ${skippedCount} custom icon(s) with no Homarr match.`;
+        message = `Updated ${updatedCount} icon(s). Skipped ${skippedCount} invalid or failed update(s).`;
       } else if (updatedCount > 0) {
-        message = `Successfully updated ${updatedCount} icon(s) from Homarr Dashboard Icons`;
+        message = `Successfully updated ${updatedCount} icon(s)`;
       } else if (skippedCount > 0) {
-        message = `No updates made. ${skippedCount} shortcut(s) already have custom icons or no Homarr match found.`;
+        message = `No updates made. ${skippedCount} update(s) were invalid or failed.`;
       } else {
         message = "No changes were made";
       }
@@ -720,11 +800,11 @@ router.post(
         message,
         updated: updatedCount,
         skipped: skippedCount,
-        total: shortcuts.length,
+        total: updates.length,
       });
     } catch (error) {
-      console.error("[HOMARR-ICONS] Error migrating icons:", error);
-      res.status(500).json({ error: "Failed to migrate icons" });
+      console.error("[MIGRATE-ICONS] Error applying icon updates:", error);
+      res.status(500).json({ error: "Failed to apply icon updates" });
     }
   },
 );

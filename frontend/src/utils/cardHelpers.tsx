@@ -1,7 +1,10 @@
-import React from "react";
+import React, { useState, useCallback } from "react";
 import { LinkIcon, Dock } from "../constants/icons";
 import { DynamicIcon } from "../components/DynamicIcon";
-import type { Shortcut, Container } from "../types";
+import type { Shortcut, DockerContainer } from "../types";
+
+// Alias for backward compatibility
+type Container = DockerContainer;
 
 /**
  * Shared utility functions for shortcut cards
@@ -29,9 +32,45 @@ export const getLinkIcon = (
 };
 
 /**
+ * Component to render an image with fallback to DynamicIcon on error
+ */
+const ShortcutImage: React.FC<{
+  src: string;
+  alt: string;
+  fallbackIcon: string;
+}> = ({ src, alt, fallbackIcon }) => {
+  const [hasError, setHasError] = useState(false);
+
+  const handleError = useCallback(() => {
+    setHasError(true);
+  }, []);
+
+  if (hasError) {
+    return (
+      <DynamicIcon
+        name={fallbackIcon}
+        className="w-full h-full"
+      />
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt={alt}
+      className="w-full h-full object-contain"
+      onError={handleError}
+    />
+  );
+};
+
+/**
  * Render the shortcut icon (image or dynamic icon)
+ * Falls back to DynamicIcon if the image URL fails to load
  */
 export const renderShortcutIcon = (shortcut: Shortcut) => {
+  const fallbackIcon = shortcut.icon || "Server";
+
   if (
     shortcut.icon &&
     (shortcut.icon.startsWith("http") || shortcut.icon.includes("/"))
@@ -40,16 +79,16 @@ export const renderShortcutIcon = (shortcut: Shortcut) => {
       ? shortcut.icon
       : `/${shortcut.icon}`;
     return (
-      <img
+      <ShortcutImage
         src={src}
         alt={shortcut.display_name}
-        className="w-full h-full object-contain"
+        fallbackIcon={fallbackIcon}
       />
     );
   }
   return (
     <DynamicIcon
-      name={shortcut.icon || "Server"}
+      name={fallbackIcon}
       className="w-full h-full"
     />
   );

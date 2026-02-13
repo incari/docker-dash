@@ -102,18 +102,14 @@ export function DashboardView({
    * Render a single shortcut card with all necessary props
    */
   const renderShortcutCard = (shortcut: Shortcut) => {
-    // Match container by container_name (base name) for stable matching
-    // This handles container recreation scenarios where container_id changes
-    const container =
-      shortcut.container_name && Array.isArray(containers)
-        ? containers.find((c) => {
-            const containerBaseName = c.name.replace(/-\d+$/, "").toLowerCase();
-            return (
-              containerBaseName === shortcut.container_name?.toLowerCase() ||
-              c.name.toLowerCase() === shortcut.container_name?.toLowerCase()
-            );
-          })
-        : null;
+    // Match container by container_match_name (stable) or container_name (fallback)
+    const matchName = shortcut.container_match_name || shortcut.container_name;
+    const container = matchName
+      ? containers.find((c) => {
+          const containerBaseName = c.name.replace(/-\d+$/, "").toLowerCase();
+          return containerBaseName === matchName.toLowerCase();
+        })
+      : null;
 
     return (
       <CardComponent

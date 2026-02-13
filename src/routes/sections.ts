@@ -3,10 +3,11 @@
  */
 
 import { Router, Request, Response } from "express";
+import type { Router as RouterType } from "express";
 import { db } from "../config/database.js";
 import type { SectionRow, ReorderItem } from "../types/index.js";
 
-const router = Router();
+const router: RouterType = Router();
 
 // Get all sections
 router.get("/api/sections", (_req: Request, res: Response) => {

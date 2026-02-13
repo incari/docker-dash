@@ -13,6 +13,9 @@ export interface DockerContainer {
   image: string;
   description?: string;
   ports: ContainerPort[];
+  // Docker Compose grouping info
+  composeProject: string | null;
+  composeService: string | null;
 }
 
 // Shortcut Types
@@ -26,9 +29,12 @@ export interface Shortcut {
   icon_type: "lucide" | "image" | "upload" | null;
   container_id: string | null;
   container_name: string | null;
+  container_match_name: string | null; // Stable identifier for matching across container restarts
   position: number;
   is_favorite: boolean;
   section_id: number | null;
+  // Docker Compose grouping
+  compose_project: string | null;
 }
 
 // Section Types

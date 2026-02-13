@@ -13,8 +13,8 @@ import { useTranslation } from "react-i18next";
 import { Header } from "./components/Header";
 import { Footer } from "./components/Footer";
 import { ConfirmModal } from "./components/ConfirmModal";
-import { ErrorModal } from "./components/ErrorModal";
 import { MigrationModal } from "./components/MigrationModal";
+import { useToast } from "./contexts/ToastContext";
 import { SectionModal } from "./components/SectionModal";
 
 // Lazy-loaded components for better initial bundle size
@@ -42,19 +42,15 @@ function App() {
   const [view, setView] = useState<"dashboard" | "add">("dashboard");
   const [isEditMode, setIsEditMode] = useState(false);
 
+  // Docker warning state
+  const [dockerWarningDismissed, setDockerWarningDismissed] = useState(false);
+
   // Migration modal state
   const [migrationModalOpen, setMigrationModalOpen] = useState(false);
-  const [migrationShortcuts, setMigrationShortcuts] = useState<
-    Array<{
-      id: number;
-      display_name: string;
-      description: string;
-      icon: string;
-    }>
-  >([]);
 
   // ==================== Custom Hooks ====================
   const { t } = useTranslation();
+  const toast = useToast();
   const { theme, updateTheme } = useTheme();
   const { viewMode, mobileColumns, setViewMode, setMobileColumns } =
     useViewSettings();
@@ -83,7 +79,7 @@ function App() {
   const shortcutActionsOptions = useMemo(
     () => ({
       onRefresh: fetchData,
-      onError: modals.showError,
+      onError: (title: string, message: string) => toast.error(title, message),
       showDeleteConfirm: (onConfirm: () => Promise<void>) => {
         modals.showConfirm(
           t("modals.confirm.deleteShortcut"),
@@ -92,13 +88,13 @@ function App() {
         );
       },
     }),
-    [fetchData, modals, t],
+    [fetchData, modals, t, toast],
   );
 
   const sectionActionsOptions = useMemo(
     () => ({
       onRefresh: fetchData,
-      onError: modals.showError,
+      onError: (title: string, message: string) => toast.error(title, message),
       showDeleteConfirm: (
         sectionName: string,
         onConfirm: () => Promise<void>,
@@ -110,7 +106,7 @@ function App() {
         );
       },
     }),
-    [fetchData, modals, t],
+    [fetchData, modals, t, toast],
   );
 
   // ==================== Action Hooks ====================
@@ -118,74 +114,34 @@ function App() {
   const shortcutActions = useShortcutActions(
     shortcutActionsOptions,
     setShortcuts,
+    shortcuts,
   );
   const sectionActions = useSectionActions(sectionActionsOptions, setSections);
 
   // ==================== Migration Handler ====================
-  const handleMigration = useCallback(async () => {
-    try {
-      // Get all container shortcuts
-      const containerShortcuts = shortcuts.filter((s) => s.container_id);
-      const allIds = containerShortcuts.map((s) => s.id);
+  // Opens the migration modal to preview and apply icon updates
+  const handleMigration = useCallback(() => {
+    // Open the migration modal - it will load previews automatically
+    setMigrationModalOpen(true);
+  }, []);
 
-      // Migrate all shortcuts (icons only)
-      const migrationResult = await shortcutsApi.migrateIcons(allIds);
-
-      // Refresh data to show updated icons
-      await fetchData();
-
-      // Show success message
-      modals.showError(
-        "Migration Complete",
-        migrationResult.message,
-        "success",
-      );
-    } catch (error) {
-      console.error("Migration failed:", error);
-      modals.showError(
-        "Migration Failed",
-        "Failed to migrate icons. Please try again later.",
-      );
-    }
-  }, [fetchData, modals, shortcuts]);
-
-  // Show migration modal with list of shortcuts
-  const showMigrationModal = useCallback(
-    (
-      shortcuts: Array<{
-        id: number;
-        display_name: string;
-        description: string;
-        icon: string;
-      }>,
-      isManualTrigger = false,
-    ) => {
-      // If it's an automatic trigger and user has dismissed it before, don't show
-      if (!isManualTrigger && migrationDismissed) {
-        console.log("Migration modal dismissed previously, skipping auto-show");
-        return;
-      }
-
-      setMigrationShortcuts(shortcuts);
-      setMigrationModalOpen(true);
-    },
-    [migrationDismissed],
-  );
-
-  // Handle migration confirmation with selected shortcuts
+  // Handle migration confirmation with selected shortcuts and custom URLs
   const handleMigrationConfirm = useCallback(
-    async (iconIds: number[]) => {
+    async (updates: Array<{ id: number; icon_url: string }>) => {
       setMigrationModalOpen(false);
       // Mark migration as dismissed so it doesn't auto-show again
       setMigrationDismissed(true);
 
+      if (updates.length === 0) {
+        return;
+      }
+
       try {
-        const migrationResult = await shortcutsApi.migrateIcons(iconIds);
+        const migrationResult = await shortcutsApi.migrateIcons(updates);
 
         // Check if migration was successful
         if (migrationResult.success === false) {
-          // Docker is not running or no options selected
-          modals.showError(
+          toast.error(
             "Migration Failed",
             migrationResult.message ||
               "Failed to migrate. Please check your settings and try again.",
@@ -197,20 +153,16 @@ function App() {
         await fetchData();
 
         // Show success message
-        modals.showError(
-          "Migration Complete",
-          migrationResult.message,
-          "success",
-        );
+        toast.success("Migration Complete", migrationResult.message);
       } catch (error) {
         console.error("Migration failed:", error);
-        modals.showError(
+        toast.error(
           "Migration Failed",
           "Failed to migrate icons. Please try again later.",
         );
       }
     },
-    [modals, fetchData, setMigrationDismissed],
+    [toast, fetchData, setMigrationDismissed],
   );
 
   // Handle migration cancel
@@ -256,15 +208,15 @@ function App() {
         const isDockerRunning =
           Array.isArray(containersData) && containersData.length > 0;
 
-        if (isDockerRunning) {
+        if (isDockerRunning && !migrationDismissed) {
           const migrationCheck = await shortcutsApi.checkMigration();
           if (migrationCheck.needsMigration) {
             console.log(
               `Migration needed for ${migrationCheck.count} shortcut(s)`,
             );
 
-            // Show migration modal with list of shortcuts
-            showMigrationModal(migrationCheck.shortcuts);
+            // Open migration modal - it will load previews automatically
+            setMigrationModalOpen(true);
           }
         }
       } catch (error) {
@@ -279,7 +231,7 @@ function App() {
   }, [
     fetchData,
     fetchTailscaleInfo,
-    showMigrationModal,
+    migrationDismissed,
     migrationSettingsLoaded,
   ]);
 
@@ -499,27 +451,49 @@ function App() {
 
       {/* Docker Not Running Warning */}
       {!loading &&
+        !dockerWarningDismissed &&
         containers.length === 0 &&
-        shortcuts.some((s) => s.container_id) && (
+        shortcuts.some((s) => s.container_name || s.container_match_name) && (
           <div className="bg-yellow-500/10 border border-yellow-500/20 text-yellow-200 px-4 py-3 mx-6 mt-4 rounded-lg">
-            <div className="flex items-center gap-2">
-              <svg
-                className="w-5 h-5 text-yellow-400"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <svg
+                  className="w-5 h-5 text-yellow-400 flex-shrink-0"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                  />
+                </svg>
+                <span className="text-sm">
+                  <strong>Docker is not running.</strong> Start Docker Desktop
+                  to see and manage your containers.
+                </span>
+              </div>
+              <button
+                onClick={() => setDockerWarningDismissed(true)}
+                className="text-yellow-400 hover:text-yellow-300 transition-colors flex-shrink-0"
+                aria-label="Dismiss warning"
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                />
-              </svg>
-              <span className="text-sm">
-                <strong>Docker is not running.</strong> Start Docker Desktop to
-                see and manage your containers.
-              </span>
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
             </div>
           </div>
         )}
@@ -579,7 +553,6 @@ function App() {
         currentTheme={theme}
         onThemeChange={updateTheme}
         onMigrate={handleMigration}
-        onShowMigrationModal={showMigrationModal}
       />
 
       <AnimatePresence>
@@ -592,7 +565,9 @@ function App() {
               tailscaleInfo={tailscaleInfo}
               onSave={fetchData}
               onClose={modals.closeShortcutModal}
-              onError={modals.showError}
+              onError={(title: string, message: string) =>
+                toast.error(title, message)
+              }
             />
           </Suspense>
         )}
@@ -619,17 +594,9 @@ function App() {
         type={modals.confirmModal.type}
       />
 
-      <ErrorModal
-        isOpen={modals.errorModal.isOpen}
-        title={modals.errorModal.title}
-        message={modals.errorModal.message}
-        onClose={modals.closeError}
-        type={modals.errorModal.type}
-      />
-
       <MigrationModal
         isOpen={migrationModalOpen}
-        shortcuts={migrationShortcuts}
+        shortcuts={[]} // No longer used - modal loads its own data
         onConfirm={handleMigrationConfirm}
         onCancel={handleMigrationCancel}
       />

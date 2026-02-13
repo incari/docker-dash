@@ -3,12 +3,13 @@
  */
 
 import { Router, Request, Response } from "express";
+import type { Router as RouterType } from "express";
 import fs from "fs";
 import path from "path";
 import { uploadDir } from "../config/multer.js";
 import { db } from "../config/database.js";
 
-const router = Router();
+const router: RouterType = Router();
 
 interface UploadedFile {
   filename: string;

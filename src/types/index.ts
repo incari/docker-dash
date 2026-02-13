@@ -12,6 +12,7 @@ export interface ShortcutRow {
   url: string | null;
   container_id: string | null;
   container_name: string | null;
+  container_match_name: string | null; // Stable identifier for matching across container restarts
   is_favorite: number;
   created_at: string;
   updated_at: string;
@@ -21,6 +22,7 @@ export interface ShortcutRow {
   use_tailscale: number | null;
   original_container_name: string | null;
   section_name?: string | null;
+  compose_project: string | null;
 }
 
 export interface SectionRow {
@@ -50,12 +52,14 @@ export interface ShortcutResponse {
   url: string | null;
   container_id: string | null;
   container_name: string | null;
+  container_match_name: string | null;
   is_favorite: boolean;
   position: number;
   section_id: number | null;
   icon_type: string | null;
   use_tailscale: boolean;
   section_name?: string | null;
+  compose_project: string | null;
 }
 
 export interface SectionResponse {
@@ -106,7 +110,7 @@ export interface CreateShortcutBody {
 }
 
 export interface UpdateShortcutBody extends Partial<CreateShortcutBody> {
-  icon_type?: 'lucide' | 'image' | 'upload';
+  icon_type?: "lucide" | "image" | "upload";
   section_id?: string | number | null;
 }
 
@@ -131,4 +135,3 @@ export interface ReorderItem {
   id: number;
   position: number;
 }
-

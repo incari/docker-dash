@@ -1,6 +1,6 @@
 {
   "name": "docker-dash",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Docker Dashboard for managing containers and shortcuts",
   "type": "module",
   "main": "dist/server.js",
@@ -14,7 +14,7 @@
     "docker:build": "docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/incari/docker-dash:latest -t ghcr.io/incari/docker-dashboard:latest .",
     "docker:push": "docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/incari/docker-dash:latest -t ghcr.io/incari/docker-dashboard:latest --push .",
     "docker:push:dev": "docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/incari/docker-dash:dev --push .",
-    "docker:push:dev:fast": "docker build -t ghcr.io/incari/docker-dash:dev . && docker push ghcr.io/incari/docker-dash:dev",
+    "docker:push:dev:version": "VERSION=$(node -p \"require('./package.json').version\") && docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/incari/docker-dash:${VERSION}-dev --push .",
     "docker:login": "gh auth token | docker login ghcr.io -u incari --password-stdin",
     "release:patch": "npm version patch && git push && git push --tags",
     "release:minor": "npm version minor && git push && git push --tags",

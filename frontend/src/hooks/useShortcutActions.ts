@@ -4,7 +4,7 @@ import type { DockerContainer, Shortcut } from "../types";
 import { getContainerIcon } from "../utils/dockerIconVault";
 
 interface ShortcutActionsOptions {
-  onRefresh: () => void;
+  onRefresh: (showLoading?: boolean) => void;
   onError: (title: string, message: string) => void;
   showDeleteConfirm: (onConfirm: () => Promise<void>) => void;
 }
@@ -30,6 +30,7 @@ interface ShortcutActions {
 export function useShortcutActions(
   options: ShortcutActionsOptions,
   setShortcuts: React.Dispatch<React.SetStateAction<Shortcut[]>>,
+  shortcuts: Shortcut[],
 ): ShortcutActions {
   const { onRefresh, onError, showDeleteConfirm } = options;
 
@@ -62,6 +63,22 @@ export function useShortcutActions(
       // Use container base name for stable matching (removes instance number suffix)
       const containerBaseName = getContainerBaseName(container.name);
 
+      // Check if a shortcut already exists for this container
+      const existingShortcut = shortcuts.find(
+        (s) =>
+          s.container_name === containerBaseName ||
+          s.container_match_name === containerBaseName,
+      );
+
+      if (existingShortcut) {
+        // If shortcut exists, just refresh to show it (or optionally show a message)
+        onError(
+          "Shortcut Already Exists",
+          `A shortcut for "${container.name}" already exists.`,
+        );
+        return;
+      }
+
       const formData = new FormData();
       formData.append("display_name", container.name);
       if (port) formData.append("port", String(port));
@@ -84,7 +101,7 @@ export function useShortcutActions(
         );
       }
     },
-    [onRefresh, onError],
+    [shortcuts, onRefresh, onError],
   );
 
   const handleQuickAddAsFavorite = useCallback(
@@ -94,6 +111,28 @@ export function useShortcutActions(
 
       // Use container base name for stable matching (removes instance number suffix)
       const containerBaseName = getContainerBaseName(container.name);
+
+      // Check if a shortcut already exists for this container
+      const existingShortcut = shortcuts.find(
+        (s) =>
+          s.container_name === containerBaseName ||
+          s.container_match_name === containerBaseName,
+      );
+
+      if (existingShortcut) {
+        // If shortcut exists, update it to mark as favorite
+        try {
+          await shortcutsApi.toggleFavorite(existingShortcut.id, true);
+          onRefresh();
+        } catch (err: any) {
+          console.error("Failed to mark shortcut as favorite:", err);
+          onError(
+            "Error Updating Favorite",
+            err.response?.data?.error || "Failed to update favorite status",
+          );
+        }
+        return;
+      }
 
       const formData = new FormData();
       formData.append("display_name", container.name);
@@ -118,7 +157,7 @@ export function useShortcutActions(
         );
       }
     },
-    [onRefresh, onError],
+    [shortcuts, onRefresh, onError],
   );
 
   const handleToggleFavorite = useCallback(

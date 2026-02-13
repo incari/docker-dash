@@ -11,6 +11,7 @@ export { ShortcutCardIcon } from "./ShortcutCardIcon";
 export { ShortcutCardList } from "./ShortcutCardList";
 export { ShortcutCardTable } from "./ShortcutCardTable";
 export { ContainerCard } from "./ContainerCard";
+export { DynamicIcon } from "./DynamicIcon";
 export { ShortcutModal } from "./ShortcutModal";
 export { SectionModal } from "./SectionModal";
 export { ViewSelector } from "./ViewSelector";
@@ -19,4 +20,9 @@ export { LanguageSelector } from "./LanguageSelector";
 export { Footer } from "./Footer";
 
 // Dashboard components
-export { EditModeBanner, EmptyDashboardState, SectionBlock } from "./dashboard";
+export {
+  EditModeBanner,
+  EmptyDashboardState,
+  SectionBlock,
+  ComposeGroupBlock,
+} from "./dashboard";

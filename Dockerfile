@@ -19,10 +19,17 @@ RUN apk update && apk add --no-cache build-base python3
 RUN corepack enable && corepack prepare pnpm@latest --activate
 WORKDIR /app
 COPY package*.json ./
+COPY pnpm-lock.yaml* ./
 ENV npm_config_build_from_source=true
-RUN pnpm install --prod --shamefully-hoist
+# Install ALL dependencies (including devDependencies for TypeScript compilation)
+RUN pnpm install --frozen-lockfile || pnpm install
 # Compile better-sqlite3 native module
 RUN cd node_modules/better-sqlite3 && npm run build-release
+# Copy TypeScript source and compile
+COPY src ./src
+RUN pnpm run build:backend
+# Now prune devDependencies for production
+RUN pnpm prune --prod
 # Clean up unnecessary files to reduce size (ignore errors for missing paths)
 RUN rm -rf node_modules/better-sqlite3/deps \
     node_modules/better-sqlite3/src \
@@ -47,11 +54,14 @@ COPY package*.json ./
 # Copy custom icon mappings (shared between backend and frontend)
 COPY customIconMappings.json ./
 
-# Copy backend source
-COPY src ./src
+# Copy compiled backend (from TypeScript build)
+# Backend files: server.js, config/, routes/, database/, types/, utils/
+COPY --from=backend-builder /app/dist ./dist
 
-# Copy built frontend
-COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
+# Copy built frontend to the same dist/ folder (files don't conflict)
+# Frontend files: index.html, assets/, manifest.json, sw.js, etc.
+# The server at dist/server.js looks for frontend at path.join(__dirname, "../dist") = /app/dist
+COPY --from=frontend-builder /app/frontend/dist ./dist
 
 # Create data directory
 RUN mkdir -p /app/data
@@ -68,4 +78,4 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1
 
-CMD ["node", "src/server.js"]
+CMD ["node", "dist/server.js"]

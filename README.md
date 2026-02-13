@@ -2,6 +2,35 @@
 
 A modern, responsive dashboard for managing your Docker containers. Create shortcuts (favorites) for your most used containers, organize them into sections, and access them quickly.
 
+## Troubleshooting
+
+> [!IMPORTANT]
+> We are still on development and we are working on new features that can cause some issues with your current installation. Here are some common issues and how to fix them.
+
+### Container not starting after update
+
+If you see an error like `Cannot find module '/app/src/server.js'` after updating, your Docker has cached an old image. Force a fresh pull:
+
+```bash
+# Stop and remove the container
+docker stop docker-dash
+docker rm docker-dash
+
+# Remove the cached image
+docker rmi ghcr.io/incari/docker-dash:latest
+# or for dev tag (experimental):
+docker rmi ghcr.io/incari/docker-dash:dev
+
+# Pull the fresh image
+docker pull ghcr.io/incari/docker-dash:latest
+#or for dev tag
+docker pull ghcr.io/incari/docker-dash:dev
+
+# Recreate the container
+```
+
+Then recreate the container from your Docker UI (Unraid, Portainer, etc.).
+
 ## Installation
 
 ## Running with Docker

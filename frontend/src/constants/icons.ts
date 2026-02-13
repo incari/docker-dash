@@ -1,9 +1,11 @@
 // Direct imports from lucide-react for better tree-shaking and faster dev server boot
 // See: https://lucide.dev/guide/packages/lucide-react#nextjs-example
 import Activity from "lucide-react/dist/esm/icons/activity";
+import AlertCircle from "lucide-react/dist/esm/icons/alert-circle";
 import AlertTriangle from "lucide-react/dist/esm/icons/alert-triangle";
 import Archive from "lucide-react/dist/esm/icons/archive";
 import ArrowLeft from "lucide-react/dist/esm/icons/arrow-left";
+import ArrowRight from "lucide-react/dist/esm/icons/arrow-right";
 import BatteryCharging from "lucide-react/dist/esm/icons/battery-charging";
 import Bell from "lucide-react/dist/esm/icons/bell";
 import Book from "lucide-react/dist/esm/icons/book";
@@ -46,6 +48,7 @@ import LayoutGrid from "lucide-react/dist/esm/icons/layout-grid";
 import LayoutList from "lucide-react/dist/esm/icons/layout-list";
 import LinkIcon from "lucide-react/dist/esm/icons/link";
 import Linkedin from "lucide-react/dist/esm/icons/linkedin";
+import Loader2 from "lucide-react/dist/esm/icons/loader-2";
 import Lock from "lucide-react/dist/esm/icons/lock";
 import Mail from "lucide-react/dist/esm/icons/mail";
 import Maximize2 from "lucide-react/dist/esm/icons/maximize-2";
@@ -83,9 +86,11 @@ import Zap from "lucide-react/dist/esm/icons/zap";
 // Re-export all icons for use across the application
 export {
   Activity,
+  AlertCircle,
   AlertTriangle,
   Archive,
   ArrowLeft,
+  ArrowRight,
   BatteryCharging,
   Bell,
   Book,
@@ -128,6 +133,7 @@ export {
   LayoutList,
   LinkIcon,
   Linkedin,
+  Loader2,
   Lock,
   Mail,
   Maximize2,

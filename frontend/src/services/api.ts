@@ -57,7 +57,7 @@ export const shortcutsApi = {
   },
 
   migrateIcons: async (
-    iconIds: number[],
+    updates: Array<{ id: number; icon_url: string }>,
   ): Promise<{
     success: boolean;
     updated: number;
@@ -66,7 +66,7 @@ export const shortcutsApi = {
     message: string;
   }> => {
     const response = await axios.post(`${API_BASE}/shortcuts/migrate-icons`, {
-      iconIds,
+      updates,
     });
     return response.data;
   },
@@ -92,6 +92,21 @@ export const shortcutsApi = {
     }>;
   }> => {
     const response = await axios.get(`${API_BASE}/shortcuts/check-migration`);
+    return response.data;
+  },
+
+  previewIcons: async (): Promise<{
+    count: number;
+    shortcuts: Array<{
+      id: number;
+      display_name: string;
+      container_name: string;
+      current_icon: string | null;
+      suggested_icon: string | null;
+      is_custom_mapping: boolean;
+    }>;
+  }> => {
+    const response = await axios.get(`${API_BASE}/shortcuts/preview-icons`);
     return response.data;
   },
 };

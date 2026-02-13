@@ -1,8 +1,16 @@
 /**
  * Database migrations for Docker Dashboard
+ *
+ * Migration system with version tracking to ensure migrations only run once.
  */
 
-import { db, columnExists, getTableInfo } from "../config/database.js";
+import {
+  db,
+  columnExists,
+  getTableInfo,
+  hasMigrationRun,
+  recordMigration,
+} from "../config/database.js";
 import Docker from "dockerode";
 
 const docker = new Docker({
@@ -10,42 +18,88 @@ const docker = new Docker({
 });
 
 /**
+ * Run a migration only if it hasn't been run before
+ */
+function runOnce(name: string, migrationFn: () => void): void {
+  if (hasMigrationRun(name)) {
+    return;
+  }
+  try {
+    console.log(`[MIGRATION] Running: ${name}`);
+    migrationFn();
+    recordMigration(name);
+    console.log(`[MIGRATION] Completed: ${name}`);
+  } catch (err) {
+    console.error(`[MIGRATION] Failed: ${name}`, err);
+  }
+}
+
+/**
+ * Run an async migration only if it hasn't been run before
+ */
+async function runOnceAsync(
+  name: string,
+  migrationFn: () => Promise<void>,
+): Promise<void> {
+  if (hasMigrationRun(name)) {
+    return;
+  }
+  try {
+    console.log(`[MIGRATION] Running: ${name}`);
+    await migrationFn();
+    recordMigration(name);
+    console.log(`[MIGRATION] Completed: ${name}`);
+  } catch (err) {
+    console.error(`[MIGRATION] Failed: ${name}`, err);
+  }
+}
+
+/**
  * Run all migrations
  */
 export async function runMigrations(): Promise<void> {
   console.log("[MIGRATIONS] Starting database migrations...");
 
-  // Basic column migrations
+  // Legacy column migrations (for existing databases)
   addColumnIfMissing("shortcuts", "url", "TEXT");
   addColumnIfMissing("shortcuts", "container_id", "TEXT");
   addColumnIfMissing("shortcuts", "is_favorite", "INTEGER DEFAULT 0");
   addColumnIfMissing("shortcuts", "use_tailscale", "INTEGER DEFAULT 0");
   addColumnIfMissing("shortcuts", "section_id", "INTEGER");
   addColumnIfMissing("shortcuts", "icon_type", "TEXT");
-
-  // Position migration
-  migratePositionColumn();
-
-  // Settings migration
+  addColumnIfMissing("shortcuts", "compose_project", "TEXT");
+  addColumnIfMissing("shortcuts", "container_name", "TEXT");
   addColumnIfMissing("settings", "migration_dismissed", "INTEGER DEFAULT 0");
 
-  // Display name migration
-  migrateDisplayNameColumn();
+  // Position migration
+  runOnce("001_add_position_column", migratePositionColumn);
 
-  // Container name migration
-  await migrateContainerNameColumn();
+  // Display name migration
+  runOnce("002_add_display_name_column", migrateDisplayNameColumn);
+
+  // Container name migration (async - needs Docker)
+  await runOnceAsync("003_migrate_container_names", migrateContainerNameColumn);
 
   // Duplicate cleanup
-  cleanupDuplicates();
+  runOnce("004_cleanup_duplicates", cleanupDuplicates);
 
   // Container base name migration
-  migrateContainerBaseName();
+  runOnce("005_normalize_container_base_names", migrateContainerBaseName);
 
   // Remove name column (final step)
-  removeNameColumn();
+  runOnce("006_remove_name_column", removeNameColumn);
 
   // Port nullable migration
-  migratePortNullable();
+  runOnce("007_make_port_nullable", migratePortNullable);
+
+  // NEW: Add container_match_name column and populate it
+  runOnce("008_add_container_match_name", migrateContainerMatchName);
+
+  // NEW: Add database indexes
+  runOnce("009_add_indexes", addDatabaseIndexes);
+
+  // NEW: Clean up deprecated columns (container_id is unreliable)
+  runOnce("010_cleanup_deprecated_columns", cleanupDeprecatedColumns);
 
   console.log("[MIGRATIONS] All migrations complete");
 }
@@ -313,36 +367,44 @@ function removeNameColumn(): void {
       ).run();
 
       db.transaction(() => {
-        const currentTableInfo = getTableInfo("shortcuts");
-        const currentColumns = currentTableInfo
+        // Get columns from old table, excluding 'name'
+        const oldTableCols = getTableInfo("shortcuts")
           .map((c) => c.name)
           .filter((c) => c !== "name");
 
         db.exec("ALTER TABLE shortcuts RENAME TO shortcuts_old");
+
+        // Create new table with ALL current columns (including compose_project, container_match_name)
         db.exec(`
           CREATE TABLE shortcuts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             display_name TEXT NOT NULL,
             description TEXT,
-            icon TEXT DEFAULT 'cube',
+            icon TEXT DEFAULT 'Server',
+            icon_type TEXT,
             port INTEGER,
             url TEXT,
             container_id TEXT,
             container_name TEXT,
-            is_favorite INTEGER DEFAULT 1,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            container_match_name TEXT,
+            compose_project TEXT,
+            section_id INTEGER REFERENCES sections(id) ON DELETE SET NULL,
             position INTEGER DEFAULT 0,
-            section_id INTEGER,
-            icon_type TEXT,
+            is_favorite INTEGER DEFAULT 0,
             use_tailscale INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
             original_container_name TEXT
           )
         `);
 
-        const columnsToInsert = currentColumns.join(", ");
+        // Only copy columns that exist in BOTH old and new tables
+        const newTableCols = getTableInfo("shortcuts").map((c) => c.name);
+        const colsToCopy = oldTableCols.filter((c) => newTableCols.includes(c));
+        const colsStr = colsToCopy.join(", ");
+
         db.exec(
-          `INSERT INTO shortcuts (${columnsToInsert}) SELECT ${columnsToInsert} FROM shortcuts_old`,
+          `INSERT INTO shortcuts (${colsStr}) SELECT ${colsStr} FROM shortcuts_old`,
         );
         db.exec("DROP TABLE shortcuts_old");
       })();
@@ -361,49 +423,39 @@ function migratePortNullable(): void {
     try {
       console.log("[MIGRATION] Making port column nullable...");
       db.transaction(() => {
+        // Get columns from old table BEFORE renaming
+        const oldCols = getTableInfo("shortcuts").map((c) => c.name);
+
         db.exec("ALTER TABLE shortcuts RENAME TO shortcuts_old");
+
+        // Create new table with ALL current columns (including compose_project, container_match_name)
         db.exec(`
           CREATE TABLE shortcuts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             display_name TEXT NOT NULL,
             description TEXT,
-            icon TEXT DEFAULT 'cube',
+            icon TEXT DEFAULT 'Server',
+            icon_type TEXT,
             port INTEGER,
             url TEXT,
             container_id TEXT,
             container_name TEXT,
-            is_favorite INTEGER DEFAULT 1,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            container_match_name TEXT,
+            compose_project TEXT,
+            section_id INTEGER REFERENCES sections(id) ON DELETE SET NULL,
             position INTEGER DEFAULT 0,
-            section_id INTEGER,
-            icon_type TEXT,
+            is_favorite INTEGER DEFAULT 0,
             use_tailscale INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
             original_container_name TEXT
           )
         `);
 
-        const oldCols = getTableInfo("shortcuts_old").map((c) => c.name);
-        const newCols = [
-          "id",
-          "display_name",
-          "description",
-          "icon",
-          "port",
-          "url",
-          "container_id",
-          "container_name",
-          "is_favorite",
-          "created_at",
-          "updated_at",
-          "position",
-          "section_id",
-          "icon_type",
-          "use_tailscale",
-          "original_container_name",
-        ];
-        const intersect = newCols.filter((c) => oldCols.includes(c));
-        const colsStr = intersect.join(", ");
+        // Only copy columns that exist in BOTH old and new tables
+        const newCols = getTableInfo("shortcuts").map((c) => c.name);
+        const colsToCopy = oldCols.filter((c) => newCols.includes(c));
+        const colsStr = colsToCopy.join(", ");
 
         db.exec(
           `INSERT INTO shortcuts (${colsStr}) SELECT ${colsStr} FROM shortcuts_old`,
@@ -414,5 +466,179 @@ function migratePortNullable(): void {
     } catch (err) {
       console.error("[MIGRATION] Failed to make port nullable:", err);
     }
+  }
+}
+
+/**
+ * Migration 008: Add container_match_name column
+ * This column stores a normalized, stable identifier for matching containers
+ * It's populated from container_name using the same normalization logic
+ */
+function migrateContainerMatchName(): void {
+  // Add the column if missing
+  if (!columnExists("shortcuts", "container_match_name")) {
+    try {
+      db.exec("ALTER TABLE shortcuts ADD COLUMN container_match_name TEXT");
+      console.log("[MIGRATION] Added container_match_name column");
+    } catch (err) {
+      console.error("[MIGRATION] Failed to add container_match_name:", err);
+      return;
+    }
+  }
+
+  // Populate from existing container_name (ONLY for container-linked shortcuts)
+  try {
+    // Only get shortcuts that have a container_name but no container_match_name yet
+    // Custom links (no container_name) should NOT have container_match_name
+    const shortcuts = db
+      .prepare(
+        "SELECT id, container_name FROM shortcuts WHERE container_match_name IS NULL AND container_name IS NOT NULL",
+      )
+      .all() as Array<{
+      id: number;
+      container_name: string;
+    }>;
+
+    if (shortcuts.length === 0) {
+      console.log("[MIGRATION] No shortcuts need container_match_name update");
+      return;
+    }
+
+    const updateStmt = db.prepare(
+      "UPDATE shortcuts SET container_match_name = ? WHERE id = ?",
+    );
+
+    let updated = 0;
+    for (const shortcut of shortcuts) {
+      // Only use container_name - never fall back to display_name
+      // This ensures custom links (without container_name) don't get a container_match_name
+      const sourceName = shortcut.container_name;
+      if (sourceName) {
+        // Normalize: lowercase, remove instance numbers
+        const matchName = sourceName
+          .toLowerCase()
+          .replace(/^\//, "") // Remove leading slash
+          .replace(/-\d+$/, "") // Remove instance numbers
+          .trim();
+
+        if (matchName) {
+          updateStmt.run(matchName, shortcut.id);
+          updated++;
+        }
+      }
+    }
+
+    console.log(
+      `[MIGRATION] Populated container_match_name for ${updated} shortcuts`,
+    );
+  } catch (err) {
+    console.error("[MIGRATION] Failed to populate container_match_name:", err);
+  }
+}
+
+/**
+ * Migration 009: Add database indexes for performance
+ */
+function addDatabaseIndexes(): void {
+  const indexes = [
+    {
+      name: "idx_shortcuts_section_position",
+      sql: "CREATE INDEX IF NOT EXISTS idx_shortcuts_section_position ON shortcuts(section_id, position)",
+    },
+    {
+      name: "idx_shortcuts_container_match",
+      sql: "CREATE INDEX IF NOT EXISTS idx_shortcuts_container_match ON shortcuts(container_match_name)",
+    },
+    {
+      name: "idx_sections_position",
+      sql: "CREATE INDEX IF NOT EXISTS idx_sections_position ON sections(position)",
+    },
+  ];
+
+  for (const index of indexes) {
+    try {
+      db.exec(index.sql);
+      console.log(`[MIGRATION] Created index: ${index.name}`);
+    } catch (err) {
+      // Index might already exist
+      console.log(`[MIGRATION] Index ${index.name} already exists or failed`);
+    }
+  }
+}
+
+/**
+ * Migration 010: Cleanup deprecated columns
+ * Note: We keep container_id for now as some features may still reference it
+ * but we document that it's unreliable and should not be used for matching
+ *
+ * This migration removes the unused original_container_name column
+ */
+function cleanupDeprecatedColumns(): void {
+  const tableInfo = getTableInfo("shortcuts");
+  const hasOriginalContainerName = tableInfo.some(
+    (c) => c.name === "original_container_name",
+  );
+
+  if (!hasOriginalContainerName) {
+    console.log("[MIGRATION] No deprecated columns to clean up");
+    return;
+  }
+
+  try {
+    console.log("[MIGRATION] Removing original_container_name column...");
+
+    db.transaction(() => {
+      // Get current columns excluding the one we want to remove
+      const currentColumns = getTableInfo("shortcuts")
+        .map((c) => c.name)
+        .filter((c) => c !== "original_container_name");
+
+      db.exec("ALTER TABLE shortcuts RENAME TO shortcuts_old");
+
+      // Create new table with updated schema (including container_match_name)
+      db.exec(`
+        CREATE TABLE shortcuts (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          display_name TEXT NOT NULL,
+          description TEXT,
+          icon TEXT DEFAULT 'Server',
+          icon_type TEXT,
+          port INTEGER,
+          url TEXT,
+          container_id TEXT,
+          container_name TEXT,
+          container_match_name TEXT,
+          compose_project TEXT,
+          section_id INTEGER REFERENCES sections(id) ON DELETE SET NULL,
+          position INTEGER DEFAULT 0,
+          is_favorite INTEGER DEFAULT 0,
+          use_tailscale INTEGER DEFAULT 0,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      // Build list of columns that exist in both old and new tables
+      const newTableCols = getTableInfo("shortcuts").map((c) => c.name);
+      const colsToCopy = currentColumns.filter((c) => newTableCols.includes(c));
+      const colsStr = colsToCopy.join(", ");
+
+      db.exec(
+        `INSERT INTO shortcuts (${colsStr}) SELECT ${colsStr} FROM shortcuts_old`,
+      );
+      db.exec("DROP TABLE shortcuts_old");
+
+      // Recreate indexes
+      db.exec(
+        "CREATE INDEX IF NOT EXISTS idx_shortcuts_section_position ON shortcuts(section_id, position)",
+      );
+      db.exec(
+        "CREATE INDEX IF NOT EXISTS idx_shortcuts_container_match ON shortcuts(container_match_name)",
+      );
+    })();
+
+    console.log("[MIGRATION] Removed original_container_name column");
+  } catch (err) {
+    console.error("[MIGRATION] Failed to cleanup deprecated columns:", err);
   }
 }

@@ -10,46 +10,19 @@ import { useTranslation } from "react-i18next";
 import { LanguageSelector } from "./LanguageSelector";
 import { ThemeSelector } from "./ThemeSelector";
 import type { ThemeColors } from "../types/themeTypes";
-import { shortcutsApi } from "../services/api";
 
 interface FooterProps {
   currentTheme: ThemeColors;
   onThemeChange: (theme: ThemeColors) => void;
-  onMigrate: () => Promise<void>;
-  onShowMigrationModal: (
-    shortcuts: Array<{
-      id: number;
-      display_name: string;
-      description: string;
-      icon: string;
-    }>,
-    isManualTrigger?: boolean,
-  ) => void;
+  onMigrate: () => void;
 }
 
 export function Footer({
   currentTheme,
   onThemeChange,
   onMigrate,
-  onShowMigrationModal,
 }: FooterProps) {
   const { t } = useTranslation();
-
-  const handleMigrationClick = async () => {
-    // Check if migration is needed first
-    try {
-      const migrationCheck = await shortcutsApi.checkMigration();
-      if (migrationCheck.needsMigration) {
-        // Show the modal with the list of shortcuts (manual trigger)
-        onShowMigrationModal(migrationCheck.shortcuts, true);
-      } else {
-        // Show info that no migration is needed
-        alert("All shortcuts are already using docker-icon-vault icons!");
-      }
-    } catch (error) {
-      console.error("Failed to check migration:", error);
-    }
-  };
 
   return (
     <footer className="border-t border-white/5 bg-slate-900 mt-auto">
@@ -101,7 +74,7 @@ export function Footer({
 
             {/* Migration Button */}
             <button
-              onClick={handleMigrationClick}
+              onClick={onMigrate}
               className="flex items-center gap-1.5 sm:gap-2 bg-slate-800/50 hover:bg-slate-800 border border-white/5 hover:border-blue-500/30 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg transition-all duration-300"
               title="Update shortcuts to use official Docker icons"
             >

@@ -3,11 +3,17 @@
  */
 
 import { Router, Request, Response } from "express";
+import type { Router as RouterType } from "express";
 import Docker from "dockerode";
 import { docker } from "../config/docker.js";
 import { getTailscaleIP } from "../utils/tailscale.js";
+import { getContainerBaseName } from "../utils/containerMatching.js";
+import {
+  isDockerUnavailable,
+  logDockerUnavailable,
+} from "../utils/dockerErrors.js";
 
-const router = Router();
+const router: RouterType = Router();
 
 interface ContainerPort {
   private: number;
@@ -23,10 +29,14 @@ interface FormattedContainer {
   status: string;
   description: string;
   ports: ContainerPort[];
+  // Docker Compose grouping info
+  composeProject: string | null;
+  composeService: string | null;
 }
 
 /**
  * Helper function to find a container by name or ID
+ * Uses the centralized getContainerBaseName for consistent matching
  */
 async function findContainer(
   nameOrId: string,
@@ -39,12 +49,6 @@ async function findContainer(
   } catch {
     // Not found by ID, try to find by name
   }
-
-  // Get container base name for matching
-  const getContainerBaseName = (name: string): string => {
-    if (!name) return name;
-    return name.replace(/-\d+$/, "").toLowerCase();
-  };
 
   // Try to find by container_name (base name)
   const containers = await docker.listContainers({ all: true });
@@ -124,15 +128,16 @@ router.get(
             status: c.Status,
             description: description,
             ports: uniquePorts,
+            composeProject: labels["com.docker.compose.project"] || null,
+            composeService: labels["com.docker.compose.service"] || null,
           };
         })
         .filter((c): c is FormattedContainer => c !== null);
 
       res.json(formatted);
     } catch (error: unknown) {
-      const err = error as { code?: string; errno?: number };
-      if (err.code === "ECONNREFUSED" || err.errno === -61) {
-        console.warn("Docker is not running. Returning empty container list.");
+      if (isDockerUnavailable(error)) {
+        logDockerUnavailable("GET /api/containers");
         res.json([]);
         return;
       }
@@ -155,6 +160,13 @@ router.post(
       await container.start();
       res.json({ success: true });
     } catch (error) {
+      if (isDockerUnavailable(error)) {
+        logDockerUnavailable("POST /api/containers/:id/start");
+        res
+          .status(503)
+          .json({ error: "Docker is not running. Please start Docker Desktop." });
+        return;
+      }
       console.error("Error starting container:", error);
       res.status(500).json({ error: "Failed to start container" });
     }
@@ -174,6 +186,13 @@ router.post(
       await container.stop();
       res.json({ success: true });
     } catch (error) {
+      if (isDockerUnavailable(error)) {
+        logDockerUnavailable("POST /api/containers/:id/stop");
+        res
+          .status(503)
+          .json({ error: "Docker is not running. Please start Docker Desktop." });
+        return;
+      }
       console.error("Error stopping container:", error);
       res.status(500).json({ error: "Failed to stop container" });
     }
@@ -193,6 +212,13 @@ router.post(
       await container.restart();
       res.json({ success: true });
     } catch (error) {
+      if (isDockerUnavailable(error)) {
+        logDockerUnavailable("POST /api/containers/:id/restart");
+        res
+          .status(503)
+          .json({ error: "Docker is not running. Please start Docker Desktop." });
+        return;
+      }
       console.error("Error restarting container:", error);
       res.status(500).json({ error: "Failed to restart container" });
     }
