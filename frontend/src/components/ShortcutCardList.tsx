@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo, useCallback } from "react";
 import {
   Settings,
   Trash2,
@@ -25,8 +25,9 @@ interface ExtendedShortcutCardProps extends ShortcutCardProps {
 
 /**
  * List view shortcut card - horizontal layout
+ * Memoized to prevent unnecessary re-renders
  */
-export const ShortcutCardList: React.FC<ExtendedShortcutCardProps> = ({
+export const ShortcutCardList: React.FC<ExtendedShortcutCardProps> = React.memo(({
   shortcut,
   container,
   tailscaleIP,
@@ -42,24 +43,23 @@ export const ShortcutCardList: React.FC<ExtendedShortcutCardProps> = ({
   isOver,
 }) => {
   const { t } = useTranslation();
-  const isRunning = container?.state === "running";
 
-  // Determine if star should be shown
-  const showStar = isEditMode || alwaysShowStar;
+  // Memoize derived state
+  const isRunning = useMemo(() => container?.state === "running", [container?.state]);
+  const showStar = useMemo(() => isEditMode || alwaysShowStar, [isEditMode, alwaysShowStar]);
 
-  // Get link and subtitle using shared utility
-  const { link, subtitle } = getShortcutLink(
-    shortcut,
-    container,
-    tailscaleIP,
-    60,
+  // Memoize link calculation (expensive operation)
+  const { link, subtitle } = useMemo(
+    () => getShortcutLink(shortcut, container, tailscaleIP, 60),
+    [shortcut, container, tailscaleIP],
   );
 
-  const handleCardClick = () => {
+  // Memoize event handlers
+  const handleCardClick = useCallback(() => {
     if (!isEditMode && link) {
       window.open(link, "_blank");
     }
-  };
+  }, [isEditMode, link]);
 
   return (
     <div
@@ -257,4 +257,4 @@ export const ShortcutCardList: React.FC<ExtendedShortcutCardProps> = ({
       </div>
     </div>
   );
-};
+});

@@ -26,7 +26,7 @@ const ShortcutModal = lazy(() =>
 import { DashboardView } from "./views/DashboardView";
 import { ManagementView } from "./views/ManagementView";
 import { useTheme } from "./hooks/useTheme";
-import { useDashboardData } from "./hooks/useDashboardData";
+import { useDashboardSWR } from "./hooks/useSWRData";
 import { useContainerActions } from "./hooks/useContainerActions";
 import { useShortcutActions } from "./hooks/useShortcutActions";
 import { useSectionActions } from "./hooks/useSectionActions";
@@ -34,7 +34,7 @@ import { useModals } from "./hooks/useModals";
 import { useInstallPrompt } from "./hooks/useInstallPrompt";
 import { useViewSettings } from "./hooks/useViewSettings";
 import { useMigrationSettings } from "./hooks/useMigrationSettings";
-import { shortcutsApi, containersApi } from "./services/api";
+import { shortcutsApi } from "./services/api";
 import type { Section, Shortcut } from "./types";
 
 function App() {
@@ -60,17 +60,18 @@ function App() {
     setMigrationDismissed,
   } = useMigrationSettings();
   const { showInstallPrompt, handleInstallClick } = useInstallPrompt();
+
+  // SWR-based data fetching with automatic revalidation and deduplication
   const {
     shortcuts,
     sections,
     containers,
     tailscaleInfo,
     loading,
-    fetchData,
-    fetchTailscaleInfo,
-    setShortcuts,
-    setSections,
-  } = useDashboardData();
+    refreshAll,
+    mutateShortcuts,
+    mutateSections,
+  } = useDashboardSWR();
 
   const modals = useModals();
 
@@ -78,7 +79,7 @@ function App() {
   // Memoize action hook options to prevent unnecessary re-initialization
   const shortcutActionsOptions = useMemo(
     () => ({
-      onRefresh: fetchData,
+      onRefresh: refreshAll,
       onError: (title: string, message: string) => toast.error(title, message),
       showDeleteConfirm: (onConfirm: () => Promise<void>) => {
         modals.showConfirm(
@@ -88,12 +89,12 @@ function App() {
         );
       },
     }),
-    [fetchData, modals, t, toast],
+    [refreshAll, modals, t, toast],
   );
 
   const sectionActionsOptions = useMemo(
     () => ({
-      onRefresh: fetchData,
+      onRefresh: refreshAll,
       onError: (title: string, message: string) => toast.error(title, message),
       showDeleteConfirm: (
         sectionName: string,
@@ -106,11 +107,24 @@ function App() {
         );
       },
     }),
-    [fetchData, modals, t, toast],
+    [refreshAll, modals, t, toast],
   );
 
   // ==================== Action Hooks ====================
-  const containerActions = useContainerActions(fetchData);
+  const containerActions = useContainerActions(refreshAll);
+
+  // Create local state setters that trigger SWR revalidation
+  // These are used by action hooks to update data after mutations
+  const setShortcuts = useCallback((_updater: React.SetStateAction<Shortcut[]>) => {
+    // Trigger SWR revalidation to fetch fresh data
+    mutateShortcuts();
+  }, [mutateShortcuts]);
+
+  const setSections = useCallback((_updater: React.SetStateAction<Section[]>) => {
+    // Trigger SWR revalidation to fetch fresh data
+    mutateSections();
+  }, [mutateSections]);
+
   const shortcutActions = useShortcutActions(
     shortcutActionsOptions,
     setShortcuts,
@@ -150,7 +164,7 @@ function App() {
         }
 
         // Refresh data to show updated icons
-        await fetchData();
+        await refreshAll();
 
         // Show success message
         toast.success("Migration Complete", migrationResult.message);
@@ -162,7 +176,7 @@ function App() {
         );
       }
     },
-    [toast, fetchData, setMigrationDismissed],
+    [toast, refreshAll, setMigrationDismissed],
   );
 
   // Handle migration cancel
@@ -190,23 +204,20 @@ function App() {
 
     // Run auto-sync and check for migration on app startup
     // Optimized: Run independent operations in parallel for faster startup
+    // SWR will automatically fetch data, so we only need to run auto-sync
     const runStartupTasks = async () => {
       try {
-        // Run auto-sync and container fetch in parallel (they're independent)
-        console.log("Running startup tasks in parallel...");
-        const [syncResult, containersData] = await Promise.all([
-          shortcutsApi.autoSync(),
-          containersApi.getAll(),
-        ]);
+        // Run auto-sync - SWR will automatically fetch containers in parallel
+        console.log("Running auto-sync...");
+        const syncResult = await shortcutsApi.autoSync();
         console.log("Auto-sync completed:", syncResult);
 
-        // Refresh data to show all shortcuts (depends on autoSync completing)
-        await fetchData();
+        // Refresh SWR data to show all shortcuts (depends on autoSync completing)
+        await refreshAll();
 
         // Check if migration is needed (only if Docker is running)
-        // If Docker is not running, containers will be empty, so skip migration check
-        const isDockerRunning =
-          Array.isArray(containersData) && containersData.length > 0;
+        // SWR has already fetched containers, so we can use them directly
+        const isDockerRunning = containers.length > 0;
 
         if (isDockerRunning && !migrationDismissed) {
           const migrationCheck = await shortcutsApi.checkMigration();
@@ -221,16 +232,14 @@ function App() {
         }
       } catch (error) {
         console.error("Startup tasks failed:", error);
-        // Still try to fetch data even if migration/sync fails
-        fetchData();
+        // SWR will automatically retry failed requests
       }
     };
 
     runStartupTasks();
-    fetchTailscaleInfo();
   }, [
-    fetchData,
-    fetchTailscaleInfo,
+    refreshAll,
+    containers,
     migrationDismissed,
     migrationSettingsLoaded,
   ]);
@@ -563,7 +572,7 @@ function App() {
               shortcut={modals.shortcutModal.shortcut}
               containers={containers}
               tailscaleInfo={tailscaleInfo}
-              onSave={fetchData}
+              onSave={refreshAll}
               onClose={modals.closeShortcutModal}
               onError={(title: string, message: string) =>
                 toast.error(title, message)
