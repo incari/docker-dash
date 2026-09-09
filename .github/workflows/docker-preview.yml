@@ -21,6 +21,41 @@ env:
   PREVIEW_IMAGE: ghcr.io/incari/docker-dash-preview
 
 jobs:
+  # Runs alongside the build rather than gating it: previews are private, so a
+  # failing test should be loud without blocking a build nobody but us can pull.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.34.5
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install backend dependencies
+        # better-sqlite3 compiles here thanks to pnpm.onlyBuiltDependencies;
+        # without its native binding the backend tests cannot open a database.
+        run: pnpm install --frozen-lockfile
+
+      - name: Run backend tests
+        run: pnpm test:backend
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
+      - name: Run frontend tests
+        working-directory: frontend
+        run: pnpm exec vitest run
+
   build-preview:
     runs-on: ubuntu-latest
     permissions:

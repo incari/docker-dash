@@ -10,6 +10,7 @@
     "start": "node dist/server.js",
     "dev:backend": "tsx watch src/server.ts",
     "type-check": "tsc -p src/tsconfig.json --noEmit",
+    "test:backend": "vitest run --config vitest.config.ts",
     "dev:frontend": "pnpm --dir frontend dev",
     "dev": "concurrently \"pnpm dev:backend\" \"pnpm dev:frontend\"",
     "docker:build": "docker buildx build --load -t docker-dash:local .",
@@ -39,6 +40,12 @@
     "@types/node": "^25.2.3",
     "concurrently": "^9.2.1",
     "tsx": "^4.21.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.16"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3"
+    ]
   }
 }

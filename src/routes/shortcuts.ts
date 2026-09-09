@@ -119,9 +119,15 @@ router.post(
       let createdCount = 0;
       let updatedCount = 0;
 
-      // Include container_match_name for stable matching across container restarts
+      // Include container_match_name for stable matching across container restarts.
+      // Bound by name rather than by position: this statement previously took
+      // seven placeholders and was called with six values, which shifted every
+      // column after `description` and made auto-sync throw on the first insert.
       const insertStmt = db.prepare(
-        "INSERT INTO shortcuts (display_name, container_name, container_match_name, description, icon, port, is_favorite) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        `INSERT INTO shortcuts
+           (display_name, container_name, container_match_name, description, icon, port, is_favorite)
+         VALUES
+           (@display_name, @container_name, @container_match_name, @description, @icon, @port, @is_favorite)`,
       );
       const updateStmt = db.prepare(
         "UPDATE shortcuts SET port = ?, container_name = ?, container_match_name = ? WHERE id = ?",
@@ -193,14 +199,17 @@ router.post(
 
         // Generate stable match name for container matching across restarts
         const matchName = generateContainerMatchName(containerData.name);
-        insertStmt.run(
-          containerData.name,
-          baseName,
-          matchName,
+        insertStmt.run({
+          display_name: containerData.name,
+          container_name: baseName,
+          container_match_name: matchName,
+          // Auto-sync has nothing to describe a container with; descriptions are
+          // filled in later by the icon migration.
+          description: null,
           icon,
-          containerData.port,
-          0,
-        );
+          port: containerData.port,
+          is_favorite: 0,
+        });
         createdCount++;
       }
 
