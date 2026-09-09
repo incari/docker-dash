@@ -1,6 +1,7 @@
 import { Download, LayoutDashboard, Layers, Edit3 } from "../constants/icons";
 import { useTranslation } from "react-i18next";
 import { ViewSelector } from "./ViewSelector";
+import { SearchInput } from "./SearchInput";
 import type { ViewMode, MobileColumns } from "../types";
 
 interface HeaderProps {
@@ -14,6 +15,8 @@ interface HeaderProps {
   mobileColumns: MobileColumns;
   onViewModeChange: (mode: ViewMode) => void;
   onMobileColumnsChange: (columns: MobileColumns) => void;
+  searchQuery: string;
+  onSearchChange: (query: string) => void;
 }
 
 export function Header({
@@ -27,13 +30,15 @@ export function Header({
   mobileColumns,
   onViewModeChange,
   onMobileColumnsChange,
+  searchQuery,
+  onSearchChange,
 }: HeaderProps) {
   const { t } = useTranslation();
 
   return (
     <header className="bg-slate-900 border-b border-white/5 sticky top-0 z-50">
-      <div className="container mx-auto px-3 sm:px-6 h-14 sm:h-16 flex items-center justify-between">
-        <div className="flex items-center gap-2 sm:gap-4">
+      <div className="container mx-auto px-3 sm:px-6 h-14 sm:h-16 flex items-center justify-between gap-2 sm:gap-4">
+        <div className="flex items-center gap-2 sm:gap-4 shrink-0">
           <button
             onClick={() => setView("dashboard")}
             className="flex items-center gap-2 sm:gap-3 hover:opacity-80 transition-opacity cursor-pointer shrink-0"
@@ -72,7 +77,15 @@ export function Header({
             <span className="hidden sm:inline">{t("header.shortcuts")}</span>
           </button>
         </div>
-        <div className="flex items-center gap-1 sm:gap-2 md:gap-4">
+        {/* Filtering is disabled while reordering: the drag lists hold their own
+            state, so a filtered subset would compute wrong drop positions. */}
+        <SearchInput
+          value={searchQuery}
+          onChange={onSearchChange}
+          disabled={isEditMode}
+        />
+
+        <div className="flex items-center gap-1 sm:gap-2 md:gap-4 shrink-0">
           {showInstallPrompt && (
             <button
               onClick={handleInstallClick}

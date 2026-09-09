@@ -1,8 +1,9 @@
-import React, { useEffect } from "react";
+import React, { useId } from "react";
 import { motion } from "framer-motion";
 import { AlertTriangle, X } from "../constants/icons";
 import { useTranslation } from "react-i18next";
 import type { ConfirmModalProps } from "../types";
+import { useModalA11y } from "../hooks/useModalA11y";
 
 /**
  * Confirmation modal component for confirming destructive actions
@@ -25,24 +26,12 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
   const buttonGradient = isWarning
     ? "bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 shadow-blue-500/30"
     : "bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 shadow-red-500/30";
-  const confirmText = isWarning ? "Update" : t("modals.confirm.delete");
+  const confirmText = isWarning
+    ? t("modals.confirm.update")
+    : t("modals.confirm.delete");
 
-  // Add ESC key handler
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && isOpen) {
-        onCancel();
-      }
-    };
-
-    if (isOpen) {
-      document.addEventListener("keydown", handleEscape);
-    }
-
-    return () => {
-      document.removeEventListener("keydown", handleEscape);
-    };
-  }, [isOpen, onCancel]);
+  const titleId = useId();
+  const dialogRef = useModalA11y<HTMLDivElement>(isOpen, onCancel);
 
   if (!isOpen) return null;
 
@@ -56,6 +45,11 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
         onClick={onCancel}
       />
       <motion.div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.9, opacity: 0 }}
@@ -63,6 +57,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
       >
         <button
           onClick={onCancel}
+          aria-label={t("modals.confirm.cancel")}
           className="absolute top-4 right-4 p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded-xl transition-colors"
         >
           <X className="w-5 h-5" />
@@ -72,7 +67,12 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
           <div className={`p-3 ${iconBgColor} rounded-2xl`}>
             <AlertTriangle className={`w-8 h-8 ${iconColor}`} />
           </div>
-          <h2 className="text-2xl font-bold text-white">{title}</h2>
+          <h2
+            id={titleId}
+            className="text-2xl font-bold text-white"
+          >
+            {title}
+          </h2>
         </div>
 
         <p className="text-slate-300 mb-8 leading-relaxed">{message}</p>

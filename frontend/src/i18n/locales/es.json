@@ -19,7 +19,8 @@
     "install": "Instalar",
     "launch": "Abrir",
     "customize": "Personalizar",
-    "optional": "Opcional"
+    "optional": "Opcional",
+    "dismiss": "Descartar"
   },
   "header": {
     "dashboard": "Panel",
@@ -45,7 +46,9 @@
     "editModeDescription": "Arrastra y suelta los accesos directos para reordenar o mover entre secciones.",
     "createSection": "Crear Sección",
     "dragItemsHere": "Arrastra elementos aquí para reorganizar",
-    "noSection": "Sin Sección"
+    "noSection": "Sin Sección",
+    "dockerNotRunning": "Docker no está en ejecución.",
+    "dockerNotRunningHint": "Iniciá Docker Desktop para ver y gestionar tus contenedores."
   },
   "containers": {
     "title": "Contenedores Docker",
@@ -61,7 +64,9 @@
     "addToFavorites": "Añadir a Favoritos",
     "removeFromFavorites": "Quitar de Favoritos",
     "quickAddToFavorites": "Añadir Rápido a Favoritos",
-    "customizeShortcut": "Personalizar Acceso Directo"
+    "customizeShortcut": "Personalizar Acceso Directo",
+    "count_one": "{{count}} contenedor",
+    "count_other": "{{count}} contenedores"
   },
   "shortcuts": {
     "title": "Accesos Directos Personalizados",
@@ -111,7 +116,9 @@
     "noSection": "Sin Sección",
     "identityBranding": "Identidad y Marca",
     "addToFavorites": "Añadir a Favoritos",
-    "removeFromFavorites": "Quitar de Favoritos"
+    "removeFromFavorites": "Quitar de Favoritos",
+    "openShortcut": "Abrir {{name}}",
+    "moreActions": "Más acciones para {{name}}"
   },
   "sections": {
     "name": "Nombre de Sección",
@@ -130,26 +137,38 @@
       "deleteSection": "Eliminar Sección",
       "deleteSectionMessage": "¿Estás seguro de que quieres eliminar \"{{sectionName}}\"? Los accesos directos en esta sección se moverán a \"Sin Sección\".",
       "stopContainer": "Detener Contenedor",
-      "stopContainerMessage": "¿Estás seguro de que quieres detener este contenedor? Esto terminará todos los procesos activos."
+      "stopContainerMessage": "¿Estás seguro de que quieres detener este contenedor? Esto terminará todos los procesos activos.",
+      "update": "Actualizar"
     },
     "error": {
       "title": "Error",
       "close": "Cerrar",
       "savingShortcut": "Error al Guardar Acceso Directo",
       "unexpectedError": "Ocurrió un error inesperado al guardar el acceso directo.",
-      "portUrlOrContainerRequired": "Se debe especificar Puerto, URL o Contenedor"
+      "portUrlOrContainerRequired": "Se debe especificar Puerto, URL o Contenedor",
+      "success": "Éxito"
     },
     "migration": {
       "title": "Actualizar Iconos y Descripciones de Contenedores",
-      "description": "Mejora tus accesos directos con iconos y descripciones mejorados de la biblioteca",
+      "description": "Descripción",
       "homarrLibrary": "Homarr Dashboard Icons",
       "descriptionContinued": ". Esta migración obtendrá automáticamente iconos optimizados y descripciones detalladas para tus contenedores. Selecciona qué iconos y descripciones deseas actualizar para cada acceso directo.",
       "name": "Nombre",
       "icon": "Icono",
-      "description": "Descripción",
       "iconCount": "Iconos: {{selected}} / {{total}}",
       "descriptionCount": "Descripciones: {{selected}} / {{total}}",
-      "updateSelected": "Actualizar Seleccionados"
+      "updateSelected": "Actualizar Seleccionados",
+      "failedTitle": "Falló la migración",
+      "failedMessage": "No se pudo migrar. Revisá la configuración e intentá de nuevo.",
+      "failedRetry": "No se pudieron migrar los iconos. Intentá de nuevo más tarde.",
+      "completeTitle": "Migración completa"
+    },
+    "deleteImage": {
+      "title": "¿Eliminar la imagen?",
+      "inUse_one": "La imagen «{{name}}» la está usando el siguiente acceso directo:",
+      "inUse_other": "La imagen «{{name}}» la están usando los siguientes accesos directos:",
+      "consequence": "Si la eliminás, esos accesos directos pasarán a usar el icono por defecto.",
+      "deleteAnyway": "Eliminar igualmente"
     }
   },
   "validation": {
@@ -178,5 +197,116 @@
     "mobileColumns": "Columnas Móvil",
     "oneCol": "1 Col",
     "twoCol": "2 Col"
+  },
+  "ai": {
+    "title": "Asistente IA",
+    "chat": {
+      "title": "Asistente IA",
+      "placeholder": "Pregúntame sobre tus contenedores...",
+      "welcomeMessage": "👋 ¡Hola! Soy tu asistente IA del Panel Docker. Puedo ayudarte a gestionar tus contenedores y accesos directos.",
+      "thinking": "Pensando...",
+      "clearChat": "Limpiar Chat",
+      "close": "Cerrar",
+      "send": "Enviar",
+      "tryAsking": "Prueba preguntando:",
+      "exampleQueries": "Consultas de Ejemplo",
+      "modelLoading": "Cargando modelo IA...",
+      "modelLoadingProgress": "Cargando: {{progress}}%",
+      "modelReady": "IA Lista",
+      "modelError": "Error al cargar el modelo IA",
+      "initializeModel": "Inicializar IA",
+      "errorProcessing": "❌ Encontré un error al procesar tu solicitud. Por favor, inténtalo de nuevo.",
+      "actionCancelled": "Acción cancelada."
+    },
+    "confirmation": {
+      "title": "Confirmar Acción",
+      "message": "Esta acción requiere tu confirmación antes de continuar.",
+      "action": "Acción",
+      "description": "Descripción",
+      "affectedResources": "Recursos Afectados",
+      "confirm": "Confirmar",
+      "cancel": "Cancelar",
+      "warning": "⚠️ Esta acción modificará tu sistema. Por favor, revisa cuidadosamente antes de confirmar.",
+      "safetyWarning": "Advertencia de Seguridad"
+    },
+    "tools": {
+      "findContainersByName": "Buscar contenedores por nombre",
+      "getContainerHealth": "Obtener estado de salud del contenedor",
+      "listAllContainers": "Listar todos los contenedores",
+      "getContainerLogs": "Obtener registros del contenedor",
+      "listShortcuts": "Listar accesos directos",
+      "startContainer": "Iniciar contenedor",
+      "stopContainer": "Detener contenedor",
+      "restartContainer": "Reiniciar contenedor",
+      "openContainerUrl": "Abrir URL del contenedor"
+    },
+    "examples": {
+      "categories": {
+        "containers": "Contenedores",
+        "search": "Búsqueda",
+        "shortcuts": "Accesos Directos",
+        "control": "Control"
+      },
+      "showAllContainers": "Muéstrame todos mis contenedores",
+      "whichRunning": "¿Qué contenedores están ejecutándose?",
+      "howManyContainers": "¿Cuántos contenedores tengo?",
+      "containerStatus": "¿Cuál es el estado de mis contenedores?",
+      "findPostgres": "Encuentra mi base de datos postgres",
+      "findNginx": "Encuentra contenedores nginx",
+      "searchByName": "Buscar contenedores llamados {{name}}",
+      "listShortcuts": "Lista todos mis accesos directos",
+      "showFavorites": "Muestra mis accesos directos favoritos",
+      "startNginx": "Inicia el contenedor nginx",
+      "stopContainer": "Detén el contenedor {{name}}",
+      "restartPostgres": "Reinicia postgres"
+    },
+    "responses": {
+      "containersFound": "Encontré {{count}} contenedor(es):",
+      "noContainersFound": "No encontré ningún contenedor que coincida con tus criterios.",
+      "containerStarted": "✅ Contenedor iniciado exitosamente.",
+      "containerStopped": "El contenedor está detenido",
+      "containerRestarted": "✅ Contenedor reiniciado exitosamente.",
+      "shortcutsFound": "Encontré {{count}} acceso(s) directo(s):",
+      "noShortcutsFound": "Aún no tienes ningún acceso directo.",
+      "containerRunning": "El contenedor está ejecutándose",
+      "containerHealthy": "El contenedor está saludable",
+      "containerUnhealthy": "El contenedor no está saludable"
+    },
+    "errors": {
+      "general": "Ocurrió un error al procesar tu solicitud.",
+      "containerNotFound": "Contenedor no encontrado: {{name}}",
+      "invalidParameters": "Parámetros inválidos proporcionados.",
+      "operationFailed": "Operación fallida: {{error}}",
+      "blockedOperation": "Esta operación está bloqueada por razones de seguridad: {{reason}}",
+      "confirmationRequired": "Esta acción requiere confirmación.",
+      "modelNotLoaded": "El modelo IA no está cargado. Por favor, inicializa el modelo primero.",
+      "noContainerId": "No se proporcionó ID de contenedor.",
+      "invalidUrl": "URL inválida proporcionada.",
+      "executionError": "Error al ejecutar la función: {{error}}"
+    },
+    "safety": {
+      "blocked": "Bloqueado",
+      "requiresConfirmation": "Requiere Confirmación",
+      "safe": "Seguro",
+      "dangerousOperation": "Esta es una operación potencialmente peligrosa.",
+      "reviewCarefully": "Por favor, revisa los detalles cuidadosamente antes de continuar.",
+      "cannotExecute": "Esta operación no puede ejecutarse por razones de seguridad.",
+      "blockedReason": "Razón: {{reason}}"
+    },
+    "status": {
+      "processing": "Procesando...",
+      "executing": "Ejecutando acción...",
+      "completed": "Completado",
+      "failed": "Fallido",
+      "cancelled": "Cancelado",
+      "waiting": "Esperando confirmación..."
+    }
+  },
+  "search": {
+    "label": "Buscar accesos directos y contenedores",
+    "placeholder": "Buscar…  (Ctrl K)",
+    "clear": "Limpiar búsqueda",
+    "noResults": "Sin resultados para «{{query}}»",
+    "noResultsHint": "Probá con otro nombre, imagen o puerto."
   }
 }

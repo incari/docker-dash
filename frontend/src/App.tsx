@@ -23,6 +23,11 @@ const ShortcutModal = lazy(() =>
     default: module.ShortcutModal,
   })),
 );
+const AIChat = lazy(() =>
+  import("./components/AIChat/AIChat").then((module) => ({
+    default: module.AIChat,
+  })),
+);
 import { DashboardView } from "./views/DashboardView";
 import { ManagementView } from "./views/ManagementView";
 import { useTheme } from "./hooks/useTheme";
@@ -35,12 +40,15 @@ import { useInstallPrompt } from "./hooks/useInstallPrompt";
 import { useViewSettings } from "./hooks/useViewSettings";
 import { useMigrationSettings } from "./hooks/useMigrationSettings";
 import { shortcutsApi } from "./services/api";
+import { parseQuery, matchesShortcut } from "./utils/search";
+import { findContainerForShortcut } from "./utils/dashboardHelpers";
 import type { Section, Shortcut } from "./types";
 
 function App() {
   // ==================== View State ====================
   const [view, setView] = useState<"dashboard" | "add">("dashboard");
   const [isEditMode, setIsEditMode] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Docker warning state
   const [dockerWarningDismissed, setDockerWarningDismissed] = useState(false);
@@ -132,6 +140,16 @@ function App() {
   );
   const sectionActions = useSectionActions(sectionActionsOptions, setSections);
 
+  // Entering reorder mode drops any active filter: the drag lists are seeded
+  // from the visible set, so reordering a filtered subset would write back
+  // positions computed against the wrong list.
+  const handleEditModeChange = useCallback((mode: boolean) => {
+    if (mode) {
+      setSearchQuery("");
+    }
+    setIsEditMode(mode);
+  }, []);
+
   // ==================== Migration Handler ====================
   // Opens the migration modal to preview and apply icon updates
   const handleMigration = useCallback(() => {
@@ -156,9 +174,8 @@ function App() {
         // Check if migration was successful
         if (migrationResult.success === false) {
           toast.error(
-            "Migration Failed",
-            migrationResult.message ||
-              "Failed to migrate. Please check your settings and try again.",
+            t("modals.migration.failedTitle"),
+            migrationResult.message || t("modals.migration.failedMessage"),
           );
           return;
         }
@@ -167,16 +184,19 @@ function App() {
         await refreshAll();
 
         // Show success message
-        toast.success("Migration Complete", migrationResult.message);
+        toast.success(
+          t("modals.migration.completeTitle"),
+          migrationResult.message,
+        );
       } catch (error) {
         console.error("Migration failed:", error);
         toast.error(
-          "Migration Failed",
-          "Failed to migrate icons. Please try again later.",
+          t("modals.migration.failedTitle"),
+          t("modals.migration.failedRetry"),
         );
       }
     },
-    [toast, refreshAll, setMigrationDismissed],
+    [toast, refreshAll, setMigrationDismissed, t],
   );
 
   // Handle migration cancel
@@ -310,12 +330,22 @@ function App() {
   // Memoize dashboard shortcuts to avoid recomputing on every render
   // In edit mode: show ALL shortcuts (so we can toggle favorites without items disappearing)
   // Not in edit mode: show only favorites
+  const searchTerms = useMemo(() => parseQuery(searchQuery), [searchQuery]);
+
   const dashboardShortcuts = useMemo(() => {
     const filtered = isEditMode
       ? shortcuts
       : shortcuts.filter((s) => s.is_favorite);
-    return filtered;
-  }, [shortcuts, isEditMode]);
+
+    // Search is off during edit mode; see the note on the Header's SearchInput.
+    if (isEditMode || searchTerms.length === 0) {
+      return filtered;
+    }
+
+    return filtered.filter((s) =>
+      matchesShortcut(s, findContainerForShortcut(s, containers), searchTerms),
+    );
+  }, [shortcuts, isEditMode, searchTerms, containers]);
 
   // Memoize formatted data for FormKit drag-and-drop
   // Note: We use useMemo here as the computation is expensive and the result
@@ -451,11 +481,13 @@ function App() {
         showInstallPrompt={showInstallPrompt}
         handleInstallClick={handleInstallClick}
         isEditMode={isEditMode}
-        setIsEditMode={setIsEditMode}
+        setIsEditMode={handleEditModeChange}
         viewMode={viewMode}
         mobileColumns={mobileColumns}
         onViewModeChange={setViewMode}
         onMobileColumnsChange={setMobileColumns}
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
       />
 
       {/* Docker Not Running Warning */}
@@ -480,14 +512,14 @@ function App() {
                   />
                 </svg>
                 <span className="text-sm">
-                  <strong>Docker is not running.</strong> Start Docker Desktop
-                  to see and manage your containers.
+                  <strong>{t("dashboard.dockerNotRunning")}</strong>{" "}
+                  {t("dashboard.dockerNotRunningHint")}
                 </span>
               </div>
               <button
                 onClick={() => setDockerWarningDismissed(true)}
                 className="text-yellow-400 hover:text-yellow-300 transition-colors flex-shrink-0"
-                aria-label="Dismiss warning"
+                aria-label={t("common.dismiss")}
               >
                 <svg
                   className="w-5 h-5"
@@ -534,6 +566,7 @@ function App() {
               viewMode={viewMode}
               mobileColumns={mobileColumns}
               onSaveChanges={handleSaveChanges}
+              searchQuery={searchQuery}
             />
           ) : (
             <ManagementView
@@ -553,6 +586,7 @@ function App() {
               handleToggleFavorite={handleToggleFavorite}
               viewMode={viewMode}
               mobileColumns={mobileColumns}
+              searchQuery={searchQuery}
             />
           )}
         </AnimatePresence>
@@ -609,6 +643,11 @@ function App() {
         onConfirm={handleMigrationConfirm}
         onCancel={handleMigrationCancel}
       />
+
+      {/* AI Chat Interface - loaded on its own chunk, it is not needed to paint the dashboard */}
+      <Suspense fallback={null}>
+        <AIChat />
+      </Suspense>
     </div>
   );
 }

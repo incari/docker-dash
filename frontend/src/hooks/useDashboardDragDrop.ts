@@ -93,18 +93,28 @@ export function useDashboardDragDrop({
       setUnsectionedList(unsectionedShortcuts);
       prevUnsectionedListRef.current = unsectionedShortcuts;
     } else {
-      // In edit mode: update properties (like is_favorite) without changing order
+      // In edit mode: refresh properties (like is_favorite) without disturbing
+      // the order the user is arranging. Items that appeared since the list was
+      // seeded are appended and ones that disappeared are dropped - without
+      // this, a shortcut added (or revealed) during edit mode stayed invisible
+      // until edit mode was left.
       setUnsectionedList((currentList) => {
-        const updated = currentList.map((item) => {
-          const updatedItem = unsectionedShortcuts.find(
-            (s) => s.id === item.id,
-          );
-          if (updatedItem) {
-            return { ...updatedItem };
-          }
-          return item;
-        });
-        return updated;
+        const incoming = new Map(unsectionedShortcuts.map((s) => [s.id, s]));
+
+        const kept = currentList
+          .filter((item) => incoming.has(item.id))
+          .map((item) => ({ ...(incoming.get(item.id) as Shortcut) }));
+
+        const keptIds = new Set(kept.map((item) => item.id));
+        const added = unsectionedShortcuts.filter((s) => !keptIds.has(s.id));
+
+        const merged = [...kept, ...added];
+
+        // This change came from props, not from a drag, so it must not be
+        // recorded as a pending reorder.
+        prevUnsectionedListRef.current = merged;
+
+        return merged;
       });
     }
   }, [unsectionedShortcuts, isEditMode]);

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, useId } from "react";
 import { motion } from "framer-motion";
 import {
   RefreshCw,
@@ -11,6 +11,7 @@ import {
   ArrowRight,
 } from "../constants/icons";
 import { useTranslation } from "react-i18next";
+import { useModalA11y } from "../hooks/useModalA11y";
 import { shortcutsApi } from "../services/api";
 
 // Debounce delay for URL input (ms)
@@ -207,22 +208,8 @@ export const MigrationModal: React.FC<MigrationModalProps> = ({
     onConfirm(updates);
   };
 
-  // Add ESC key handler
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && isOpen) {
-        onCancel();
-      }
-    };
-
-    if (isOpen) {
-      document.addEventListener("keydown", handleEscape);
-    }
-
-    return () => {
-      document.removeEventListener("keydown", handleEscape);
-    };
-  }, [isOpen, onCancel]);
+  const titleId = useId();
+  const dialogRef = useModalA11y<HTMLDivElement>(isOpen, onCancel);
 
   if (!isOpen) return null;
 
@@ -242,6 +229,11 @@ export const MigrationModal: React.FC<MigrationModalProps> = ({
         onClick={onCancel}
       />
       <motion.div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.9, opacity: 0 }}
@@ -249,6 +241,7 @@ export const MigrationModal: React.FC<MigrationModalProps> = ({
       >
         <button
           onClick={onCancel}
+          aria-label={t("common.cancel")}
           className="absolute top-4 right-4 p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded-xl transition-colors z-10"
         >
           <X className="w-5 h-5" />
@@ -259,7 +252,10 @@ export const MigrationModal: React.FC<MigrationModalProps> = ({
             <RefreshCw className="w-8 h-8 text-blue-400" />
           </div>
           <div>
-            <h2 className="text-2xl font-bold text-white">
+            <h2
+              id={titleId}
+              className="text-2xl font-bold text-white"
+            >
               {t("modals.migration.title")}
             </h2>
             <p className="text-slate-400 text-sm mt-1">

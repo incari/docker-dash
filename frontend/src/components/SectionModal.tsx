@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useId } from "react";
 import { motion } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import type { SectionModalProps } from "../types";
+import { useModalA11y } from "../hooks/useModalA11y";
 
 /**
  * Modal for creating and editing sections
@@ -36,26 +37,8 @@ export const SectionModal: React.FC<SectionModalProps> = ({
     [name, onSave],
   );
 
-  // Memoize ESC key handler to prevent re-creating listener on every render
-  const handleEscape = useCallback(
-    (e: KeyboardEvent) => {
-      if (e.key === "Escape" && isOpen) {
-        onClose();
-      }
-    },
-    [isOpen, onClose],
-  );
-
-  // Add ESC key handler
-  useEffect(() => {
-    if (isOpen) {
-      document.addEventListener("keydown", handleEscape);
-    }
-
-    return () => {
-      document.removeEventListener("keydown", handleEscape);
-    };
-  }, [isOpen, handleEscape]);
+  const titleId = useId();
+  const dialogRef = useModalA11y<HTMLDivElement>(isOpen, onClose);
 
   if (!isOpen) return null;
 
@@ -69,13 +52,21 @@ export const SectionModal: React.FC<SectionModalProps> = ({
         className="fixed inset-0 bg-slate-950/90 backdrop-blur-md"
       />
       <motion.div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
         initial={{ opacity: 0, scale: 0.9, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.9, y: 20 }}
         className="relative bg-slate-900 border border-white/10 rounded-3xl w-full max-w-md shadow-2xl overflow-hidden"
       >
         <div className="p-6">
-          <h3 className="text-xl font-bold text-white mb-4">
+          <h3
+            id={titleId}
+            className="text-xl font-bold text-white mb-4"
+          >
             {mode === "edit"
               ? t("sections.editSection")
               : t("sections.createSection")}

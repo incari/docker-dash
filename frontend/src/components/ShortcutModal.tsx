@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useId } from "react";
 import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
 import axios from "axios";
@@ -24,6 +24,7 @@ import {
   cleanDescription,
 } from "../utils/validation";
 import { uploadsApi, type UploadedImage } from "../services/api";
+import { useModalA11y } from "../hooks/useModalA11y";
 import { getContainerIcon } from "../utils/dockerIconVault";
 
 interface FormData {
@@ -102,22 +103,8 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
     setSelectedFile(null);
   }, [shortcut, isOpen]);
 
-  // Add ESC key handler
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && isOpen) {
-        onClose();
-      }
-    };
-
-    if (isOpen) {
-      document.addEventListener("keydown", handleEscape);
-    }
-
-    return () => {
-      document.removeEventListener("keydown", handleEscape);
-    };
-  }, [isOpen, onClose]);
+  const titleId = useId();
+  const dialogRef = useModalA11y<HTMLDivElement>(isOpen, onClose);
 
   // Auto-fetch favicon for website URLs
   useEffect(() => {
@@ -257,19 +244,28 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
         className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm"
       />
       <motion.div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
         initial={{ opacity: 0, scale: 0.95, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
         className="relative bg-slate-900 border border-white/10 rounded-3xl w-full max-w-xl shadow-2xl overflow-hidden"
       >
         <div className="p-6 border-b border-white/5 flex items-center justify-between bg-slate-800/20">
-          <h2 className="text-xl font-bold text-white">
+          <h2
+            id={titleId}
+            className="text-xl font-bold text-white"
+          >
             {shortcut?.id
               ? t("shortcuts.editShortcut")
               : t("shortcuts.createNew")}
           </h2>
           <button
             onClick={onClose}
+            aria-label={t("common.cancel")}
             className="p-2 text-slate-400 hover:text-white transition-colors"
           >
             <X className="w-5 h-5" />
@@ -689,6 +685,7 @@ interface IconDropdownProps {
 }
 
 const IconDropdown: React.FC<IconDropdownProps> = ({ icon, setIcon }) => {
+  const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const [dropdownPos, setDropdownPos] = useState({
     top: 0,
@@ -1024,6 +1021,7 @@ const IconDropdown: React.FC<IconDropdownProps> = ({ icon, setIcon }) => {
                     shortcuts: [],
                   })
                 }
+                aria-label={t("common.cancel")}
                 className="absolute top-4 right-4 p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded-xl transition-colors"
               >
                 <X className="w-5 h-5" />
@@ -1033,16 +1031,16 @@ const IconDropdown: React.FC<IconDropdownProps> = ({ icon, setIcon }) => {
                 <div className="p-3 bg-yellow-500/20 rounded-2xl">
                   <Trash2 className="w-8 h-8 text-yellow-400" />
                 </div>
-                <h2 className="text-2xl font-bold text-white">Delete Image?</h2>
+                <h2 className="text-2xl font-bold text-white">
+                  {t("modals.deleteImage.title")}
+                </h2>
               </div>
 
               <p className="text-slate-300 mb-4 leading-relaxed">
-                The image{" "}
-                <span className="font-semibold text-white">
-                  "{deleteConfirm.displayName}"
-                </span>{" "}
-                is currently being used by the following shortcut
-                {deleteConfirm.shortcuts.length > 1 ? "s" : ""}:
+                {t("modals.deleteImage.inUse", {
+                  name: deleteConfirm.displayName,
+                  count: deleteConfirm.shortcuts.length,
+                })}
               </p>
 
               <div className="bg-slate-950/50 rounded-xl p-4 mb-6 max-h-32 overflow-y-auto">
@@ -1060,8 +1058,7 @@ const IconDropdown: React.FC<IconDropdownProps> = ({ icon, setIcon }) => {
               </div>
 
               <p className="text-slate-400 text-sm mb-6">
-                If you delete this image, these shortcuts will be updated to use
-                the default icon.
+                {t("modals.deleteImage.consequence")}
               </p>
 
               <div className="flex gap-3">
@@ -1076,13 +1073,13 @@ const IconDropdown: React.FC<IconDropdownProps> = ({ icon, setIcon }) => {
                   }
                   className="flex-1 py-3 px-6 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-xl transition-all duration-200"
                 >
-                  Cancel
+                  {t("common.cancel")}
                 </button>
                 <button
                   onClick={handleConfirmedDelete}
                   className="flex-1 py-3 px-6 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-semibold rounded-xl transition-all duration-200 shadow-lg shadow-red-500/30"
                 >
-                  Delete Anyway
+                  {t("modals.deleteImage.deleteAnyway")}
                 </button>
               </div>
             </motion.div>

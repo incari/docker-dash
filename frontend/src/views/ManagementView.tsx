@@ -18,6 +18,11 @@ import {
   ShortcutCardTable,
 } from "../components";
 import { getContainerIcon } from "../utils/dockerIconVault";
+import {
+  parseQuery,
+  matchesContainer,
+  matchesShortcut,
+} from "../utils/search";
 import type {
   DockerContainer,
   Shortcut,
@@ -78,6 +83,7 @@ interface ManagementViewProps {
   handleToggleFavorite: (id: number, currentStatus: boolean | number) => void;
   viewMode: ViewMode;
   mobileColumns: MobileColumns;
+  searchQuery: string;
 }
 
 /**
@@ -138,19 +144,32 @@ export function ManagementView({
   handleToggleFavorite,
   viewMode,
   mobileColumns,
+  searchQuery,
 }: ManagementViewProps) {
   const { t } = useTranslation();
+  const searchTerms = useMemo(() => parseQuery(searchQuery), [searchQuery]);
   // Custom shortcuts are those NOT linked to any container
   // A shortcut is linked to a container if it has container_name or container_match_name
   // Custom shortcuts are manual URL entries and port-based shortcuts without a container
-  const customShortcuts = shortcuts.filter((s) => !s.container_name && !s.container_match_name);
+  const customShortcuts = useMemo(
+    () =>
+      shortcuts
+        .filter((s) => !s.container_name && !s.container_match_name)
+        .filter((s) => matchesShortcut(s, null, searchTerms)),
+    [shortcuts, searchTerms],
+  );
+
+  const visibleContainers = useMemo(
+    () => containers.filter((c) => matchesContainer(c, searchTerms)),
+    [containers, searchTerms],
+  );
   const CardComponent = getCardComponentForViewMode(viewMode);
   const gridClasses = getGridLayoutClasses(viewMode, mobileColumns);
 
   // Group containers by compose project
   const { grouped: composeGroups, ungrouped: standaloneContainers } = useMemo(
-    () => groupContainersByComposeProject(containers),
-    [containers],
+    () => groupContainersByComposeProject(visibleContainers),
+    [visibleContainers],
   );
 
   // Track collapsed state for each compose group
@@ -285,9 +304,15 @@ export function ManagementView({
         {customShortcuts.length === 0 ? (
           <div className="text-center py-12 border-2 border-dashed border-white/5 rounded-2xl bg-white/[0.02]">
             <LinkIcon className="w-10 h-10 text-slate-600 mx-auto mb-3" />
-            <p className="text-slate-400">{t("shortcuts.noShortcuts")}</p>
+            <p className="text-slate-400">
+              {searchTerms.length > 0
+                ? t("search.noResults", { query: searchQuery })
+                : t("shortcuts.noShortcuts")}
+            </p>
             <p className="text-slate-500 text-sm mt-1">
-              {t("shortcuts.noShortcutsDescription")}
+              {searchTerms.length > 0
+                ? t("search.noResultsHint")
+                : t("shortcuts.noShortcutsDescription")}
             </p>
           </div>
         ) : (
@@ -330,12 +355,18 @@ export function ManagementView({
           </p>
         </div>
 
-        {containers.length === 0 ? (
+        {visibleContainers.length === 0 ? (
           <div className="text-center py-12 border-2 border-dashed border-white/5 rounded-2xl bg-white/[0.02]">
             <Server className="w-10 h-10 text-slate-600 mx-auto mb-3" />
-            <p className="text-slate-400">{t("containers.noContainers")}</p>
+            <p className="text-slate-400">
+              {searchTerms.length > 0
+                ? t("search.noResults", { query: searchQuery })
+                : t("containers.noContainers")}
+            </p>
             <p className="text-slate-500 text-sm mt-1">
-              {t("containers.noContainersDescription")}
+              {searchTerms.length > 0
+                ? t("search.noResultsHint")
+                : t("containers.noContainersDescription")}
             </p>
           </div>
         ) : (
@@ -410,10 +441,9 @@ export function ManagementView({
                             "rgba(var(--color-primary-rgb), 0.1)",
                         }}
                       >
-                        {projectContainers.length}{" "}
-                        {projectContainers.length === 1
-                          ? "container"
-                          : "containers"}
+                        {t("containers.count", {
+                          count: projectContainers.length,
+                        })}
                       </span>
                     </div>
 

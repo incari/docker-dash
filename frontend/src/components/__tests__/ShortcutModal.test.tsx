@@ -62,7 +62,7 @@ describe('ShortcutModal', () => {
         await user.type(portInput, '9000');
 
         // Find submit button by text
-        const saveButton = screen.getByRole('button', { name: /Create Shortcut/i });
+        const saveButton = screen.getByRole('button', { name: /^Create$/i });
         await user.click(saveButton);
 
         await waitFor(() => {

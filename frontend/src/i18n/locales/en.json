@@ -19,7 +19,8 @@
     "install": "Install",
     "launch": "Launch",
     "customize": "Customize",
-    "optional": "Optional"
+    "optional": "Optional",
+    "dismiss": "Dismiss"
   },
   "header": {
     "dashboard": "Dashboard",
@@ -45,7 +46,9 @@
     "editModeDescription": "Drag and drop shortcuts to reorder or move between sections.",
     "createSection": "Create Section",
     "dragItemsHere": "Drag items here to reorganize",
-    "noSection": "No Section"
+    "noSection": "No Section",
+    "dockerNotRunning": "Docker is not running.",
+    "dockerNotRunningHint": "Start Docker Desktop to see and manage your containers."
   },
   "containers": {
     "title": "Docker Containers",
@@ -61,7 +64,9 @@
     "addToFavorites": "Add to Favorites",
     "removeFromFavorites": "Remove from Favorites",
     "quickAddToFavorites": "Quick Add to Favorites",
-    "customizeShortcut": "Customize Shortcut"
+    "customizeShortcut": "Customize Shortcut",
+    "count_one": "{{count}} container",
+    "count_other": "{{count}} containers"
   },
   "shortcuts": {
     "title": "Custom Shortcuts",
@@ -111,7 +116,9 @@
     "noSection": "No Section",
     "identityBranding": "Identity & Branding",
     "addToFavorites": "Add to Favorites",
-    "removeFromFavorites": "Remove from Favorites"
+    "removeFromFavorites": "Remove from Favorites",
+    "openShortcut": "Open {{name}}",
+    "moreActions": "More actions for {{name}}"
   },
   "sections": {
     "name": "Section Name",
@@ -130,26 +137,38 @@
       "deleteSection": "Delete Section",
       "deleteSectionMessage": "Are you sure you want to delete \"{{sectionName}}\"? Shortcuts in this section will be moved to \"No Section\".",
       "stopContainer": "Stop Container",
-      "stopContainerMessage": "Are you sure you want to stop this container? This will terminate all active processes."
+      "stopContainerMessage": "Are you sure you want to stop this container? This will terminate all active processes.",
+      "update": "Update"
     },
     "error": {
       "title": "Error",
       "close": "Close",
       "savingShortcut": "Error Saving Shortcut",
       "unexpectedError": "An unexpected error occurred while saving the shortcut.",
-      "portUrlOrContainerRequired": "Either Port, URL, or Container must be specified"
+      "portUrlOrContainerRequired": "Either Port, URL, or Container must be specified",
+      "success": "Success"
     },
     "migration": {
       "title": "Update Container Icons & Descriptions",
-      "description": "Upgrade your shortcuts with enhanced icons and descriptions from the",
+      "description": "Description",
       "homarrLibrary": "Homarr Dashboard Icons",
       "descriptionContinued": "library. This migration will automatically fetch optimized icons and detailed descriptions for your containers. Select which icons and descriptions you want to update for each shortcut.",
       "name": "Name",
       "icon": "Icon",
-      "description": "Description",
       "iconCount": "Icons: {{selected}} / {{total}}",
       "descriptionCount": "Descriptions: {{selected}} / {{total}}",
-      "updateSelected": "Update Selected"
+      "updateSelected": "Update Selected",
+      "failedTitle": "Migration Failed",
+      "failedMessage": "Failed to migrate. Please check your settings and try again.",
+      "failedRetry": "Failed to migrate icons. Please try again later.",
+      "completeTitle": "Migration Complete"
+    },
+    "deleteImage": {
+      "title": "Delete Image?",
+      "inUse_one": "The image “{{name}}” is currently being used by the following shortcut:",
+      "inUse_other": "The image “{{name}}” is currently being used by the following shortcuts:",
+      "consequence": "If you delete this image, these shortcuts will be updated to use the default icon.",
+      "deleteAnyway": "Delete Anyway"
     }
   },
   "validation": {
@@ -178,5 +197,116 @@
     "mobileColumns": "Mobile Columns",
     "oneCol": "1 Col",
     "twoCol": "2 Col"
+  },
+  "ai": {
+    "title": "AI Assistant",
+    "chat": {
+      "title": "AI Assistant",
+      "placeholder": "Ask me about your containers...",
+      "welcomeMessage": "👋 Hello! I'm your Docker Dashboard AI assistant. I can help you manage your containers and shortcuts.",
+      "thinking": "Thinking...",
+      "clearChat": "Clear Chat",
+      "close": "Close",
+      "send": "Send",
+      "tryAsking": "Try asking:",
+      "exampleQueries": "Example Queries",
+      "modelLoading": "Loading AI model...",
+      "modelLoadingProgress": "Loading: {{progress}}%",
+      "modelReady": "AI Ready",
+      "modelError": "Failed to load AI model",
+      "initializeModel": "Initialize AI",
+      "errorProcessing": "❌ I encountered an error processing your request. Please try again.",
+      "actionCancelled": "Action cancelled."
+    },
+    "confirmation": {
+      "title": "Confirm Action",
+      "message": "This action requires your confirmation before proceeding.",
+      "action": "Action",
+      "description": "Description",
+      "affectedResources": "Affected Resources",
+      "confirm": "Confirm",
+      "cancel": "Cancel",
+      "warning": "⚠️ This action will modify your system. Please review carefully before confirming.",
+      "safetyWarning": "Safety Warning"
+    },
+    "tools": {
+      "findContainersByName": "Find containers by name",
+      "getContainerHealth": "Get container health status",
+      "listAllContainers": "List all containers",
+      "getContainerLogs": "Get container logs",
+      "listShortcuts": "List shortcuts",
+      "startContainer": "Start container",
+      "stopContainer": "Stop container",
+      "restartContainer": "Restart container",
+      "openContainerUrl": "Open container URL"
+    },
+    "examples": {
+      "categories": {
+        "containers": "Containers",
+        "search": "Search",
+        "shortcuts": "Shortcuts",
+        "control": "Control"
+      },
+      "showAllContainers": "Show me all my containers",
+      "whichRunning": "Which containers are running?",
+      "howManyContainers": "How many containers do I have?",
+      "containerStatus": "What's the status of my containers?",
+      "findPostgres": "Find my postgres database",
+      "findNginx": "Find nginx containers",
+      "searchByName": "Search for containers named {{name}}",
+      "listShortcuts": "List all my shortcuts",
+      "showFavorites": "Show my favorite shortcuts",
+      "startNginx": "Start the nginx container",
+      "stopContainer": "Stop container {{name}}",
+      "restartPostgres": "Restart postgres"
+    },
+    "responses": {
+      "containersFound": "I found {{count}} container(s):",
+      "noContainersFound": "I didn't find any containers matching your criteria.",
+      "containerStarted": "✅ Container started successfully.",
+      "containerStopped": "Container is stopped",
+      "containerRestarted": "✅ Container restarted successfully.",
+      "shortcutsFound": "I found {{count}} shortcut(s):",
+      "noShortcutsFound": "You don't have any shortcuts yet.",
+      "containerRunning": "Container is running",
+      "containerHealthy": "Container is healthy",
+      "containerUnhealthy": "Container is unhealthy"
+    },
+    "errors": {
+      "general": "An error occurred while processing your request.",
+      "containerNotFound": "Container not found: {{name}}",
+      "invalidParameters": "Invalid parameters provided.",
+      "operationFailed": "Operation failed: {{error}}",
+      "blockedOperation": "This operation is blocked for safety reasons: {{reason}}",
+      "confirmationRequired": "This action requires confirmation.",
+      "modelNotLoaded": "AI model is not loaded. Please initialize the model first.",
+      "noContainerId": "No container ID provided.",
+      "invalidUrl": "Invalid URL provided.",
+      "executionError": "Error executing function: {{error}}"
+    },
+    "safety": {
+      "blocked": "Blocked",
+      "requiresConfirmation": "Requires Confirmation",
+      "safe": "Safe",
+      "dangerousOperation": "This is a potentially dangerous operation.",
+      "reviewCarefully": "Please review the details carefully before proceeding.",
+      "cannotExecute": "This operation cannot be executed for safety reasons.",
+      "blockedReason": "Reason: {{reason}}"
+    },
+    "status": {
+      "processing": "Processing...",
+      "executing": "Executing action...",
+      "completed": "Completed",
+      "failed": "Failed",
+      "cancelled": "Cancelled",
+      "waiting": "Waiting for confirmation..."
+    }
+  },
+  "search": {
+    "label": "Search shortcuts and containers",
+    "placeholder": "Search…  (Ctrl K)",
+    "clear": "Clear search",
+    "noResults": "No matches for “{{query}}”",
+    "noResultsHint": "Try a different name, image or port."
   }
 }
