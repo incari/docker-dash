@@ -1,0 +1,193 @@
+name: Release Docker Image
+
+# Promotes an already-built preview image to the public registries, then records
+# the release: CHANGELOG entry, git tag and GitHub Release.
+#
+# The promotion re-tags the exact manifest that was tested - it does NOT rebuild.
+# Rebuilding would be a different image: the Dockerfile's base is `node:22-alpine`,
+# a floating tag, so the same commit can produce different bytes on another day.
+#
+# Run this workflow from the ref you want tagged (main, normally). The release
+# notes are the `[Unreleased]` section of CHANGELOG.md, written by hand - nothing
+# here generates prose from commit messages.
+on:
+  workflow_dispatch:
+    inputs:
+      source:
+        description: "Preview to promote: a digest (sha256:...) or a tag like edge / sha-abc1234"
+        required: true
+        default: edge
+      version:
+        description: "Release version, without the leading v (e.g. 0.3.0)"
+        required: true
+      move_latest:
+        description: "Also move the `latest` tag"
+        type: boolean
+        default: true
+
+concurrency:
+  group: docker-release
+  cancel-in-progress: false
+
+env:
+  PREVIEW_IMAGE: ghcr.io/incari/docker-dash-preview
+  DOCKERHUB_IMAGE: docker.io/incari/docker-dash
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+
+    env:
+      # Lifted to job level so steps can test for their presence: Docker Hub is
+      # optional and the release must work without it.
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate version
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::'$VERSION' is not a semver version (expected e.g. 0.3.0 or 0.3.0-rc.1)"
+            exit 1
+          fi
+
+      - name: Extract release notes from CHANGELOG
+        run: |
+          # Fails when [Unreleased] is empty, so a release always has notes.
+          python3 scripts/changelog.py extract > /tmp/release-notes.md
+          echo "::group::Release notes"
+          cat /tmp/release-notes.md
+          echo "::endgroup::"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to Docker Hub
+        if: env.DOCKERHUB_TOKEN != ''
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Resolve source digest
+        id: src
+        env:
+          SOURCE: ${{ inputs.source }}
+        run: |
+          case "$SOURCE" in
+            sha256:*) REF="${PREVIEW_IMAGE}@${SOURCE}" ;;
+            *)        REF="${PREVIEW_IMAGE}:${SOURCE}" ;;
+          esac
+
+          # Pin to the digest so the promotion is reproducible and auditable even
+          # if a moving tag like `edge` advances while this job runs.
+          DIGEST=$(docker buildx imagetools inspect "$REF" --format '{{ .Manifest.Digest }}')
+          echo "ref=${PREVIEW_IMAGE}@${DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+
+      - name: Build tag list
+        id: tags
+        env:
+          VERSION: ${{ inputs.version }}
+          MOVE_LATEST: ${{ inputs.move_latest }}
+        run: |
+          MINOR="${VERSION%.*}"
+
+          IMAGES="ghcr.io/incari/docker-dash ghcr.io/incari/docker-dashboard"
+          if [ -n "$DOCKERHUB_TOKEN" ]; then
+            IMAGES="$IMAGES $DOCKERHUB_IMAGE"
+          else
+            echo "::notice::DOCKERHUB_TOKEN is not set - publishing to GHCR only"
+          fi
+
+          ARGS=""
+          for IMAGE in $IMAGES; do
+            ARGS="$ARGS -t ${IMAGE}:${VERSION}"
+
+            # Pre-releases get the exact version only: no floating tags, so an
+            # rc can never become what `latest` or `0.3` resolve to.
+            case "$VERSION" in
+              *-*) ;;
+              *)
+                ARGS="$ARGS -t ${IMAGE}:${MINOR}"
+                if [ "$MOVE_LATEST" = 'true' ]; then
+                  ARGS="$ARGS -t ${IMAGE}:latest"
+                fi
+                ;;
+            esac
+          done
+
+          echo "args=${ARGS}" >> "$GITHUB_OUTPUT"
+
+      - name: Promote to public images
+        env:
+          SRC_REF: ${{ steps.src.outputs.ref }}
+        run: |
+          # The tag list is built from the already-validated version, so the
+          # unquoted expansion below is intentional: it splits into -t flags.
+          docker buildx imagetools create \
+            ${{ steps.tags.outputs.args }} \
+            "$SRC_REF"
+
+      - name: Move CHANGELOG entry and commit
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          python3 scripts/changelog.py release "$VERSION"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+          git commit -m "chore(release): ${VERSION}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+
+      - name: Create tag and GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          # --target pins the release to the changelog commit just pushed.
+          case "$VERSION" in
+            *-*) PRERELEASE=--prerelease ;;
+            *)   PRERELEASE="" ;;
+          esac
+
+          gh release create "v${VERSION}" \
+            --title "v${VERSION}" \
+            --notes-file /tmp/release-notes.md \
+            --target "$(git rev-parse HEAD)" \
+            $PRERELEASE
+
+      - name: Summarise
+        env:
+          VERSION: ${{ inputs.version }}
+          DIGEST: ${{ steps.src.outputs.digest }}
+          TAG_ARGS: ${{ steps.tags.outputs.args }}
+        run: |
+          {
+            echo "### Released \`v${VERSION}\`"
+            echo
+            echo "Promoted \`${DIGEST}\` from the preview package - no rebuild."
+            echo
+            echo "Applied tags:"
+            echo '```'
+            printf '%s\n' "$TAG_ARGS" | tr ' ' '\n' | grep -v '^-t$' | grep -v '^$'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
