@@ -9,7 +9,7 @@
 # same thing. Replace the digest to move to a newer preview.
 services:
   docker-dashboard-preview:
-    image: ghcr.io/incari/docker-dash-preview@sha256:0ebd353498d706fe8ad0a15b539755559ac7fe7e58bc628ac9fcf54d07b52c8a
+    image: ghcr.io/incari/docker-dash-preview@sha256:8333f5dff4d2c23213b2140378ec0147c38d15a38224bdf71315aea43a39202e
     container_name: docker-dashboard-preview
     restart: unless-stopped
 
