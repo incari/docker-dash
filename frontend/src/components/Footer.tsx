@@ -9,18 +9,23 @@ import {
 import { useTranslation } from "react-i18next";
 import { LanguageSelector } from "./LanguageSelector";
 import { ThemeSelector } from "./ThemeSelector";
+import { DataTransfer } from "./DataTransfer";
 import type { ThemeColors } from "../types/themeTypes";
 
 interface FooterProps {
   currentTheme: ThemeColors;
   onThemeChange: (theme: ThemeColors) => void;
   onMigrate: () => void;
+  onImport: (payload: unknown, fileName: string) => void;
+  onImportError: (title: string, message: string) => void;
 }
 
 export function Footer({
   currentTheme,
   onThemeChange,
   onMigrate,
+  onImport,
+  onImportError,
 }: FooterProps) {
   const { t } = useTranslation();
 
@@ -76,13 +81,18 @@ export function Footer({
             <button
               onClick={onMigrate}
               className="flex items-center gap-1.5 sm:gap-2 bg-slate-800/50 hover:bg-slate-800 border border-white/5 hover:border-blue-500/30 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg transition-all duration-300"
-              title="Update shortcuts to use official Docker icons"
+              title={t("footer.updateIconsHint")}
             >
               <RefreshCw className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-400" />
               <span className="text-slate-300 text-xs sm:text-sm hover:text-blue-400 transition-colors">
-                Update Icons
+                {t("footer.updateIcons")}
               </span>
             </button>
+
+            <DataTransfer
+              onImport={onImport}
+              onError={onImportError}
+            />
           </div>
 
           {/* Right: Theme, Language Selector + PowerSlug */}

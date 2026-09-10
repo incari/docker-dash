@@ -212,3 +212,24 @@ export const uploadsApi = {
     });
   },
 };
+
+/**
+ * Export and import of the dashboard's own data. Upgrades migrate the database
+ * in place and cannot be undone, so users need a copy they control.
+ */
+export const dataApi = {
+  /** The browser downloads this directly; the server sets Content-Disposition. */
+  exportUrl: `${API_BASE}/export`,
+
+  importData: async (
+    payload: unknown,
+  ): Promise<{
+    success: boolean;
+    shortcuts: number;
+    sections: number;
+    message: string;
+  }> => {
+    const response = await axios.post(`${API_BASE}/import`, payload);
+    return response.data;
+  },
+};

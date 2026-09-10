@@ -35,7 +35,9 @@
     "tryPowerSlug": "Try PowerSlug",
     "bestUrlShortener": "The best URL shortener",
     "language": "Language",
-    "feedback": "Feedback"
+    "feedback": "Feedback",
+    "updateIcons": "Update Icons",
+    "updateIconsHint": "Update shortcuts to use official Docker icons"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -308,5 +310,17 @@
     "clear": "Clear search",
     "noResults": "No matches for “{{query}}”",
     "noResultsHint": "Try a different name, image or port."
+  },
+  "data": {
+    "export": "Export",
+    "exportHint": "Download your shortcuts and sections as a JSON file",
+    "import": "Import",
+    "importHint": "Restore shortcuts and sections from an exported file",
+    "importComplete": "Import complete",
+    "importFailed": "Import failed",
+    "importFailedMessage": "The file could not be imported. Check the server logs for details.",
+    "notJson": "That file is not valid JSON.",
+    "confirmImportTitle": "Replace all shortcuts?",
+    "confirmImportMessage": "Importing {{file}} replaces every shortcut and section with the contents of the file. A backup of the current database is saved first."
   }
 }

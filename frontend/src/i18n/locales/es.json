@@ -35,7 +35,9 @@
     "tryPowerSlug": "Prueba PowerSlug",
     "bestUrlShortener": "El mejor acortador de URLs",
     "language": "Idioma",
-    "feedback": "Comentarios"
+    "feedback": "Comentarios",
+    "updateIcons": "Actualizar iconos",
+    "updateIconsHint": "Actualizar los accesos directos con los iconos oficiales de Docker"
   },
   "dashboard": {
     "title": "Panel",
@@ -308,5 +310,17 @@
     "clear": "Limpiar búsqueda",
     "noResults": "Sin resultados para «{{query}}»",
     "noResultsHint": "Probá con otro nombre, imagen o puerto."
+  },
+  "data": {
+    "export": "Exportar",
+    "exportHint": "Descargar tus accesos directos y secciones en un archivo JSON",
+    "import": "Importar",
+    "importHint": "Restaurar accesos directos y secciones desde un archivo exportado",
+    "importComplete": "Importación completa",
+    "importFailed": "Falló la importación",
+    "importFailedMessage": "No se pudo importar el archivo. Revisá los registros del servidor.",
+    "notJson": "Ese archivo no es JSON válido.",
+    "confirmImportTitle": "¿Reemplazar todos los accesos directos?",
+    "confirmImportMessage": "Importar {{file}} reemplaza todos los accesos directos y secciones por el contenido del archivo. Antes se guarda una copia de seguridad de la base de datos actual."
   }
 }

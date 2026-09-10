@@ -10,7 +10,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Database path from environment or default
-const dbPath =
+export const dbPath =
   process.env.DB_PATH || path.join(__dirname, "../../data/dashboard.db");
 
 // Create database instance

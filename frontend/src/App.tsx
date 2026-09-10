@@ -39,7 +39,7 @@ import { useModals } from "./hooks/useModals";
 import { useInstallPrompt } from "./hooks/useInstallPrompt";
 import { useViewSettings } from "./hooks/useViewSettings";
 import { useMigrationSettings } from "./hooks/useMigrationSettings";
-import { shortcutsApi } from "./services/api";
+import { shortcutsApi, dataApi } from "./services/api";
 import { parseQuery, matchesShortcut } from "./utils/search";
 import { findContainerForShortcut } from "./utils/dashboardHelpers";
 import type { Section, Shortcut } from "./types";
@@ -205,6 +205,28 @@ function App() {
     // Mark migration as dismissed so it doesn't auto-show again
     setMigrationDismissed(true);
   }, [setMigrationDismissed]);
+
+  // Import replaces every shortcut and section, so it is confirmed first. The
+  // server writes its own backup before applying it.
+  const handleImport = useCallback(
+    (payload: unknown, fileName: string) => {
+      modals.showConfirm(
+        t("data.confirmImportTitle"),
+        t("data.confirmImportMessage", { file: fileName }),
+        async () => {
+          try {
+            const result = await dataApi.importData(payload);
+            await refreshAll();
+            toast.success(t("data.importComplete"), result.message);
+          } catch (error) {
+            console.error("Import failed:", error);
+            toast.error(t("data.importFailed"), t("data.importFailedMessage"));
+          }
+        },
+      );
+    },
+    [modals, t, toast, refreshAll],
+  );
 
   // ==================== Effects ====================
   // Use ref to ensure startup tasks only run once
@@ -596,6 +618,8 @@ function App() {
         currentTheme={theme}
         onThemeChange={updateTheme}
         onMigrate={handleMigration}
+        onImport={handleImport}
+        onImportError={(title, message) => toast.error(title, message)}
       />
 
       <AnimatePresence>

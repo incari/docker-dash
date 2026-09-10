@@ -11,6 +11,7 @@ import {
   hasMigrationRun,
   recordMigration,
 } from "../config/database.js";
+import { createBackup } from "./backup.js";
 import Docker from "dockerode";
 
 const docker = new Docker({
@@ -57,8 +58,34 @@ async function runOnceAsync(
 /**
  * Run all migrations
  */
+/** Migrations that rewrite tables or delete rows, in the order they run. */
+const MIGRATION_NAMES = [
+  "001_add_position_column",
+  "002_add_display_name_column",
+  "003_normalize_container_names",
+  "004_cleanup_duplicates",
+  "005_normalize_container_base_names",
+  "006_remove_name_column",
+  "007_make_port_nullable",
+  "008_add_container_match_name",
+  "009_add_indexes",
+  "010_cleanup_deprecated_columns",
+];
+
 export async function runMigrations(): Promise<void> {
   console.log("[MIGRATIONS] Starting database migrations...");
+
+  // Back up before anything is rewritten. Several migrations drop and rebuild
+  // tables and 004 deletes rows outright, and there are no down migrations, so
+  // this copy is the only way back to the previous state.
+  const pending = MIGRATION_NAMES.filter((name) => !hasMigrationRun(name));
+  if (pending.length > 0) {
+    console.log(
+      `[MIGRATIONS] ${pending.length} pending; backing up first:`,
+      pending.join(", "),
+    );
+    await createBackup("premigration");
+  }
 
   // Legacy column migrations (for existing databases)
   addColumnIfMissing("shortcuts", "url", "TEXT");

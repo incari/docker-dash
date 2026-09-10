@@ -25,6 +25,7 @@ import {
   sectionsRouter,
   shortcutsRouter,
   settingsRouter,
+  dataRouter,
 } from "./routes/index.js";
 
 // ES module equivalents of __dirname and __filename
@@ -74,6 +75,7 @@ app.use(uploadsRouter);
 app.use(sectionsRouter);
 app.use(shortcutsRouter);
 app.use(settingsRouter);
+app.use(dataRouter);
 
 // Catch-all route for SPA (React Router support)
 app.get("*", (req, res): void => {
