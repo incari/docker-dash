@@ -23,6 +23,11 @@ interface ExportedSection {
   is_collapsed: number;
 }
 
+interface ExportedDismissal {
+  container_match_name: string;
+  display_name: string | null;
+}
+
 interface ExportedShortcut {
   display_name: string;
   description: string | null;
@@ -56,6 +61,13 @@ router.get("/api/export", (_req: Request, res: Response): void => {
       )
       .all() as ExportedShortcut[];
 
+    // Deletions have to travel with the data: auto-sync recreates a shortcut for
+    // any container that lacks one, so restoring an export without these would
+    // bring every deliberately deleted container back on the next sync.
+    const dismissed_containers = db
+      .prepare("SELECT container_match_name, display_name FROM dismissed_containers")
+      .all() as ExportedDismissal[];
+
     const filename = `dockerdash-export-${new Date().toISOString().slice(0, 10)}.json`;
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
     res.json({
@@ -63,6 +75,7 @@ router.get("/api/export", (_req: Request, res: Response): void => {
       exported_at: new Date().toISOString(),
       sections,
       shortcuts,
+      dismissed_containers,
     });
   } catch (err) {
     console.error("[EXPORT] Failed:", err);
@@ -92,6 +105,10 @@ router.post("/api/import", async (req: Request, res: Response): Promise<void> =>
     // Import replaces everything, so keep a copy of what is being replaced.
     const backup = await createBackup("preimport");
 
+    const insertDismissal = db.prepare(
+      `INSERT OR REPLACE INTO dismissed_containers (container_match_name, display_name)
+       VALUES (@container_match_name, @display_name)`,
+    );
     const insertSection = db.prepare(
       `INSERT INTO sections (name, position, is_collapsed)
        VALUES (@name, @position, @is_collapsed)`,
@@ -108,9 +125,21 @@ router.post("/api/import", async (req: Request, res: Response): Promise<void> =>
     );
 
     const replaceAll = db.transaction(
-      (sections: ExportedSection[], shortcuts: ExportedShortcut[]) => {
+      (
+        sections: ExportedSection[],
+        shortcuts: ExportedShortcut[],
+        dismissals: ExportedDismissal[],
+      ) => {
         db.prepare("DELETE FROM shortcuts").run();
         db.prepare("DELETE FROM sections").run();
+        db.prepare("DELETE FROM dismissed_containers").run();
+
+        for (const dismissal of dismissals) {
+          insertDismissal.run({
+            container_match_name: dismissal.container_match_name,
+            display_name: dismissal.display_name ?? null,
+          });
+        }
 
         // Sections get fresh ids, so shortcuts' section_id has to be remapped.
         const sectionIdMap = new Map<number, number>();
@@ -146,7 +175,14 @@ router.post("/api/import", async (req: Request, res: Response): Promise<void> =>
       },
     );
 
-    replaceAll(payload.sections, payload.shortcuts);
+    // Exports written before dismissals were included simply carry none.
+    replaceAll(
+      payload.sections,
+      payload.shortcuts,
+      Array.isArray(payload.dismissed_containers)
+        ? payload.dismissed_containers
+        : [],
+    );
 
     res.json({
       success: true,

@@ -70,6 +70,17 @@ export function initializeSchema(): void {
     )
   `);
 
+  // Remembers containers whose shortcut the user deleted. Auto-sync would
+  // otherwise recreate a shortcut for every running container on the next
+  // startup, so a deliberate deletion could never stick.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS dismissed_containers (
+      container_match_name TEXT PRIMARY KEY,
+      display_name TEXT,
+      dismissed_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
   // Create settings table (singleton pattern)
   db.exec(`
     CREATE TABLE IF NOT EXISTS settings (

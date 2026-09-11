@@ -19,10 +19,13 @@ import {
   urlExists,
   isCustomMappingIcon,
 } from "../utils/dockerIconVault.js";
+import { isUserChosenIcon } from "../utils/iconOwnership.js";
 import {
   getContainerBaseName,
   extractImageName,
   generateContainerMatchName,
+  getPublishedPorts,
+  selectPublishedPort,
 } from "../utils/containerMatching.js";
 import {
   isDockerUnavailable,
@@ -31,6 +34,47 @@ import {
 import type { ShortcutRow, ReorderItem } from "../types/index.js";
 
 const router: RouterType = Router();
+
+/**
+ * Auto-sync reads the shortcut table, then writes to it, with a network call
+ * for the icon in between. Every dashboard that loads fires the endpoint, so
+ * two of them overlapping both decided a container had no shortcut and both
+ * created one - that is where the identical pairs of rows on the live server
+ * came from. Run one sync at a time.
+ */
+let autoSyncQueue: Promise<unknown> = Promise.resolve();
+
+function withAutoSyncLock<T>(task: () => Promise<T>): Promise<T> {
+  const result = autoSyncQueue.then(task, task);
+  autoSyncQueue = result.catch(() => undefined);
+  return result;
+}
+
+/**
+ * Stop auto-sync from recreating a shortcut the user deleted.
+ * Keyed by container_match_name so the dismissal outlives the container being
+ * recreated under a different name.
+ */
+function rememberDismissedContainer(
+  matchName: string,
+  displayName: string,
+): void {
+  db.prepare(
+    `INSERT INTO dismissed_containers (container_match_name, display_name)
+     VALUES (?, ?)
+     ON CONFLICT(container_match_name) DO UPDATE SET
+       display_name = excluded.display_name,
+       dismissed_at = CURRENT_TIMESTAMP`,
+  ).run(matchName, displayName);
+}
+
+/** Adding a shortcut back by hand undoes an earlier dismissal. */
+function forgetDismissedContainer(matchName: string | null): void {
+  if (!matchName) return;
+  db.prepare(
+    "DELETE FROM dismissed_containers WHERE container_match_name = ?",
+  ).run(matchName);
+}
 
 // Get all shortcuts
 router.get("/api/shortcuts", (_req: Request, res: Response) => {
@@ -55,191 +99,299 @@ router.get("/api/shortcuts", (_req: Request, res: Response) => {
 router.post(
   "/api/shortcuts/auto-sync",
   async (_req: Request, res: Response): Promise<void> => {
-    try {
-      console.log(
-        "[AUTO-SYNC] Starting auto-sync of containers to shortcuts...",
-      );
+    await withAutoSyncLock(async () => {
+      try {
+        console.log(
+          "[AUTO-SYNC] Starting auto-sync of containers to shortcuts...",
+        );
 
-      const containers = await docker.listContainers({ all: true });
-      console.log("[AUTO-SYNC] Found", containers.length, "containers");
+        const containers = await docker.listContainers({ all: true });
+        console.log("[AUTO-SYNC] Found", containers.length, "containers");
 
-      const existingShortcuts = db
-        .prepare(
-          "SELECT id, container_name, container_match_name, display_name, container_id FROM shortcuts WHERE container_name IS NOT NULL",
-        )
-        .all() as Array<{
-        id: number;
-        container_name: string;
-        container_match_name: string | null;
-        display_name: string;
-        container_id: string | null;
-      }>;
-
-      // Use container_match_name for stable matching, fall back to container_name
-      const existingContainerNames = new Set(
-        existingShortcuts.map(
-          (s) => s.container_match_name || s.container_name,
-        ),
-      );
-      console.log(
-        "[AUTO-SYNC] Found",
-        existingContainerNames.size,
-        "existing container shortcuts",
-      );
-
-      // Build a map of container base names from Docker
-      const dockerContainerMap = new Map<
-        string,
-        {
-          id: string;
-          name: string;
-          baseName: string;
-          imageName: string;
+        // Every shortcut, not only the container-linked ones: a shortcut added
+        // by hand has no container_name, and looking at the linked rows alone
+        // is why a hand-made "coolify" tile and an auto-synced one ended up
+        // side by side.
+        const existingShortcuts = db
+          .prepare(
+            `SELECT id, display_name, container_name, container_match_name, port
+             FROM shortcuts`,
+          )
+          .all() as Array<{
+          id: number;
+          display_name: string;
+          container_name: string | null;
+          container_match_name: string | null;
           port: number | null;
-        }
-      >();
+        }>;
 
-      for (const container of containers) {
-        const containerName = container.Names[0].replace(/^\//, "");
-        const containerBaseName = getContainerBaseName(containerName);
-        const imageName = extractImageName(container.Image) || containerName;
-
-        dockerContainerMap.set(containerBaseName, {
-          id: container.Id,
-          name: containerName,
-          baseName: containerBaseName,
-          imageName: imageName,
-          port:
-            container.Ports && container.Ports[0]
-              ? container.Ports[0].PublicPort || null
-              : null,
-        });
-      }
-
-      let createdCount = 0;
-      let updatedCount = 0;
-
-      // Include container_match_name for stable matching across container restarts.
-      // Bound by name rather than by position: this statement previously took
-      // seven placeholders and was called with six values, which shifted every
-      // column after `description` and made auto-sync throw on the first insert.
-      const insertStmt = db.prepare(
-        `INSERT INTO shortcuts
-           (display_name, container_name, container_match_name, description, icon, port, is_favorite)
-         VALUES
-           (@display_name, @container_name, @container_match_name, @description, @icon, @port, @is_favorite)`,
-      );
-      const updateStmt = db.prepare(
-        "UPDATE shortcuts SET port = ?, container_name = ?, container_match_name = ? WHERE id = ?",
-      );
-
-      // Build a reverse lookup: imageName → containerBaseName (for legacy matching)
-      const imageNameToBaseName = new Map<string, string>();
-      for (const [baseName, containerData] of dockerContainerMap) {
-        if (containerData.imageName && containerData.imageName !== baseName) {
-          imageNameToBaseName.set(containerData.imageName, baseName);
-        }
-      }
-
-      // First pass: Update existing shortcuts
-      for (const shortcut of existingShortcuts) {
-        // Use container_match_name for stable matching, fall back to container_name
-        const matchName =
-          shortcut.container_match_name || shortcut.container_name;
-        let dockerContainer = dockerContainerMap.get(matchName);
-        let matchKey = matchName;
-
-        if (!dockerContainer && imageNameToBaseName.has(matchName)) {
-          matchKey = imageNameToBaseName.get(matchName)!;
-          dockerContainer = dockerContainerMap.get(matchKey);
-          if (dockerContainer) {
-            console.log(
-              "[AUTO-SYNC] Found legacy match by image name:",
-              matchName,
-              "→",
-              matchKey,
-            );
+        // A container is already on the dashboard if any shortcut points at it,
+        // whether through its container link or just by being named after it.
+        const claimedNames = new Set<string>();
+        for (const shortcut of existingShortcuts) {
+          const linked =
+            shortcut.container_match_name || shortcut.container_name;
+          if (linked) {
+            claimedNames.add(getContainerBaseName(linked));
+          }
+          const fromDisplayName = getContainerBaseName(shortcut.display_name);
+          if (fromDisplayName) {
+            claimedNames.add(fromDisplayName);
           }
         }
 
-        if (dockerContainer) {
-          const needsUpdate = matchName !== matchKey;
-          if (needsUpdate) {
+        // Containers whose shortcut the user deleted stay deleted.
+        const dismissedNames = new Set(
+          (
+            db
+              .prepare("SELECT container_match_name FROM dismissed_containers")
+              .all() as Array<{ container_match_name: string }>
+          ).map((row) => row.container_match_name),
+        );
+
+        console.log(
+          "[AUTO-SYNC]",
+          claimedNames.size,
+          "containers already have a shortcut,",
+          dismissedNames.size,
+          "dismissed",
+        );
+
+        // Build a map of container base names from Docker
+        const dockerContainerMap = new Map<
+          string,
+          {
+            id: string;
+            name: string;
+            baseName: string;
+            imageName: string;
+            port: number | null;
+            publishedPorts: number[];
+          }
+        >();
+
+        for (const container of containers) {
+          const containerName = container.Names[0].replace(/^\//, "");
+          const containerBaseName = getContainerBaseName(containerName);
+          const imageName = extractImageName(container.Image) || containerName;
+
+          dockerContainerMap.set(containerBaseName, {
+            id: container.Id,
+            name: containerName,
+            baseName: containerBaseName,
+            imageName: imageName,
+            // Never Ports[0]: see selectPublishedPort.
+            port: selectPublishedPort(container.Ports),
+            publishedPorts: getPublishedPorts(container.Ports),
+          });
+        }
+
+        let createdCount = 0;
+        let updatedCount = 0;
+        let skippedCount = 0;
+
+        // Include container_match_name for stable matching across container restarts.
+        // Bound by name rather than by position: this statement previously took
+        // seven placeholders and was called with six values, which shifted every
+        // column after `description` and made auto-sync throw on the first insert.
+        const insertStmt = db.prepare(
+          `INSERT INTO shortcuts
+             (display_name, container_name, container_match_name, description, icon, port, is_favorite)
+           VALUES
+             (@display_name, @container_name, @container_match_name, @description, @icon, @port, @is_favorite)`,
+        );
+        const updateStmt = db.prepare(
+          "UPDATE shortcuts SET port = ?, container_name = ?, container_match_name = ? WHERE id = ?",
+        );
+
+        // Build a reverse lookup: imageName → containerBaseName (for legacy matching)
+        const imageNameToBaseName = new Map<string, string>();
+        for (const [baseName, containerData] of dockerContainerMap) {
+          if (containerData.imageName && containerData.imageName !== baseName) {
+            imageNameToBaseName.set(containerData.imageName, baseName);
+          }
+        }
+
+        // First pass: Update existing shortcuts
+        for (const shortcut of existingShortcuts) {
+          // Use container_match_name for stable matching, fall back to container_name
+          const matchName =
+            shortcut.container_match_name || shortcut.container_name;
+          if (!matchName) continue;
+
+          let dockerContainer = dockerContainerMap.get(matchName);
+          let matchKey = matchName;
+
+          if (!dockerContainer && imageNameToBaseName.has(matchName)) {
+            matchKey = imageNameToBaseName.get(matchName)!;
+            dockerContainer = dockerContainerMap.get(matchKey);
+            if (dockerContainer) {
+              console.log(
+                "[AUTO-SYNC] Found legacy match by image name:",
+                matchName,
+                "→",
+                matchKey,
+              );
+            }
+          }
+
+          if (!dockerContainer) continue;
+
+          const needsRelink = matchName !== matchKey;
+          // Only replace a port that cannot be right: it was never filled in,
+          // or the container does not publish it any more. A port the container
+          // still publishes may have been picked deliberately in the editor, so
+          // it is left alone. Stopped containers publish nothing and so never
+          // clear a port.
+          const needsPort =
+            dockerContainer.port !== null &&
+            shortcut.port !== dockerContainer.port &&
+            (shortcut.port === null ||
+              !dockerContainer.publishedPorts.includes(shortcut.port));
+
+          if (needsRelink || needsPort) {
             console.log(
               "[AUTO-SYNC] Updating shortcut:",
               shortcut.display_name,
+              needsPort ? `(port → ${dockerContainer.port})` : "",
             );
-            // Also update container_match_name for stable matching
-            const matchName = generateContainerMatchName(matchKey);
             updateStmt.run(
-              dockerContainer.port,
-              matchKey,
-              matchName,
+              needsPort ? dockerContainer.port : shortcut.port,
+              needsRelink ? matchKey : shortcut.container_name,
+              needsRelink
+                ? generateContainerMatchName(matchKey)
+                : shortcut.container_match_name,
               shortcut.id,
             );
             updatedCount++;
           }
+
           dockerContainerMap.delete(matchKey);
         }
-      }
 
-      // Second pass: Create shortcuts for new containers
-      for (const [baseName, containerData] of dockerContainerMap) {
-        // Use validated icon URL (checks if Homarr URL exists before using)
-        const icon = await getValidatedIconUrl(
-          containerData.imageName,
-          "Server",
+        // Drop containers that already have a shortcut or that the user
+        // dismissed, so only genuinely new containers are left.
+        for (const baseName of [...dockerContainerMap.keys()]) {
+          if (dismissedNames.has(baseName)) {
+            console.log(
+              "[AUTO-SYNC] Skipping dismissed container:",
+              baseName,
+            );
+            dockerContainerMap.delete(baseName);
+            skippedCount++;
+          } else if (claimedNames.has(baseName)) {
+            console.log(
+              "[AUTO-SYNC] Container already covered by a shortcut:",
+              baseName,
+            );
+            dockerContainerMap.delete(baseName);
+          }
+        }
+
+        // Second pass: Create shortcuts for new containers.
+        // Icons are resolved first because the lookup hits the network, and
+        // the inserts then happen in one transaction below.
+        const pending: Array<{
+          name: string;
+          baseName: string;
+          matchName: string;
+          icon: string;
+          port: number | null;
+        }> = [];
+
+        for (const [baseName, containerData] of dockerContainerMap) {
+          // Use validated icon URL (checks if Homarr URL exists before using)
+          const icon = await getValidatedIconUrl(
+            containerData.imageName,
+            "Server",
+          );
+          console.log(
+            "[AUTO-SYNC] Creating shortcut for container:",
+            containerData.name,
+            "with icon:",
+            icon.startsWith("http") ? icon.substring(0, 50) + "..." : icon,
+          );
+
+          pending.push({
+            name: containerData.name,
+            baseName,
+            // Generate stable match name for container matching across restarts
+            matchName: generateContainerMatchName(containerData.name),
+            icon,
+            port: containerData.port,
+          });
+        }
+
+        // Re-check inside the transaction against a fresh read: another process
+        // sharing this database file could have inserted while the icons above
+        // were being fetched.
+        const insertNewShortcuts = db.transaction(
+          (items: typeof pending): number => {
+            const taken = new Set(
+              (
+                db
+                  .prepare(
+                    "SELECT container_match_name FROM shortcuts WHERE container_match_name IS NOT NULL",
+                  )
+                  .all() as Array<{ container_match_name: string }>
+              ).map((row) => row.container_match_name),
+            );
+
+            let inserted = 0;
+            for (const item of items) {
+              if (taken.has(item.matchName)) continue;
+              insertStmt.run({
+                display_name: item.name,
+                container_name: item.baseName,
+                container_match_name: item.matchName,
+                // Auto-sync has nothing to describe a container with;
+                // descriptions are filled in later by the icon migration.
+                description: null,
+                icon: item.icon,
+                port: item.port,
+                is_favorite: 0,
+              });
+              taken.add(item.matchName);
+              inserted++;
+            }
+            return inserted;
+          },
         );
+
+        createdCount = insertNewShortcuts(pending);
+
         console.log(
-          "[AUTO-SYNC] Creating shortcut for container:",
-          containerData.name,
-          "with icon:",
-          icon.startsWith("http") ? icon.substring(0, 50) + "..." : icon,
+          "[AUTO-SYNC] Auto-sync completed. Created",
+          createdCount,
+          "new shortcuts, updated",
+          updatedCount,
+          "skipped",
+          skippedCount,
+          "dismissed",
         );
-
-        // Generate stable match name for container matching across restarts
-        const matchName = generateContainerMatchName(containerData.name);
-        insertStmt.run({
-          display_name: containerData.name,
-          container_name: baseName,
-          container_match_name: matchName,
-          // Auto-sync has nothing to describe a container with; descriptions are
-          // filled in later by the icon migration.
-          description: null,
-          icon,
-          port: containerData.port,
-          is_favorite: 0,
-        });
-        createdCount++;
-      }
-
-      console.log(
-        "[AUTO-SYNC] Auto-sync completed. Created",
-        createdCount,
-        "new shortcuts, updated",
-        updatedCount,
-      );
-      res.json({
-        success: true,
-        created: createdCount,
-        updated: updatedCount,
-        total: containers.length,
-        message: `Created ${createdCount} new shortcuts, updated ${updatedCount} existing shortcuts from ${containers.length} containers`,
-      });
-    } catch (error: unknown) {
-      if (isDockerUnavailable(error)) {
-        logDockerUnavailable("POST /api/shortcuts/auto-sync");
         res.json({
           success: true,
-          created: 0,
-          total: 0,
-          message: "Docker is not running. No containers to sync.",
+          created: createdCount,
+          updated: updatedCount,
+          skipped: skippedCount,
+          total: containers.length,
+          message: `Created ${createdCount} new shortcuts, updated ${updatedCount} existing shortcuts from ${containers.length} containers`,
         });
-        return;
+      } catch (error: unknown) {
+        if (isDockerUnavailable(error)) {
+          logDockerUnavailable("POST /api/shortcuts/auto-sync");
+          res.json({
+            success: true,
+            created: 0,
+            total: 0,
+            message: "Docker is not running. No containers to sync.",
+          });
+          return;
+        }
+        console.error("[AUTO-SYNC] Auto-sync failed:", error);
+        res.status(500).json({ error: "Failed to auto-sync containers" });
       }
-      console.error("[AUTO-SYNC] Auto-sync failed:", error);
-      res.status(500).json({ error: "Failed to auto-sync containers" });
-    }
+    });
   },
 );
 
@@ -371,6 +523,9 @@ router.post(
         finalComposeProject,
       );
 
+      // Asking for this container back overrides an earlier deletion.
+      forgetDismissedContainer(finalMatchName);
+
       res.json({
         id: result.lastInsertRowid,
         display_name: display_name.trim(),
@@ -437,7 +592,17 @@ router.put(
 
     let iconValue = icon;
 
-    if (!icon && display_name) {
+    const existingIcon = (
+      db.prepare("SELECT icon FROM shortcuts WHERE id = ?").get(id) as
+        | { icon: string | null }
+        | undefined
+    )?.icon;
+
+    // Regenerating from the container is a convenience for shortcuts that have
+    // no icon yet. Doing it when the user already chose one - an upload or their
+    // own URL - would silently throw their choice away on any edit that omits
+    // the field.
+    if (!icon && !req.file && display_name && !isUserChosenIcon(existingIcon)) {
       try {
         const containers = await docker.listContainers({ all: true });
         const nameBaseName = getContainerBaseName(display_name.trim());
@@ -497,14 +662,20 @@ router.put(
 
     try {
       let sql =
-        "UPDATE shortcuts SET display_name=?, description=?, icon=?, port=?, url=?, updated_at=CURRENT_TIMESTAMP";
+        "UPDATE shortcuts SET display_name=?, description=?, port=?, url=?, updated_at=CURRENT_TIMESTAMP";
       const params: (string | number | null)[] = [
         display_name ? display_name.trim() : display_name,
         cleanedDescription,
-        iconValue,
         finalPort,
         finalUrl,
       ];
+
+      // No icon in the request and none derived: keep whatever is stored rather
+      // than overwriting it with undefined.
+      if (iconValue !== undefined) {
+        sql += ", icon=?";
+        params.push(iconValue);
+      }
 
       if (reqContainerName !== undefined) {
         sql += ", container_name=?, container_match_name=?";
@@ -532,6 +703,10 @@ router.put(
 
       const stmt = db.prepare(sql);
       stmt.run(...params);
+
+      // Pointing a shortcut at a container overrides an earlier deletion.
+      forgetDismissedContainer(matchName ?? null);
+
       res.json({
         id,
         display_name: display_name ? display_name.trim() : display_name,
@@ -609,7 +784,33 @@ router.put("/api/shortcuts/reorder", (req: Request, res: Response): void => {
 router.delete("/api/shortcuts/:id", (req: Request, res: Response) => {
   const { id } = req.params;
   try {
+    const shortcut = db
+      .prepare(
+        "SELECT display_name, container_name, container_match_name FROM shortcuts WHERE id = ?",
+      )
+      .get(id) as
+      | {
+          display_name: string;
+          container_name: string | null;
+          container_match_name: string | null;
+        }
+      | undefined;
+
     db.prepare("DELETE FROM shortcuts WHERE id=?").run(id);
+
+    // Deleting a container-linked shortcut is the only way the user can say
+    // "I don't want this container on the dashboard". Without recording it,
+    // auto-sync sees a container with no shortcut on the next startup and
+    // creates it again, so the tile could never be removed for good.
+    const link = shortcut?.container_match_name || shortcut?.container_name;
+    if (link) {
+      const matchName = getContainerBaseName(link);
+      if (matchName) {
+        rememberDismissedContainer(matchName, shortcut!.display_name);
+        console.log("[SHORTCUTS] Dismissed container:", matchName);
+      }
+    }
+
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: "Failed to delete shortcut" });
@@ -636,10 +837,15 @@ router.get(
         icon: string;
       }>;
 
+      // An icon the user uploaded or set themselves is not "unmigrated" - it is
+      // their choice. Counting those made the migration modal open on its own
+      // and offer to replace them.
+      const candidates = shortcuts.filter((s) => !isUserChosenIcon(s.icon));
+
       res.json({
-        needsMigration: shortcuts.length > 0,
-        count: shortcuts.length,
-        shortcuts: shortcuts.map((s) => ({
+        needsMigration: candidates.length > 0,
+        count: candidates.length,
+        shortcuts: candidates.map((s) => ({
           id: s.id,
           display_name: s.display_name,
           description: s.description,
@@ -779,6 +985,25 @@ router.post(
             skippedCount++;
             continue;
           }
+        }
+
+        // The modal only decides what is preselected; this is what actually
+        // protects the data. An icon the user uploaded or set themselves is
+        // never replaced by a bulk migration, whatever the request asks for.
+        const current = db
+          .prepare("SELECT icon FROM shortcuts WHERE id = ?")
+          .get(update.id) as { icon: string | null } | undefined;
+
+        if (
+          current &&
+          isUserChosenIcon(current.icon) &&
+          current.icon !== update.icon_url
+        ) {
+          console.log(
+            `[MIGRATE-ICONS] Keeping user-chosen icon for shortcut ${update.id}`,
+          );
+          skippedCount++;
+          continue;
         }
 
         try {

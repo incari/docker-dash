@@ -9,6 +9,7 @@
 import { readFileSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
+export { isUserChosenIcon } from "./iconOwnership.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -167,6 +168,14 @@ export async function urlExists(url: string): Promise<boolean> {
 export function isCustomMappingIcon(iconUrl: string): boolean {
   return Object.values(CUSTOM_ICON_MAPPINGS).includes(iconUrl);
 }
+
+/**
+ * Whether an icon was chosen by the user rather than assigned by this app.
+ *
+ * An uploaded file, or any URL outside the Homarr icon set, is a deliberate
+ * choice. The icon migration fills in icons that are missing or generic; it
+ * must never overwrite one of these unless that exact shortcut was picked.
+ */
 
 /**
  * Get a validated icon URL for a container

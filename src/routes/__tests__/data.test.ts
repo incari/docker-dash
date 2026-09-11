@@ -39,7 +39,9 @@ afterAll(() => {
 });
 
 beforeEach(() => {
-  db.exec("DELETE FROM shortcuts; DELETE FROM sections;");
+  db.exec(
+    "DELETE FROM shortcuts; DELETE FROM sections; DELETE FROM dismissed_containers;",
+  );
 });
 
 function seed() {
@@ -124,6 +126,44 @@ describe("export / import", () => {
       n: number;
     };
     expect(count.n).toBe(2);
+  });
+
+  it("carries deleted containers across, so they stay deleted", async () => {
+    seed();
+    db.prepare(
+      "INSERT INTO dismissed_containers (container_match_name, display_name) VALUES ('plex', 'Plex')",
+    ).run();
+
+    const exported = await (await fetch(`${baseUrl}/api/export`)).json();
+    expect(exported.dismissed_containers).toEqual([
+      { container_match_name: "plex", display_name: "Plex" },
+    ]);
+
+    db.exec("DELETE FROM dismissed_containers");
+    await fetch(`${baseUrl}/api/import`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(exported),
+    });
+
+    // Without this, auto-sync would recreate every shortcut the user deleted.
+    const restored = db
+      .prepare("SELECT container_match_name FROM dismissed_containers")
+      .all();
+    expect(restored).toEqual([{ container_match_name: "plex" }]);
+  });
+
+  it("accepts an export written before dismissals were included", async () => {
+    seed();
+    const exported = await (await fetch(`${baseUrl}/api/export`)).json();
+    delete exported.dismissed_containers;
+
+    const res = await fetch(`${baseUrl}/api/import`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(exported),
+    });
+    expect(res.status).toBe(200);
   });
 
   it("refuses an export from an unknown version", async () => {
