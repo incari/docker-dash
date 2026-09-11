@@ -66,7 +66,11 @@ export const ShortcutCardIcon: React.FC<ExtendedShortcutCardProps> = React.memo(
       shadow="0 10px 15px -3px rgba(var(--color-primary-rgb), 0.05)"
       className={`rounded-xl ${
         isEditMode ? "cursor-grab active:cursor-grabbing" : ""
-      } ${showMenu ? "overflow-visible" : "overflow-hidden"}`}
+      // With the menu open the whole card is raised above its siblings. The
+      // menu is z-50 but lives inside .card-actions (z-20), and every other card
+      // has a .card-actions at the same z-20 - so cards later in the DOM painted
+      // their star and kebab on top of the open menu.
+      } ${showMenu ? "overflow-visible z-50" : "overflow-hidden"}`}
     >
       {isEditMode && (
         <div className="absolute top-2 left-2 z-10 p-1 rounded-lg bg-slate-900/90 backdrop-blur-sm border border-white/10 pointer-events-none">

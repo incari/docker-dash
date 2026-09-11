@@ -65,8 +65,12 @@ export const ShortcutCard: React.FC<ExtendedShortcutCardProps> = React.memo(({
       isOver={isOver}
       dragHandleProps={dragHandleProps}
       shadow="0 25px 50px -12px rgba(var(--color-primary-rgb), 0.05)"
+      // With the menu open the whole card is raised above its siblings. The
+      // menu is z-50 but lives inside .card-actions (z-20), and every other card
+      // has a .card-actions at the same z-20 - so cards later in the DOM painted
+      // their star and kebab on top of the open menu.
       className={`rounded-2xl sm:rounded-3xl h-full flex flex-col ${
-        showMenu ? "overflow-visible" : "overflow-hidden"
+        showMenu ? "overflow-visible z-50" : "overflow-hidden"
       }`}
     >
       {/* Drag indicator - Only visible in edit mode */}
