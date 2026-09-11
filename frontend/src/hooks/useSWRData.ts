@@ -7,6 +7,7 @@
  * 2. On success, save to IndexedDB and return data
  * 3. On error, fall back to IndexedDB cached data
  */
+import { useCallback } from "react";
 import useSWR from "swr";
 import {
   shortcutsApi,
@@ -193,6 +194,19 @@ export function useTailscale() {
 }
 
 /**
+ * Applies a change to the cached list, runs the request, and puts the previous
+ * list back if the request fails.
+ *
+ * The UI renders straight from the SWR cache, so the change is on screen before
+ * the request leaves the browser instead of after a write plus a refetch. The
+ * returned promise rejects when the request fails, so callers can tell the user.
+ */
+export type OptimisticUpdate<T> = (
+  updater: (current: T[]) => T[],
+  request: () => Promise<unknown>,
+) => Promise<unknown>;
+
+/**
  * Combined hook for all dashboard data
  * Uses parallel SWR hooks for automatic deduplication
  */
@@ -205,14 +219,50 @@ export function useDashboardSWR() {
   // Overall loading state - true only if ALL are loading (initial load)
   const loading = shortcutsLoading && sectionsLoading && containersLoading && tailscaleLoading;
 
-  // Manual refresh function for all data
-  const refreshAll = async () => {
+  // Manual refresh function for all data. Memoized so the callers that hold it
+  // in a dependency array are not rebuilt on every render.
+  const refreshAll = useCallback(async () => {
     await Promise.all([
       mutateShortcuts(),
       mutateSections(),
       mutateContainers(),
     ]);
-  };
+  }, [mutateShortcuts, mutateSections, mutateContainers]);
+
+  // SWR shows `optimisticData` immediately, keeps the value the request settles
+  // on, rolls back to the previous list if it throws, and revalidates
+  // afterwards so the cache cannot drift away from the server.
+  const updateShortcutsOptimistic = useCallback<OptimisticUpdate<Shortcut>>(
+    (updater, request) =>
+      mutateShortcuts(
+        async (current) => {
+          await request();
+          return updater(current ?? []);
+        },
+        {
+          optimisticData: (current) => updater(current ?? []),
+          rollbackOnError: true,
+          revalidate: true,
+        },
+      ),
+    [mutateShortcuts],
+  );
+
+  const updateSectionsOptimistic = useCallback<OptimisticUpdate<Section>>(
+    (updater, request) =>
+      mutateSections(
+        async (current) => {
+          await request();
+          return updater(current ?? []);
+        },
+        {
+          optimisticData: (current) => updater(current ?? []),
+          rollbackOnError: true,
+          revalidate: true,
+        },
+      ),
+    [mutateSections],
+  );
 
   return {
     shortcuts,
@@ -223,6 +273,8 @@ export function useDashboardSWR() {
     refreshAll,
     mutateShortcuts,
     mutateSections,
+    updateShortcutsOptimistic,
+    updateSectionsOptimistic,
   };
 }
 

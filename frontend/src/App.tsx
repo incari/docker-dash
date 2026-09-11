@@ -78,7 +78,8 @@ function App() {
     loading,
     refreshAll,
     mutateShortcuts,
-    mutateSections,
+    updateShortcutsOptimistic,
+    updateSectionsOptimistic,
   } = useDashboardSWR();
 
   const modals = useModals();
@@ -89,6 +90,7 @@ function App() {
     () => ({
       onRefresh: refreshAll,
       onError: (title: string, message: string) => toast.error(title, message),
+      applyOptimistic: updateShortcutsOptimistic,
       showDeleteConfirm: (onConfirm: () => Promise<void>) => {
         modals.showConfirm(
           t("modals.confirm.deleteShortcut"),
@@ -97,13 +99,14 @@ function App() {
         );
       },
     }),
-    [refreshAll, modals, t, toast],
+    [refreshAll, updateShortcutsOptimistic, modals, t, toast],
   );
 
   const sectionActionsOptions = useMemo(
     () => ({
       onRefresh: refreshAll,
       onError: (title: string, message: string) => toast.error(title, message),
+      applyOptimistic: updateSectionsOptimistic,
       showDeleteConfirm: (
         sectionName: string,
         onConfirm: () => Promise<void>,
@@ -115,30 +118,21 @@ function App() {
         );
       },
     }),
-    [refreshAll, modals, t, toast],
+    [refreshAll, updateSectionsOptimistic, modals, t, toast],
   );
 
   // ==================== Action Hooks ====================
   const containerActions = useContainerActions(refreshAll);
 
-  // Create local state setters that trigger SWR revalidation
-  // These are used by action hooks to update data after mutations
-  const setShortcuts = useCallback((_updater: React.SetStateAction<Shortcut[]>) => {
-    // Trigger SWR revalidation to fetch fresh data
+  const shortcutActions = useShortcutActions(shortcutActionsOptions, shortcuts);
+  const sectionActions = useSectionActions(sectionActionsOptions);
+
+  // The shortcut modal has already written its changes, so only the shortcut
+  // list can be stale. Refetching containers and Tailscale too was most of the
+  // wait the user saw after saving an edit.
+  const handleShortcutSaved = useCallback(() => {
     mutateShortcuts();
   }, [mutateShortcuts]);
-
-  const setSections = useCallback((_updater: React.SetStateAction<Section[]>) => {
-    // Trigger SWR revalidation to fetch fresh data
-    mutateSections();
-  }, [mutateSections]);
-
-  const shortcutActions = useShortcutActions(
-    shortcutActionsOptions,
-    setShortcuts,
-    shortcuts,
-  );
-  const sectionActions = useSectionActions(sectionActionsOptions, setSections);
 
   // Entering reorder mode drops any active filter: the drag lists are seeded
   // from the visible set, so reordering a filtered subset would write back
@@ -349,22 +343,21 @@ function App() {
   );
 
   // ==================== Computed Data ====================
-  // Memoize dashboard shortcuts to avoid recomputing on every render
-  // In edit mode: show ALL shortcuts (so we can toggle favorites without items disappearing)
-  // Not in edit mode: show only favorites
+  // The dashboard is the favourites board, in reorder mode as much as outside
+  // it: reordering a list that also holds every non-favourite meant arranging
+  // items that vanish as soon as reorder mode ends. Favourites are starred from
+  // the "Accesos" screen, which shows the star without needing reorder mode.
   const searchTerms = useMemo(() => parseQuery(searchQuery), [searchQuery]);
 
   const dashboardShortcuts = useMemo(() => {
-    const filtered = isEditMode
-      ? shortcuts
-      : shortcuts.filter((s) => s.is_favorite);
+    const favorites = shortcuts.filter((s) => s.is_favorite);
 
     // Search is off during edit mode; see the note on the Header's SearchInput.
     if (isEditMode || searchTerms.length === 0) {
-      return filtered;
+      return favorites;
     }
 
-    return filtered.filter((s) =>
+    return favorites.filter((s) =>
       matchesShortcut(s, findContainerForShortcut(s, containers), searchTerms),
     );
   }, [shortcuts, isEditMode, searchTerms, containers]);
@@ -630,7 +623,7 @@ function App() {
               shortcut={modals.shortcutModal.shortcut}
               containers={containers}
               tailscaleInfo={tailscaleInfo}
-              onSave={refreshAll}
+              onSave={handleShortcutSaved}
               onClose={modals.closeShortcutModal}
               onError={(title: string, message: string) =>
                 toast.error(title, message)

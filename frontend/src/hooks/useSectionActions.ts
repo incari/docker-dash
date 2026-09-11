@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import { sectionsApi } from "../services/api";
 import type { Section } from "../types";
+import type { OptimisticUpdate } from "./useSWRData";
 
 interface SectionActionsOptions {
   onRefresh: () => void;
@@ -9,6 +10,9 @@ interface SectionActionsOptions {
     sectionName: string,
     onConfirm: () => Promise<void>,
   ) => void;
+  // Paints the change first and sends the request after; rejects and restores
+  // the previous list when the server refuses it.
+  applyOptimistic: OptimisticUpdate<Section>;
 }
 
 interface SectionActions {
@@ -26,9 +30,8 @@ interface SectionActions {
 
 export function useSectionActions(
   options: SectionActionsOptions,
-  setSections: React.Dispatch<React.SetStateAction<Section[]>>,
 ): SectionActions {
-  const { onRefresh, onError, showDeleteConfirm } = options;
+  const { onRefresh, onError, showDeleteConfirm, applyOptimistic } = options;
 
   const handleSaveSection = useCallback(
     async (name: string, editingSection: Section | null) => {
@@ -72,40 +75,46 @@ export function useSectionActions(
   const handleToggleSection = useCallback(
     async (sectionId: number, isCollapsed: boolean) => {
       try {
-        await sectionsApi.update(sectionId, { is_collapsed: !isCollapsed });
-        // Optimistic update
-        setSections((prev) =>
-          prev.map((s) =>
-            s.id === sectionId ? { ...s, is_collapsed: !isCollapsed } : s,
-          ),
+        await applyOptimistic(
+          (current) =>
+            current.map((s) =>
+              s.id === sectionId ? { ...s, is_collapsed: !isCollapsed } : s,
+            ),
+          () => sectionsApi.update(sectionId, { is_collapsed: !isCollapsed }),
         );
-      } catch (err) {
+      } catch (err: any) {
         console.error("Failed to toggle section:", err);
-        onRefresh();
+        onError(
+          "Error Updating Section",
+          err.response?.data?.error || "Failed to save the section state",
+        );
       }
     },
-    [onRefresh, setSections],
+    [applyOptimistic, onError],
   );
 
   const handleReorderSections = useCallback(
     async (sections: Section[]) => {
-      // Optimistic update
-      setSections(sections);
+      const reorderData = sections.map((section, index) => ({
+        id: section.id,
+        position: index,
+      }));
 
       try {
-        // Send reorder request to backend
-        const reorderData = sections.map((section, index) => ({
-          id: section.id,
-          position: index,
-        }));
-        await sectionsApi.reorder(reorderData);
-      } catch (err) {
+        await applyOptimistic(
+          () =>
+            sections.map((section, index) => ({ ...section, position: index })),
+          () => sectionsApi.reorder(reorderData),
+        );
+      } catch (err: any) {
         console.error("Failed to reorder sections:", err);
-        // On error, refetch to restore correct state
-        onRefresh();
+        onError(
+          "Error Reordering Sections",
+          err.response?.data?.error || "Failed to save the new order",
+        );
       }
     },
-    [onRefresh, setSections],
+    [applyOptimistic, onError],
   );
 
   return {

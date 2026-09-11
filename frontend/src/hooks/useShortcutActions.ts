@@ -1,12 +1,16 @@
 import { useCallback } from "react";
 import { shortcutsApi } from "../services/api";
 import type { DockerContainer, Shortcut } from "../types";
+import type { OptimisticUpdate } from "./useSWRData";
 import { getContainerIcon } from "../utils/dockerIconVault";
 
 interface ShortcutActionsOptions {
   onRefresh: (showLoading?: boolean) => void;
   onError: (title: string, message: string) => void;
   showDeleteConfirm: (onConfirm: () => Promise<void>) => void;
+  // Paints the change first and sends the request after; rejects and restores
+  // the previous list when the server refuses it.
+  applyOptimistic: OptimisticUpdate<Shortcut>;
 }
 
 interface ShortcutActions {
@@ -29,23 +33,28 @@ interface ShortcutActions {
 
 export function useShortcutActions(
   options: ShortcutActionsOptions,
-  setShortcuts: React.Dispatch<React.SetStateAction<Shortcut[]>>,
   shortcuts: Shortcut[],
 ): ShortcutActions {
-  const { onRefresh, onError, showDeleteConfirm } = options;
+  const { onRefresh, onError, showDeleteConfirm, applyOptimistic } = options;
 
   const handleDelete = useCallback(
     (id: number) => {
       showDeleteConfirm(async () => {
         try {
-          await shortcutsApi.delete(id);
-          onRefresh();
-        } catch (err) {
+          await applyOptimistic(
+            (current) => current.filter((s) => s.id !== id),
+            () => shortcutsApi.delete(id),
+          );
+        } catch (err: any) {
           console.error("Failed to delete shortcut:", err);
+          onError(
+            "Error Deleting Shortcut",
+            err.response?.data?.error || "Failed to delete shortcut",
+          );
         }
       });
     },
-    [onRefresh, showDeleteConfirm],
+    [applyOptimistic, onError, showDeleteConfirm],
   );
 
   // Helper to get container base name (without instance number suffix)
@@ -122,8 +131,13 @@ export function useShortcutActions(
       if (existingShortcut) {
         // If shortcut exists, update it to mark as favorite
         try {
-          await shortcutsApi.toggleFavorite(existingShortcut.id, true);
-          onRefresh();
+          await applyOptimistic(
+            (current) =>
+              current.map((s) =>
+                s.id === existingShortcut.id ? { ...s, is_favorite: true } : s,
+              ),
+            () => shortcutsApi.toggleFavorite(existingShortcut.id, true),
+          );
         } catch (err: any) {
           console.error("Failed to mark shortcut as favorite:", err);
           onError(
@@ -157,20 +171,30 @@ export function useShortcutActions(
         );
       }
     },
-    [shortcuts, onRefresh, onError],
+    [shortcuts, onRefresh, onError, applyOptimistic],
   );
 
   const handleToggleFavorite = useCallback(
     async (id: number, currentStatus: boolean | number) => {
+      const isFavorite = !currentStatus;
+
       try {
-        await shortcutsApi.toggleFavorite(id, !currentStatus);
-        // Pass false to avoid showing loading spinner (prevents flickering)
-        await onRefresh(false);
-      } catch (err) {
+        await applyOptimistic(
+          (current) =>
+            current.map((s) =>
+              s.id === id ? { ...s, is_favorite: isFavorite } : s,
+            ),
+          () => shortcutsApi.toggleFavorite(id, isFavorite),
+        );
+      } catch (err: any) {
         console.error("Failed to toggle favorite:", err);
+        onError(
+          "Error Updating Favorite",
+          err.response?.data?.error || "Failed to update favorite status",
+        );
       }
     },
-    [onRefresh],
+    [applyOptimistic, onError],
   );
 
   const handleSaveChanges = useCallback(
@@ -184,9 +208,8 @@ export function useShortcutActions(
     ) => {
       if (changes.length === 0) return;
 
-      // Optimistic update
-      setShortcuts((prevShortcuts) => {
-        const updated = prevShortcuts.map((shortcut) => {
+      const applyChanges = (current: Shortcut[]) => {
+        const updated = current.map((shortcut) => {
           const change = changes.find((c) => c.shortcutId === shortcut.id);
           if (change) {
             return {
@@ -203,24 +226,29 @@ export function useShortcutActions(
           }
           return 0;
         });
-      });
+      };
 
       try {
-        await Promise.all(
-          changes.map((change) =>
-            shortcutsApi.updateSection(
-              change.shortcutId,
-              change.sectionId,
-              change.position,
+        await applyOptimistic(applyChanges, () =>
+          Promise.all(
+            changes.map((change) =>
+              shortcutsApi.updateSection(
+                change.shortcutId,
+                change.sectionId,
+                change.position,
+              ),
             ),
           ),
         );
-      } catch (err) {
-        // On error, refetch to restore correct state
-        onRefresh();
+      } catch (err: any) {
+        console.error("Failed to save layout changes:", err);
+        onError(
+          "Error Saving Layout",
+          err.response?.data?.error || "Failed to save the new order",
+        );
       }
     },
-    [onRefresh, setShortcuts],
+    [applyOptimistic, onError],
   );
 
   return {
