@@ -18,13 +18,22 @@ const BLOCKED_PATTERNS = [
 ];
 
 /**
- * Patterns that require user confirmation before execution
+ * Patterns that require user confirmation before execution.
+ *
+ * State-changing verbs match on their own, whatever the target is called.
+ * These previously demanded the literal word "container" or "service" after the
+ * verb, so the ordinary phrasing - "stop nginx", "restart postgres", naming the
+ * container directly - went through unconfirmed. For a guardrail, asking too
+ * often is the safe failure; not asking is not.
+ *
+ * Blocked operations are checked before these, so widening them here does not
+ * let anything dangerous through as merely "needs confirmation".
  */
 const CONFIRMATION_PATTERNS = [
-  /\b(start|stop|restart|kill)\b.*\b(container|service)\b/i,
-  /\bopen\b.*\b(url|link|website)\b/i,
-  /\b(delete|remove)\b.*\b(container|shortcut)\b/i,
-  /\b(modify|update|change)\b.*\b(settings|config)\b/i,
+  /\b(start|stop|restart|kill|pause|unpause|recreate)\b/i,
+  /\b(delete|remove)\b/i,
+  /\bopen\b.*\b(url|link|website|http)\b/i,
+  /\b(modify|update|change)\b.*\b(settings|config|configuration)\b/i,
 ];
 
 /**
