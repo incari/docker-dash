@@ -123,7 +123,7 @@ export const ShortcutCardCompact: React.FC<ExtendedShortcutCardProps> = React.me
                 e.stopPropagation();
                 onToggleFavorite();
               }}
-              className="p-1 transition-colors"
+              className="p-1 cursor-pointer transition-colors"
               style={{
                 color: shortcut.is_favorite
                   ? "var(--color-primary)"

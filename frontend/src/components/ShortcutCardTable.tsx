@@ -143,7 +143,7 @@ export const ShortcutCardTable: React.FC<ExtendedShortcutCardProps> = React.memo
                 e.stopPropagation();
                 onToggleFavorite();
               }}
-              className="p-2 transition-colors"
+              className="p-2 cursor-pointer transition-colors"
               style={{
                 color: shortcut.is_favorite
                   ? "var(--color-primary)"

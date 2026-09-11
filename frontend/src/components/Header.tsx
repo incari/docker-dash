@@ -37,8 +37,15 @@ export function Header({
 
   return (
     <header className="bg-slate-900 border-b border-white/5 sticky top-0 z-50">
-      <div className="container mx-auto px-3 sm:px-6 h-14 sm:h-16 flex items-center justify-between gap-2 sm:gap-4">
-        <div className="flex items-center gap-2 sm:gap-4 shrink-0">
+      {/* From lg up the side groups grow from a zero basis, so they always claim
+          the same width and the search stays centred even though the right group
+          only renders the view controls on the dashboard; min-w-fit keeps that
+          growth from squeezing either group below its own content. Narrower than
+          lg the groups stay shrink-0 and the search takes what is left over —
+          reserving half the row for a couple of icons would leave nothing to
+          type in. */}
+      <div className="container mx-auto px-3 sm:px-6 h-14 sm:h-16 flex items-center gap-2 sm:gap-4">
+        <div className="flex items-center gap-2 sm:gap-4 shrink-0 lg:grow lg:basis-0 lg:min-w-fit">
           <button
             onClick={() => setView("dashboard")}
             className="flex items-center gap-2 sm:gap-3 hover:opacity-80 transition-opacity cursor-pointer shrink-0"
@@ -85,7 +92,7 @@ export function Header({
           disabled={isEditMode}
         />
 
-        <div className="flex items-center gap-1 sm:gap-2 md:gap-4 shrink-0">
+        <div className="flex items-center justify-end gap-1 sm:gap-2 md:gap-4 shrink-0 lg:grow lg:basis-0 lg:min-w-fit">
           {showInstallPrompt && (
             <button
               onClick={handleInstallClick}

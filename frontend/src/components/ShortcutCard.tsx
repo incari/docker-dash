@@ -88,9 +88,11 @@ export const ShortcutCard: React.FC<ExtendedShortcutCardProps> = React.memo(({
 
         {/* Overlay: Title, Subtitle, and Star */}
         <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/60 to-transparent flex flex-col justify-between p-4">
-          {/* Star in top-right - Visible in edit/reorder mode or when alwaysShowStar is true */}
+          {/* Star in top-right - Visible in edit/reorder mode or when alwaysShowStar is true.
+              self-end keeps the z-raised .card-actions box the size of the button: stretched
+              to the overlay's width it would sit over the stretched link and eat taps there. */}
           {showStar && (
-            <div className="card-actions flex justify-end">
+            <div className="card-actions self-end">
               <button
                 aria-label={
                   shortcut.is_favorite
@@ -101,7 +103,7 @@ export const ShortcutCard: React.FC<ExtendedShortcutCardProps> = React.memo(({
                   e.stopPropagation();
                   onToggleFavorite();
                 }}
-                className="p-2 rounded-lg bg-slate-900/80 backdrop-blur-sm transition-colors"
+                className="p-2 rounded-lg bg-slate-900/80 backdrop-blur-sm cursor-pointer transition-colors"
                 style={{
                   color: shortcut.is_favorite
                     ? "var(--color-primary)"
@@ -219,7 +221,7 @@ export const ShortcutCard: React.FC<ExtendedShortcutCardProps> = React.memo(({
                 e.stopPropagation();
                 onToggleFavorite();
               }}
-              className="p-1 transition-colors"
+              className="p-1 cursor-pointer transition-colors"
               style={{
                 color: shortcut.is_favorite
                   ? "var(--color-primary)"
