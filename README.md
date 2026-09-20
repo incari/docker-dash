@@ -113,6 +113,10 @@ One installation is the **hub** - the dashboard you actually open. The others
 just allow the hub to read them. No terminal and no secret to invent: each
 installation generates its own API key and shows it to you.
 
+> This is multi-**host**, not multi-tenancy. One dashboard reads many machines;
+> it does not give different people different views of it. There are no user
+> accounts anywhere in Docker Dashboard - see [Security](#security) below.
+
 ### 1. On the machine you want to read
 
 Install Docker Dashboard as usual (see [docker-compose.agent.yml](docker-compose.agent.yml)),
@@ -143,6 +147,45 @@ installation is just a dashboard for its own machine, as before.
 Each server card then reports whether it answered and how many containers it
 has, so an unreachable machine says so instead of silently showing nothing.
 
+### Which address to use
+
+The address decides two separate things, which is why it is worth a minute:
+whether the hub can reach the server at all, and where that server's port-based
+shortcuts point. A shortcut for a container on the NAS opens the hostname taken
+from this address, not the machine serving the dashboard.
+
+Two things worth knowing before you pick one:
+
+- **A LAN address is not always reachable, even on the same network.** Machines
+  on different subnets or VLANs cannot see each other's LAN addresses, and the
+  attempt does not fail - it hangs until it times out.
+- **A mesh address works from anywhere.** With Tailscale or WireGuard, the
+  address keeps working when you open the dashboard away from home, and so do
+  the links it builds. A LAN address does not.
+
+If the machines are on one flat network and you never open the dashboard from
+outside, the LAN address is fine and marginally faster. Otherwise use the mesh
+address. **Test** in the add-server form tells you which of the two works
+before you commit to it.
+
+### When a server is off
+
+A server that refuses the connection - powered on, nothing listening - fails
+instantly. One that is asleep, or behind a firewall that drops packets, does
+not answer at all, and waiting for it would hold up every other server on every
+refresh. So:
+
+- A read of all servers answers within about two seconds with whatever has
+  arrived. A server that misses that keeps its previous containers on screen
+  while its request finishes in the background.
+- After it fails, a server is skipped for a growing interval - five seconds,
+  then ten, up to a minute - instead of being retried on every refresh.
+- Its card carries a **Try again now** button, because a backoff is the wrong
+  answer the moment you switch the machine back on.
+
+`HOST_TIMEOUT_MS`, `HOST_DEADLINE_MS` and `HOST_CACHE_MS` tune this if your
+network needs it.
+
 ### What lives where
 
 - The hub holds all the shortcuts, sections and settings in its own database.
@@ -158,6 +201,18 @@ has, so an unreachable machine says so instead of silently showing nothing.
 - Export and import carry the servers and each shortcut's server. Keys are
   never written to an export, so restored servers arrive switched off until you
   enter their key.
+
+### Upgrading an installation that already has shortcuts
+
+Nothing to do beyond pulling the new image. On first start the database is
+migrated and every existing shortcut is filed under the local server, so the
+dashboard looks exactly as it did before - the servers panel simply appears,
+with one entry.
+
+A copy of the database as it was is written next to it before anything is
+rewritten (`dashboard.db.backup-premigration-*`), because migrations have no
+undo. If you ever need to go back, stop the container, put that file back as
+`dashboard.db`, and run the older image.
 
 ### Security
 
