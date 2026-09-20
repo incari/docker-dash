@@ -3,6 +3,7 @@
  */
 
 export { Header } from "./Header";
+export { ErrorBoundary } from "./ErrorBoundary";
 export { ErrorModal } from "./ErrorModal";
 export { ConfirmModal } from "./ConfirmModal";
 export { ShortcutCard } from "./ShortcutCard";
@@ -14,6 +15,9 @@ export { ContainerCard } from "./ContainerCard";
 export { DynamicIcon } from "./DynamicIcon";
 export { ShortcutModal } from "./ShortcutModal";
 export { SectionModal } from "./SectionModal";
+export { AgentAccessPanel } from "./AgentAccessPanel";
+export { HostModal } from "./HostModal";
+export { HostsManager } from "./HostsManager";
 export { ViewSelector } from "./ViewSelector";
 export { ThemeSelector } from "./ThemeSelector";
 export { LanguageSelector } from "./LanguageSelector";

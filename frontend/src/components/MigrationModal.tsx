@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, useId } from "react";
 import { motion } from "framer-motion";
 import {
   RefreshCw,
@@ -11,10 +11,37 @@ import {
   ArrowRight,
 } from "../constants/icons";
 import { useTranslation } from "react-i18next";
+import { useModalA11y } from "../hooks/useModalA11y";
 import { shortcutsApi } from "../services/api";
 
 // Debounce delay for URL input (ms)
 const URL_DEBOUNCE_DELAY = 500;
+
+const HOMARR_CDN_MARKER = "homarr-labs/dashboard-icons";
+
+/**
+ * An icon the user picked themselves: a file they uploaded, or a URL that did
+ * not come from the Homarr icon set this migration assigns.
+ *
+ * These are never preselected and never default to the suggestion: the
+ * migration exists to fill in missing icons, not to replace chosen ones.
+ */
+const isUserChosenIcon = (icon: string | null): boolean => {
+  if (!icon) return false;
+  if (icon.startsWith("uploads/")) return true;
+  return icon.startsWith("http") && !icon.includes(HOMARR_CDN_MARKER);
+};
+
+/**
+ * Turn a stored icon value into something an <img> can load. Uploaded icons are
+ * stored as a relative "uploads/<file>" path and are served from the app root;
+ * Lucide icon names (no slash) are not images at all.
+ */
+const toImageSrc = (icon: string | null | undefined): string | null => {
+  if (!icon) return null;
+  if (icon.startsWith("http")) return icon;
+  return icon.includes("/") ? `/${icon}` : null;
+};
 
 interface IconPreview {
   id: number;
@@ -73,25 +100,25 @@ export const MigrationModal: React.FC<MigrationModalProps> = ({
       const result = await shortcutsApi.previewIcons();
       setPreviews(result.shortcuts);
 
-      // Initialize selected IDs - only select shortcuts that need updating
-      // (those where current icon differs from suggested, or current is not a Homarr icon)
-      const needsUpdate = result.shortcuts.filter((s) => {
-        const isCurrentHomarr = s.current_icon?.includes(
-          "homarr-labs/dashboard-icons",
-        );
-        // Need update if: has a suggested icon AND (current is not Homarr OR current differs from suggested)
-        return (
+      // Preselect only shortcuts that actually need an icon: a suggestion
+      // exists, it differs from what is stored, and the stored icon is not one
+      // the user chose (an upload or their own URL). Replacing those would
+      // destroy a deliberate choice, so they stay unticked.
+      const needsUpdate = result.shortcuts.filter(
+        (s) =>
           s.suggested_icon &&
-          (!isCurrentHomarr || s.current_icon !== s.suggested_icon)
-        );
-      });
+          s.suggested_icon !== s.current_icon &&
+          !isUserChosenIcon(s.current_icon),
+      );
       setSelectedIds(new Set(needsUpdate.map((s) => s.id)));
 
-      // Initialize custom URLs with suggested icons (or current for already-set ones)
-      // Only use values that are actual URLs (start with http)
+      // Seed each row's URL field. A user-chosen icon seeds with itself, so
+      // even "select all" followed by Update writes it back unchanged.
       const urls: Record<number, string> = {};
       result.shortcuts.forEach((s) => {
-        if (s.suggested_icon?.startsWith("http")) {
+        if (isUserChosenIcon(s.current_icon) && s.current_icon) {
+          urls[s.id] = s.current_icon;
+        } else if (s.suggested_icon?.startsWith("http")) {
           urls[s.id] = s.suggested_icon;
         } else if (s.current_icon?.startsWith("http")) {
           urls[s.id] = s.current_icon;
@@ -107,7 +134,7 @@ export const MigrationModal: React.FC<MigrationModalProps> = ({
       setImageLoaded(new Set(Object.keys(urls).map(Number)));
       // Pre-populate current image loaded state for shortcuts with valid current icons
       const currentIconIds = result.shortcuts
-        .filter((s) => s.current_icon?.startsWith("http"))
+        .filter((s) => toImageSrc(s.current_icon))
         .map((s) => s.id);
       setCurrentImageLoaded(new Set(currentIconIds));
     } catch (err) {
@@ -198,38 +225,30 @@ export const MigrationModal: React.FC<MigrationModalProps> = ({
   };
 
   const handleConfirm = () => {
-    const updates = previews
-      .filter((p) => selectedIds.has(p.id) && customUrls[p.id])
-      .map((p) => ({
-        id: p.id,
-        icon_url: customUrls[p.id],
-      }));
+    const updates = previews.flatMap((p) => {
+      const iconUrl = customUrls[p.id];
+      // Writing an icon back onto itself is not a migration; skipping it keeps
+      // rows the user only wanted to keep out of the update entirely.
+      if (!selectedIds.has(p.id) || !iconUrl || iconUrl === p.current_icon) {
+        return [];
+      }
+      return [{ id: p.id, icon_url: iconUrl }];
+    });
     onConfirm(updates);
   };
 
-  // Add ESC key handler
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && isOpen) {
-        onCancel();
-      }
-    };
-
-    if (isOpen) {
-      document.addEventListener("keydown", handleEscape);
-    }
-
-    return () => {
-      document.removeEventListener("keydown", handleEscape);
-    };
-  }, [isOpen, onCancel]);
+  const titleId = useId();
+  const dialogRef = useModalA11y<HTMLDivElement>(isOpen, onCancel);
 
   if (!isOpen) return null;
 
   const allSelected = selectedIds.size === previews.length;
   const noneSelected = selectedIds.size === 0;
   const selectedCount = previews.filter(
-    (p) => selectedIds.has(p.id) && customUrls[p.id],
+    (p) =>
+      selectedIds.has(p.id) &&
+      customUrls[p.id] &&
+      customUrls[p.id] !== p.current_icon,
   ).length;
 
   return (
@@ -242,6 +261,11 @@ export const MigrationModal: React.FC<MigrationModalProps> = ({
         onClick={onCancel}
       />
       <motion.div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.9, opacity: 0 }}
@@ -249,6 +273,7 @@ export const MigrationModal: React.FC<MigrationModalProps> = ({
       >
         <button
           onClick={onCancel}
+          aria-label={t("common.cancel")}
           className="absolute top-4 right-4 p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded-xl transition-colors z-10"
         >
           <X className="w-5 h-5" />
@@ -259,7 +284,10 @@ export const MigrationModal: React.FC<MigrationModalProps> = ({
             <RefreshCw className="w-8 h-8 text-blue-400" />
           </div>
           <div>
-            <h2 className="text-2xl font-bold text-white">
+            <h2
+              id={titleId}
+              className="text-2xl font-bold text-white"
+            >
               {t("modals.migration.title")}
             </h2>
             <p className="text-slate-400 text-sm mt-1">
@@ -319,11 +347,12 @@ export const MigrationModal: React.FC<MigrationModalProps> = ({
                   {previews.map((preview) => {
                     // Check if this shortcut already has the correct Homarr icon
                     const isCurrentHomarr = preview.current_icon?.includes(
-                      "homarr-labs/dashboard-icons",
+                      HOMARR_CDN_MARKER,
                     );
                     const isAlreadySet =
                       isCurrentHomarr &&
                       preview.current_icon === preview.suggested_icon;
+                    const isUserIcon = isUserChosenIcon(preview.current_icon);
 
                     return (
                       <tr
@@ -360,12 +389,17 @@ export const MigrationModal: React.FC<MigrationModalProps> = ({
                               ✓ Already set
                             </span>
                           )}
+                          {isUserIcon && !isAlreadySet && (
+                            <span className="text-xs text-amber-400">
+                              ✓ Your own icon — kept
+                            </span>
+                          )}
                         </td>
                         {/* Current Icon Column */}
                         <td className="p-3 text-center">
                           {(() => {
-                            const currentUrl = preview.current_icon;
-                            const isValidUrl = currentUrl?.startsWith("http");
+                            const currentUrl = toImageSrc(preview.current_icon);
+                            const isValidUrl = Boolean(currentUrl);
                             const isLoaded = currentImageLoaded.has(preview.id);
                             const hasError = currentImageErrors.has(preview.id);
 
@@ -377,7 +411,7 @@ export const MigrationModal: React.FC<MigrationModalProps> = ({
                                 {(!isValidUrl || hasError) && (
                                   <Server className="w-5 h-5 text-slate-500" />
                                 )}
-                                {isValidUrl && (
+                                {currentUrl && (
                                   <img
                                     src={currentUrl}
                                     alt={`Current: ${preview.display_name}`}
@@ -405,8 +439,8 @@ export const MigrationModal: React.FC<MigrationModalProps> = ({
                         {/* New Icon Column */}
                         <td className="p-3 text-center">
                           {(() => {
-                            const url = customUrls[preview.id];
-                            const isValidUrl = url?.startsWith("http");
+                            const url = toImageSrc(customUrls[preview.id]);
+                            const isValidUrl = Boolean(url);
                             const isLoaded = imageLoaded.has(preview.id);
                             const hasError = imageErrors.has(preview.id);
 
@@ -418,7 +452,7 @@ export const MigrationModal: React.FC<MigrationModalProps> = ({
                                 {(!isValidUrl || hasError) && (
                                   <Server className="w-5 h-5 text-slate-500" />
                                 )}
-                                {isValidUrl && (
+                                {url && (
                                   <img
                                     src={url}
                                     alt={`New: ${preview.display_name}`}

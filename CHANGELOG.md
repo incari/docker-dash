@@ -9,6 +9,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+#### Several servers, one dashboard
+
+- **Multi-server support**: one installation (the hub) can now read every other
+  installation and show the whole fleet on one page.
+  - Each installation generates its own API key on first boot and shows it in
+    its own **Servers** card, with reveal, copy and replace buttons, so setting
+    up a fleet needs no terminal and no invented secret. Reading stays off until
+    "let another dashboard read this server" is ticked, and `/api/agent` answers
+    404 until then. `API_KEY` pins the key from the environment instead, for a
+    compose file or a secrets manager.
+  - **Servers** panel in the Shortcuts view: add, edit, remove and test a
+    server, with its reachability and container count on the card.
+  - Containers in the Shortcuts list are grouped by server, with compose
+    projects nested inside each server; favourites stay ungrouped and name their
+    server on the card.
+  - Search covers every server at once, and a server's name works as a filter.
+  - A port-based shortcut opens the machine the container runs on, not the
+    machine serving the dashboard.
+  - A server that cannot be reached costs only its own containers: the rest of
+    the fleet stays on screen and the reason is shown on that server's card, in
+    the dashboard's language.
+  - Shortcuts, sections and settings all live on the hub. Every shortcut records
+    its server, so the same container name on two machines gets a tile each and
+    dismissing one does not dismiss the other.
+  - Export/import carries the servers and each shortcut's server (export
+    version 2; version 1 files still import, filed under the local server).
+    Keys are never written to an export, so restored servers arrive switched
+    off until their key is entered.
+  - The offline cache keys containers by server as well as by ID, and a failed
+    cache write no longer counts as a failed fetch - it used to make the
+    dashboard quietly fall back to stale data even though the server had just
+    answered.
+  - New env vars: `HOST_NAME`, `API_KEY`, `HOST_TIMEOUT_MS`, `HOST_CACHE_MS`.
+    Migrations `013_add_hosts` and `014_add_agent_access` file every existing
+    shortcut under the local server, so an upgrade looks exactly as it did
+    before.
+
 #### Toast Notifications (2026-02-13)
 
 - **Toast Notifications**: Success and error messages now appear as non-blocking toast notifications in the bottom-right corner
@@ -31,6 +68,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - You can still select them if you want to update anyway
 
 ### Fixed
+
+#### Stability
+
+- **`docker stop` now actually stops the app**: a `SIGTERM` listener on the
+  database removed Node's default exit, so the process stayed up for the whole
+  of Docker's ten-second timeout with a closed database - answering every
+  request with an error while `/health` still reported 200 - and was then
+  killed. It now stops accepting requests, finishes the ones in flight, closes
+  the database and exits. Covered by a test that spawns the real server and
+  fails after nine seconds against the old behaviour.
+- **`/health` can fail**: it returns 503 when the database is unreachable or the
+  process is draining, so the Dockerfile's `HEALTHCHECK` and any restart policy
+  can finally see a wedged container.
+- **Crashes say why**: an unhandled promise rejection is logged instead of
+  silently terminating the process, and an uncaught exception is logged before
+  the process exits for the restart policy to pick up.
+- **One unreachable server no longer sets the pace**: a server that is asleep or
+  behind a firewall that drops packets does not answer at all, and every read
+  waited the full request timeout for it - measured at 6.0s, on a list the
+  browser refreshes every 5s. Failing servers are now skipped for a growing
+  interval (5s to 60s), and the whole fan-out answers within 2s with whatever
+  has arrived. Measured on the same setup: 6.0s on every read, before; 2.0s
+  twice and then ~0.04s, after. Offline cards carry a **Try again now** button,
+  because a backoff is the wrong answer the moment a machine comes back.
+- **A broken render no longer blanks the page**: error boundaries around the app
+  and around the views show the error with a way back, and keep the header and
+  navigation usable.
+- **Auto-sync is not repeated once per browser tab**: it runs on every dashboard
+  load and now reads every server, bypassing the container cache and looking up
+  an icon per new container, so five tabs opening meant five full sweeps queued
+  behind each other. A sweep from the last minute is reused instead - unless a
+  server was added, removed or re-pointed, which clears it. Adding a server also
+  triggers a sweep, so its containers get their shortcuts straight away rather
+  than on the next reload.
+- **SQLite runs in WAL mode with a busy timeout**, so two docker-dash processes
+  on the same data volume - which is what an update is, briefly - take turns
+  instead of one failing outright.
 
 #### Icon Migration Fixes (2026-02-13)
 

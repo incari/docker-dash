@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import {
   Settings,
   Trash2,
@@ -10,6 +10,7 @@ import {
 } from "../constants/icons";
 import { useTranslation } from "react-i18next";
 import type { ShortcutCardProps } from "../types";
+import { CardShell } from "./CardShell";
 import {
   getLinkIcon,
   renderShortcutIcon,
@@ -25,8 +26,9 @@ interface ExtendedShortcutCardProps extends ShortcutCardProps {
 
 /**
  * List view shortcut card - horizontal layout
+ * Memoized to prevent unnecessary re-renders
  */
-export const ShortcutCardList: React.FC<ExtendedShortcutCardProps> = ({
+export const ShortcutCardList: React.FC<ExtendedShortcutCardProps> = React.memo(({
   shortcut,
   container,
   tailscaleIP,
@@ -42,65 +44,28 @@ export const ShortcutCardList: React.FC<ExtendedShortcutCardProps> = ({
   isOver,
 }) => {
   const { t } = useTranslation();
-  const isRunning = container?.state === "running";
 
-  // Determine if star should be shown
-  const showStar = isEditMode || alwaysShowStar;
+  // Memoize derived state
+  const isRunning = useMemo(() => container?.state === "running", [container?.state]);
+  const showStar = useMemo(() => isEditMode || alwaysShowStar, [isEditMode, alwaysShowStar]);
 
-  // Get link and subtitle using shared utility
-  const { link, subtitle } = getShortcutLink(
-    shortcut,
-    container,
-    tailscaleIP,
-    60,
+  // Memoize link calculation (expensive operation)
+  const { link, subtitle } = useMemo(
+    () => getShortcutLink(shortcut, container, tailscaleIP, 60),
+    [shortcut, container, tailscaleIP],
   );
 
-  const handleCardClick = () => {
-    if (!isEditMode && link) {
-      window.open(link, "_blank");
-    }
-  };
-
   return (
-    <div
-      {...(isEditMode && dragHandleProps ? dragHandleProps : {})}
-      onClick={handleCardClick}
-      className={`group relative border rounded-xl overflow-hidden transition-all duration-300 ${
-        isEditMode
-          ? "cursor-grab active:cursor-grabbing"
-          : link
-            ? "cursor-pointer"
-            : "cursor-default"
+    <CardShell
+      link={link}
+      linkLabel={t("shortcuts.openShortcut", { name: shortcut.display_name })}
+      isEditMode={isEditMode}
+      isOver={isOver}
+      dragHandleProps={dragHandleProps}
+      shadow="0 10px 15px -3px rgba(var(--color-primary-rgb), 0.05)"
+      className={`rounded-xl overflow-hidden ${
+        isEditMode ? "cursor-grab active:cursor-grabbing" : ""
       }`}
-      style={{
-        backgroundColor: isOver
-          ? "rgba(var(--color-primary-rgb), 0.1)"
-          : "var(--color-card-background)",
-        borderColor: isOver
-          ? "var(--color-primary)"
-          : isEditMode
-            ? "rgba(var(--color-primary-rgb), 0.5)"
-            : "rgba(255, 255, 255, 0.05)",
-        boxShadow:
-          isOver || !isEditMode
-            ? `0 10px 15px -3px rgba(var(--color-primary-rgb), 0.05)`
-            : undefined,
-        color: "var(--color-background-contrast)",
-      }}
-      onMouseEnter={(e) => {
-        if (!isEditMode) {
-          e.currentTarget.style.borderColor = `rgba(var(--color-primary-rgb), 0.3)`;
-        } else {
-          e.currentTarget.style.borderColor = `var(--color-primary)`;
-        }
-      }}
-      onMouseLeave={(e) => {
-        if (!isEditMode) {
-          e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.05)";
-        } else {
-          e.currentTarget.style.borderColor = `rgba(var(--color-primary-rgb), 0.5)`;
-        }
-      }}
     >
       {isEditMode && (
         <div className="absolute top-1/2 -translate-y-1/2 left-2 z-10 p-1.5 rounded-lg bg-slate-900/90 backdrop-blur-sm border border-white/10 pointer-events-none">
@@ -152,15 +117,20 @@ export const ShortcutCardList: React.FC<ExtendedShortcutCardProps> = ({
         </div>
 
         {/* Actions */}
-        <div className="flex flex-col sm:flex-row items-end sm:items-center gap-1 sm:gap-2 shrink-0">
+        <div className="card-actions flex flex-col sm:flex-row items-end sm:items-center gap-1 sm:gap-2 shrink-0">
           {/* Star - Visible in edit/reorder mode or when alwaysShowStar is true */}
           {showStar && (
             <button
+                aria-label={
+                  shortcut.is_favorite
+                    ? t("shortcuts.removeFromFavorites")
+                    : t("shortcuts.addToFavorites")
+                }
               onClick={(e) => {
                 e.stopPropagation();
                 onToggleFavorite();
               }}
-              className="p-2 transition-colors"
+              className="p-2 cursor-pointer transition-colors"
               style={{
                 color: shortcut.is_favorite
                   ? "var(--color-primary)"
@@ -255,6 +225,6 @@ export const ShortcutCardList: React.FC<ExtendedShortcutCardProps> = ({
           )}
         </div>
       </div>
-    </div>
+    </CardShell>
   );
-};
+});

@@ -70,9 +70,120 @@ body {
   background: #64748b;
 }
 
+/* Custom scrollbar class for chat */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #475569;
+  border-radius: 3px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
 /* Touch optimization: show hover elements on devices that don't support hover */
 @media (hover: none) {
   .opacity-0.group-hover\:opacity-100 {
     opacity: 1 !important;
   }
+}
+
+/* ==========================================================================
+   Focus visibility
+   Keyboard users had no indication of where they were: nothing in this file
+   styled :focus, and card hover states were applied via inline JS handlers.
+   ========================================================================== */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ==========================================================================
+   Card shell
+   Shared by all five shortcut card variants. Border feedback lives here rather
+   than in onMouseEnter/onMouseLeave handlers so that hover and keyboard focus
+   behave the same way.
+   ========================================================================== */
+.card-shell {
+  border-color: rgba(255, 255, 255, 0.05);
+}
+.card-shell:hover {
+  border-color: rgba(var(--color-primary-rgb), 0.3);
+}
+.card-shell[data-edit="true"] {
+  border-color: rgba(var(--color-primary-rgb), 0.5);
+}
+.card-shell[data-edit="true"]:hover {
+  border-color: var(--color-primary);
+}
+.card-shell[data-over="true"],
+.card-shell[data-over="true"]:hover {
+  border-color: var(--color-primary);
+}
+.card-shell:has(.card-shell-link:focus-visible) {
+  border-color: var(--color-primary);
+}
+
+/* Stretched link: covers the whole card so the card is a real anchor
+   (Tab-focusable, Enter-activatable, cmd/middle-click, "copy link address")
+   without nesting the action buttons inside an <a>. */
+.card-shell-link {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  border-radius: inherit;
+}
+.card-shell-link:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -2px;
+}
+
+/* Controls that must stay clickable above the stretched link. */
+.card-actions {
+  position: relative;
+  z-index: 20;
+}
+
+/* ==========================================================================
+   Loading skeletons
+   ========================================================================== */
+@keyframes skeleton-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+.skeleton {
+  background-color: rgba(var(--color-background-contrast-rgb), 0.08);
+  border-radius: 0.5rem;
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* The search field renders its own clear affordance; hide the WebKit/Blink
+   native one so the two don't sit side by side. */
+input[type="search"]::-webkit-search-cancel-button,
+input[type="search"]::-webkit-search-decoration {
+  -webkit-appearance: none;
+  appearance: none;
 }

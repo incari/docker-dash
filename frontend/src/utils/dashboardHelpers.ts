@@ -1,4 +1,9 @@
-import type { ViewMode, MobileColumns } from "../types";
+import type {
+  ViewMode,
+  MobileColumns,
+  DockerContainer,
+  Shortcut,
+} from "../types";
 import {
   ShortcutCard,
   ShortcutCardCompact,
@@ -71,3 +76,30 @@ export function getMinHeightForViewMode(viewMode: ViewMode): string {
   }
 }
 
+
+/**
+ * Resolve the Docker container a shortcut points at.
+ * Matching is by container_match_name (stable across recreates), falling back
+ * to container_name, with the trailing replica suffix stripped off.
+ *
+ * The search is confined to the shortcut's own server. Container names are only
+ * unique within one Docker daemon, so across a fleet a bare name match would
+ * hand a shortcut the status - and the start/stop buttons - of a container with
+ * the same name on a different machine.
+ */
+export function findContainerForShortcut(
+  shortcut: Shortcut,
+  containers: DockerContainer[],
+): DockerContainer | null {
+  const matchName = shortcut.container_match_name || shortcut.container_name;
+  if (!matchName) return null;
+
+  const target = matchName.toLowerCase();
+  return (
+    containers.find(
+      (c) =>
+        c.hostId === shortcut.host_id &&
+        c.name.replace(/-\d+$/, "").toLowerCase() === target,
+    ) ?? null
+  );
+}

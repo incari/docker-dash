@@ -2,6 +2,7 @@ import { motion } from "framer-motion";
 import { useTranslation } from "react-i18next";
 
 import {
+  DashboardSkeleton,
   EditModeBanner,
   EmptyDashboardState,
   SectionBlock,
@@ -15,6 +16,7 @@ import type {
   MobileColumns,
 } from "../types";
 import {
+  findContainerForShortcut,
   getCardComponentForViewMode,
   getGridLayoutClasses,
   getMinHeightForViewMode,
@@ -44,14 +46,15 @@ interface DashboardViewProps {
   handleReorderSections: (sections: Section[]) => Promise<void>;
   openEditModal: (shortcut: Shortcut) => void;
   handleDelete: (id: number) => void;
-  handleStart: (id: string) => void;
-  handleStop: (id: string) => void;
-  handleRestart: (id: string) => void;
+  handleStart: (hostId: number, id: string) => void;
+  handleStop: (hostId: number, id: string) => void;
+  handleRestart: (hostId: number, id: string) => void;
   handleToggleFavorite: (id: number, currentStatus: boolean | number) => void;
   setView: (view: "dashboard" | "add") => void;
   viewMode: ViewMode;
   mobileColumns: MobileColumns;
   onSaveChanges: (changes: PendingChange[]) => Promise<void>;
+  searchQuery: string;
 }
 
 export function DashboardView({
@@ -78,6 +81,7 @@ export function DashboardView({
   viewMode,
   mobileColumns,
   onSaveChanges,
+  searchQuery,
 }: DashboardViewProps) {
   const { t } = useTranslation();
   const CardComponent = getCardComponentForViewMode(viewMode);
@@ -102,25 +106,20 @@ export function DashboardView({
    * Render a single shortcut card with all necessary props
    */
   const renderShortcutCard = (shortcut: Shortcut) => {
-    // Match container by container_match_name (stable) or container_name (fallback)
-    const matchName = shortcut.container_match_name || shortcut.container_name;
-    const container = matchName
-      ? containers.find((c) => {
-          const containerBaseName = c.name.replace(/-\d+$/, "").toLowerCase();
-          return containerBaseName === matchName.toLowerCase();
-        })
-      : null;
+    const container = findContainerForShortcut(shortcut, containers);
 
     return (
       <CardComponent
         shortcut={shortcut}
-        container={container || null}
+        container={container}
         tailscaleIP={tailscaleInfo.ip}
         onEdit={() => openEditModal(shortcut)}
         onDelete={() => handleDelete(shortcut.id)}
-        onStart={() => container && handleStart(container.id)}
-        onStop={() => container && handleStop(container.id)}
-        onRestart={() => container && handleRestart(container.id)}
+        onStart={() => container && handleStart(container.hostId, container.id)}
+        onStop={() => container && handleStop(container.hostId, container.id)}
+        onRestart={() =>
+          container && handleRestart(container.hostId, container.id)
+        }
         onToggleFavorite={() =>
           handleToggleFavorite(shortcut.id, shortcut.is_favorite)
         }
@@ -129,7 +128,11 @@ export function DashboardView({
     );
   };
 
-  const hasNoFavorites = dashboardShortcuts.length === 0 && !loading;
+  const isSearching = searchQuery.trim().length > 0;
+  const hasNoResults =
+    dashboardShortcuts.length === 0 && !loading && isSearching;
+  const hasNoFavorites =
+    dashboardShortcuts.length === 0 && !loading && !isSearching;
   const showEditModeBanner = isEditMode && dashboardShortcuts.length > 0;
   const showUnsectionedWithHeader =
     (unsectionedShortcuts.length > 0 || (isEditMode && sections.length > 0)) &&
@@ -153,7 +156,24 @@ export function DashboardView({
         />
       )}
 
-      {hasNoFavorites ? (
+      {loading && dashboardShortcuts.length === 0 ? (
+        <DashboardSkeleton
+          gridClasses={gridClasses}
+          minHeight={getMinHeightForViewMode(viewMode)}
+        />
+      ) : hasNoResults ? (
+        <div
+          className="text-center py-16 border-2 border-dashed border-white/5 rounded-2xl bg-white/[0.02]"
+          role="status"
+        >
+          <p style={{ color: "var(--color-background-contrast)" }}>
+            {t("search.noResults", { query: searchQuery })}
+          </p>
+          <p className="text-sm mt-1 text-slate-500">
+            {t("search.noResultsHint")}
+          </p>
+        </div>
+      ) : hasNoFavorites ? (
         <EmptyDashboardState
           setView={setView}
           t={t}

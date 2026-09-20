@@ -1,0 +1,36 @@
+# Runs the private preview image, for trying a build before it is released.
+#
+# The preview package is private, so the host must authenticate first:
+#
+#   echo <GITHUB_PAT_WITH_read:packages> | docker login ghcr.io -u incari --password-stdin
+#
+# Pinned by digest on purpose: the `edge` tag moves with every push to main, so
+# pinning is what makes "the build I tested" and "the build that is running" the
+# same thing. Replace the digest to move to a newer preview.
+services:
+  docker-dashboard-preview:
+    image: ghcr.io/incari/docker-dash-preview@sha256:8333f5dff4d2c23213b2140378ec0147c38d15a38224bdf71315aea43a39202e
+    container_name: docker-dashboard-preview
+    restart: unless-stopped
+
+    # A different host port from the stable instance, so both can run side by side.
+    ports:
+      - "3081:3000"
+    networks:
+      - docker-dashboard-preview-net
+
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Separate data directory: do NOT point this at the stable instance's
+      # config. The preview runs its own migrations, and letting it touch the
+      # live database would make rolling back much harder than deleting a folder.
+      - /mnt/user/appdata/docker-dashboard-preview/config:/app/data
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DB_PATH=/app/data/dashboard.db
+      - UPLOAD_DIR=/app/data/images
+
+networks:
+  docker-dashboard-preview-net:
+    driver: bridge

@@ -1,8 +1,9 @@
-import React, { useEffect } from "react";
+import React, { useId } from "react";
 import { motion } from "framer-motion";
 import { AlertTriangle, CheckCircle, X } from "../constants/icons";
 import { useTranslation } from "react-i18next";
 import type { ErrorModalProps } from "../types";
+import { useModalA11y } from "../hooks/useModalA11y";
 
 /**
  * Error modal component for displaying error and success messages
@@ -18,22 +19,8 @@ export const ErrorModal: React.FC<ErrorModalProps> = ({
 
   const isSuccess = type === "success";
 
-  // Add ESC key handler
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && isOpen) {
-        onClose();
-      }
-    };
-
-    if (isOpen) {
-      document.addEventListener("keydown", handleEscape);
-    }
-
-    return () => {
-      document.removeEventListener("keydown", handleEscape);
-    };
-  }, [isOpen, onClose]);
+  const titleId = useId();
+  const dialogRef = useModalA11y<HTMLDivElement>(isOpen, onClose);
 
   if (!isOpen) return null;
 
@@ -47,6 +34,11 @@ export const ErrorModal: React.FC<ErrorModalProps> = ({
         onClick={onClose}
       />
       <motion.div
+        ref={dialogRef}
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.9, opacity: 0 }}
@@ -56,6 +48,7 @@ export const ErrorModal: React.FC<ErrorModalProps> = ({
       >
         <button
           onClick={onClose}
+          aria-label={t("modals.error.close")}
           className="absolute top-4 right-4 p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded-xl transition-colors"
         >
           <X className="w-5 h-5" />
@@ -73,8 +66,12 @@ export const ErrorModal: React.FC<ErrorModalProps> = ({
               <AlertTriangle className="w-8 h-8 text-red-400" />
             )}
           </div>
-          <h2 className="text-2xl font-bold text-white">
-            {title || (isSuccess ? "Success" : t("modals.error.title"))}
+          <h2
+            id={titleId}
+            className="text-2xl font-bold text-white"
+          >
+            {title ||
+              (isSuccess ? t("modals.error.success") : t("modals.error.title"))}
           </h2>
         </div>
 

@@ -47,6 +47,7 @@ const mockProps = {
     handleRestart: vi.fn(),
     handleToggleFavorite: vi.fn(),
     setView: vi.fn(),
+    searchQuery: '',
 } as any;
 
 describe('DashboardView', () => {
@@ -59,7 +60,7 @@ describe('DashboardView', () => {
     it('renders shortcuts when provided', () => {
         const shortcuts = [{
             id: 1,
-            name: 'Test Shortcut',
+            display_name: 'Test Shortcut',
             description: 'Test Desc',
             icon: 'Server',
             url: 'http://test',

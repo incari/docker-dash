@@ -7,6 +7,7 @@ import {
   Server,
   ChevronDown,
   ChevronRight,
+  HardDrive,
   Layers,
 } from "../constants/icons";
 import { useTranslation } from "react-i18next";
@@ -18,8 +19,15 @@ import {
   ShortcutCardTable,
 } from "../components";
 import { getContainerIcon } from "../utils/dockerIconVault";
+import {
+  parseQuery,
+  matchesContainer,
+  matchesShortcut,
+} from "../utils/search";
+import { HostsManager } from "../components/HostsManager";
 import type {
   DockerContainer,
+  Host,
   Shortcut,
   ViewMode,
   MobileColumns,
@@ -64,20 +72,25 @@ function groupContainersByComposeProject(containers: DockerContainer[]) {
 interface ManagementViewProps {
   containers: DockerContainer[];
   shortcuts: Shortcut[];
+  hosts: Host[];
   tailscaleInfo: { available: boolean; ip: string | null };
   setView: (view: "dashboard" | "add") => void;
   setEditingShortcut: (shortcut: Shortcut | null) => void;
   setIsModalOpen: (open: boolean) => void;
   openEditModal: (shortcut: Shortcut) => void;
   handleDelete: (id: number) => void;
-  handleStart: (id: string) => void;
-  handleStop: (id: string) => void;
-  handleRestart?: (id: string) => void;
+  handleStart: (hostId: number, id: string) => void;
+  handleStop: (hostId: number, id: string) => void;
+  handleRestart?: (hostId: number, id: string) => void;
+  onHostsChanged: () => void;
+  onError: (title: string, message: string) => void;
+  showHostConfirm: (message: string, onConfirm: () => Promise<void>) => void;
   handleQuickAdd: (container: DockerContainer) => void;
   handleQuickAddAsFavorite: (container: DockerContainer) => void;
   handleToggleFavorite: (id: number, currentStatus: boolean | number) => void;
   viewMode: ViewMode;
   mobileColumns: MobileColumns;
+  searchQuery: string;
 }
 
 /**
@@ -124,6 +137,7 @@ function getGridLayoutClasses(
 export function ManagementView({
   containers,
   shortcuts,
+  hosts,
   tailscaleInfo,
   setView,
   setEditingShortcut,
@@ -138,33 +152,85 @@ export function ManagementView({
   handleToggleFavorite,
   viewMode,
   mobileColumns,
+  searchQuery,
+  onHostsChanged,
+  onError,
+  showHostConfirm,
 }: ManagementViewProps) {
   const { t } = useTranslation();
+  const searchTerms = useMemo(() => parseQuery(searchQuery), [searchQuery]);
   // Custom shortcuts are those NOT linked to any container
   // A shortcut is linked to a container if it has container_name or container_match_name
   // Custom shortcuts are manual URL entries and port-based shortcuts without a container
-  const customShortcuts = shortcuts.filter((s) => !s.container_name && !s.container_match_name);
+  const customShortcuts = useMemo(
+    () =>
+      shortcuts
+        .filter((s) => !s.container_name && !s.container_match_name)
+        .filter((s) => matchesShortcut(s, null, searchTerms)),
+    [shortcuts, searchTerms],
+  );
+
+  const visibleContainers = useMemo(
+    () => containers.filter((c) => matchesContainer(c, searchTerms)),
+    [containers, searchTerms],
+  );
   const CardComponent = getCardComponentForViewMode(viewMode);
   const gridClasses = getGridLayoutClasses(viewMode, mobileColumns);
 
-  // Group containers by compose project
-  const { grouped: composeGroups, ungrouped: standaloneContainers } = useMemo(
-    () => groupContainersByComposeProject(containers),
-    [containers],
-  );
+  /**
+   * Containers grouped by the server they run on, in the order the servers are
+   * listed. This is the view where a fleet has to be legible: the same image
+   * runs on several machines, and a flat list of thirty containers says nothing
+   * about which box to look at.
+   *
+   * A container whose server is no longer in the list still appears, under its
+   * own heading, rather than disappearing from the page.
+   */
+  const containersByHost = useMemo(() => {
+    const remaining = new Map<number, DockerContainer[]>();
+    for (const container of visibleContainers) {
+      const list = remaining.get(container.hostId) || [];
+      list.push(container);
+      remaining.set(container.hostId, list);
+    }
 
-  // Track collapsed state for each compose group
+    const ordered: Array<{
+      hostId: number;
+      host: Host | undefined;
+      containers: DockerContainer[];
+    }> = [];
+
+    for (const host of hosts) {
+      const list = remaining.get(host.id);
+      if (list && list.length > 0) {
+        ordered.push({ hostId: host.id, host, containers: list });
+        remaining.delete(host.id);
+      }
+    }
+    for (const [hostId, list] of remaining) {
+      ordered.push({ hostId, host: undefined, containers: list });
+    }
+
+    return ordered;
+  }, [visibleContainers, hosts]);
+
+  // Only one server: the heading would name the one thing already on screen.
+  const showHostGroups = hosts.length > 1;
+
+  // Track collapsed state for each compose group, and for each server.
+  // Keys carry the server, so collapsing `supabase` on one machine does not
+  // collapse the identically named project on another.
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(
     new Set(),
   );
 
-  const toggleGroup = (projectName: string) => {
+  const toggleGroup = (key: string) => {
     setCollapsedGroups((prev) => {
       const next = new Set(prev);
-      if (next.has(projectName)) {
-        next.delete(projectName);
+      if (next.has(key)) {
+        next.delete(key);
       } else {
-        next.add(projectName);
+        next.add(key);
       }
       return next;
     });
@@ -174,11 +240,14 @@ export function ManagementView({
   const renderContainerCard = (container: DockerContainer) => {
     const containerBaseName = container.name.replace(/-\d+$/, "").toLowerCase();
 
+    // Confined to this container's own server: the same name on another
+    // machine is a different container with its own shortcut.
     const existingShortcut = shortcuts.find(
       (s) =>
-        s.container_name?.toLowerCase() === containerBaseName ||
-        s.container_match_name?.toLowerCase() === containerBaseName ||
-        s.container_name?.toLowerCase() === container.name.toLowerCase(),
+        s.host_id === container.hostId &&
+        (s.container_name?.toLowerCase() === containerBaseName ||
+          s.container_match_name?.toLowerCase() === containerBaseName ||
+          s.container_name?.toLowerCase() === container.name.toLowerCase()),
     );
 
     // Get the first public port from the container
@@ -186,6 +255,8 @@ export function ManagementView({
 
     const displayShortcut = existingShortcut || {
       id: -1,
+      host_id: container.hostId,
+      host_name: container.hostName,
       display_name: container.name,
       container_id: null, // Not used for matching - kept for type compatibility
       container_name: containerBaseName,
@@ -215,10 +286,12 @@ export function ManagementView({
         onDelete={
           existingShortcut ? () => handleDelete(existingShortcut.id) : () => {}
         }
-        onStart={() => handleStart(container.id)}
-        onStop={() => handleStop(container.id)}
+        onStart={() => handleStart(container.hostId, container.id)}
+        onStop={() => handleStop(container.hostId, container.id)}
         onRestart={
-          handleRestart ? () => handleRestart(container.id) : undefined
+          handleRestart
+            ? () => handleRestart(container.hostId, container.id)
+            : undefined
         }
         onToggleFavorite={
           existingShortcut
@@ -231,6 +304,118 @@ export function ManagementView({
         }
         alwaysShowStar={true}
       />
+    );
+  };
+
+  /**
+   * Compose projects first, then everything that stands on its own.
+   *
+   * `keyPrefix` scopes the collapsed-group state to one server: two machines
+   * running the same compose project would otherwise share a single toggle.
+   */
+  const renderComposeAndStandalone = (
+    list: DockerContainer[],
+    keyPrefix: string,
+  ) => {
+    const { grouped, ungrouped } = groupContainersByComposeProject(list);
+
+    return (
+      <div className="space-y-6">
+        {Array.from(grouped.entries()).map(
+          ([projectName, projectContainers]) => {
+            const groupKey = `${keyPrefix}:${projectName}`;
+            const isCollapsed = collapsedGroups.has(groupKey);
+            return (
+              <div
+                key={groupKey}
+                className="space-y-4"
+              >
+                {/* Group Header */}
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => toggleGroup(groupKey)}
+                    className="flex items-center gap-2 text-lg font-semibold transition-colors hover:text-blue-400"
+                    style={{ color: "var(--color-background-contrast)" }}
+                  >
+                    {isCollapsed ? (
+                      <ChevronRight className="w-5 h-5" />
+                    ) : (
+                      <ChevronDown className="w-5 h-5" />
+                    )}
+                    {/* Project icon - use compose project name to get icon, fallback to Layers */}
+                    {(() => {
+                      const iconSrc = getContainerIcon(projectName, "");
+                      const isUrl =
+                        iconSrc &&
+                        (iconSrc.startsWith("http") || iconSrc.includes("/"));
+
+                      // If no icon URL found, show Layers icon
+                      if (!isUrl) {
+                        return <Layers className="w-5 h-5 opacity-60" />;
+                      }
+
+                      return (
+                        <img
+                          src={iconSrc}
+                          alt={projectName}
+                          className="w-5 h-5 object-contain"
+                          onError={(e) => {
+                            // If image fails to load, replace with Layers icon
+                            const parent = e.currentTarget.parentElement;
+                            if (parent) {
+                              e.currentTarget.style.display = "none";
+                              const placeholder =
+                                document.createElement("span");
+                              placeholder.className =
+                                "w-5 h-5 opacity-60 flex items-center justify-center";
+                              placeholder.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></svg>`;
+                              parent.insertBefore(placeholder, e.currentTarget);
+                            }
+                          }}
+                        />
+                      );
+                    })()}
+                    <span className="capitalize">{projectName}</span>
+                  </button>
+                  <span
+                    className="text-sm px-2 py-0.5 rounded-full"
+                    style={{
+                      color: "var(--color-background-contrast)",
+                      opacity: 0.6,
+                      backgroundColor: "rgba(var(--color-primary-rgb), 0.1)",
+                    }}
+                  >
+                    {t("containers.count", {
+                      count: projectContainers.length,
+                    })}
+                  </span>
+                </div>
+
+                {/* Group Content */}
+                {!isCollapsed && (
+                  <div
+                    className={`${gridClasses} pl-4 border-l-2`}
+                    style={{
+                      borderColor: "rgba(var(--color-primary-rgb), 0.3)",
+                    }}
+                  >
+                    {projectContainers.map((container) =>
+                      renderContainerCard(container),
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          },
+        )}
+
+        {/* Standalone Containers (no compose project) */}
+        {ungrouped.length > 0 && (
+          <div className={gridClasses}>
+            {ungrouped.map((container) => renderContainerCard(container))}
+          </div>
+        )}
+      </div>
     );
   };
 
@@ -285,9 +470,15 @@ export function ManagementView({
         {customShortcuts.length === 0 ? (
           <div className="text-center py-12 border-2 border-dashed border-white/5 rounded-2xl bg-white/[0.02]">
             <LinkIcon className="w-10 h-10 text-slate-600 mx-auto mb-3" />
-            <p className="text-slate-400">{t("shortcuts.noShortcuts")}</p>
+            <p className="text-slate-400">
+              {searchTerms.length > 0
+                ? t("search.noResults", { query: searchQuery })
+                : t("shortcuts.noShortcuts")}
+            </p>
             <p className="text-slate-500 text-sm mt-1">
-              {t("shortcuts.noShortcutsDescription")}
+              {searchTerms.length > 0
+                ? t("search.noResultsHint")
+                : t("shortcuts.noShortcutsDescription")}
             </p>
           </div>
         ) : (
@@ -310,6 +501,14 @@ export function ManagementView({
         )}
       </section>
 
+      {/* Servers */}
+      <HostsManager
+        hosts={hosts}
+        onChanged={onHostsChanged}
+        onError={onError}
+        showConfirm={showHostConfirm}
+      />
+
       {/* Docker Containers Section */}
       <section className="space-y-6">
         <div>
@@ -330,120 +529,88 @@ export function ManagementView({
           </p>
         </div>
 
-        {containers.length === 0 ? (
+        {visibleContainers.length === 0 ? (
           <div className="text-center py-12 border-2 border-dashed border-white/5 rounded-2xl bg-white/[0.02]">
             <Server className="w-10 h-10 text-slate-600 mx-auto mb-3" />
-            <p className="text-slate-400">{t("containers.noContainers")}</p>
+            <p className="text-slate-400">
+              {searchTerms.length > 0
+                ? t("search.noResults", { query: searchQuery })
+                : t("containers.noContainers")}
+            </p>
             <p className="text-slate-500 text-sm mt-1">
-              {t("containers.noContainersDescription")}
+              {searchTerms.length > 0
+                ? t("search.noResultsHint")
+                : t("containers.noContainersDescription")}
             </p>
           </div>
-        ) : (
-          <div className="space-y-6">
-            {/* Compose Project Groups */}
-            {Array.from(composeGroups.entries()).map(
-              ([projectName, projectContainers]) => {
-                const isCollapsed = collapsedGroups.has(projectName);
-                return (
-                  <div
-                    key={projectName}
-                    className="space-y-4"
-                  >
-                    {/* Group Header */}
-                    <div className="flex items-center gap-3">
-                      <button
-                        onClick={() => toggleGroup(projectName)}
-                        className="flex items-center gap-2 text-lg font-semibold transition-colors hover:text-blue-400"
-                        style={{ color: "var(--color-background-contrast)" }}
-                      >
-                        {isCollapsed ? (
-                          <ChevronRight className="w-5 h-5" />
-                        ) : (
-                          <ChevronDown className="w-5 h-5" />
-                        )}
-                        {/* Project icon - use compose project name to get icon, fallback to Layers */}
-                        {(() => {
-                          const iconSrc = getContainerIcon(projectName, "");
-                          const isUrl =
-                            iconSrc &&
-                            (iconSrc.startsWith("http") ||
-                              iconSrc.includes("/"));
+        ) : showHostGroups ? (
+          <div className="space-y-10">
+            {containersByHost.map(({ hostId, host, containers: onHost }) => {
+              const hostKey = `host:${hostId}`;
+              const isCollapsed = collapsedGroups.has(hostKey);
+              const isLocal = host?.type === "local";
+              const HostIcon = isLocal ? HardDrive : Server;
+              const accent = host?.color || "var(--color-primary)";
 
-                          // If no icon URL found, show Layers icon
-                          if (!isUrl) {
-                            return <Layers className="w-5 h-5 opacity-60" />;
-                          }
-
-                          return (
-                            <img
-                              src={iconSrc}
-                              alt={projectName}
-                              className="w-5 h-5 object-contain"
-                              onError={(e) => {
-                                // If image fails to load, replace with Layers icon
-                                const parent = e.currentTarget.parentElement;
-                                if (parent) {
-                                  e.currentTarget.style.display = "none";
-                                  // Create and insert Layers icon placeholder
-                                  const placeholder =
-                                    document.createElement("span");
-                                  placeholder.className =
-                                    "w-5 h-5 opacity-60 flex items-center justify-center";
-                                  placeholder.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></svg>`;
-                                  parent.insertBefore(
-                                    placeholder,
-                                    e.currentTarget,
-                                  );
-                                }
-                              }}
-                            />
-                          );
-                        })()}
-                        <span className="capitalize">{projectName}</span>
-                      </button>
+              return (
+                <div
+                  key={hostKey}
+                  className="space-y-4"
+                >
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <button
+                      onClick={() => toggleGroup(hostKey)}
+                      className="flex items-center gap-2 text-xl font-bold transition-opacity hover:opacity-80"
+                      style={{ color: "var(--color-background-contrast)" }}
+                    >
+                      {isCollapsed ? (
+                        <ChevronRight className="w-5 h-5" />
+                      ) : (
+                        <ChevronDown className="w-5 h-5" />
+                      )}
                       <span
-                        className="text-sm px-2 py-0.5 rounded-full"
+                        className="p-1.5 rounded-lg"
                         style={{
-                          color: "var(--color-background-contrast)",
-                          opacity: 0.6,
-                          backgroundColor:
-                            "rgba(var(--color-primary-rgb), 0.1)",
+                          backgroundColor: host?.color
+                            ? `${host.color}22`
+                            : "rgba(var(--color-primary-rgb), 0.12)",
+                          color: accent,
                         }}
                       >
-                        {projectContainers.length}{" "}
-                        {projectContainers.length === 1
-                          ? "container"
-                          : "containers"}
+                        <HostIcon className="w-4 h-4" />
                       </span>
-                    </div>
-
-                    {/* Group Content */}
-                    {!isCollapsed && (
-                      <div
-                        className={`${gridClasses} pl-4 border-l-2`}
-                        style={{
-                          borderColor: "rgba(var(--color-primary-rgb), 0.3)",
-                        }}
-                      >
-                        {projectContainers.map((container) =>
-                          renderContainerCard(container),
-                        )}
-                      </div>
-                    )}
+                      <span>
+                        {host?.name ??
+                          onHost[0]?.hostName ??
+                          t("hosts.unknownServer")}
+                      </span>
+                    </button>
+                    <span
+                      className="text-sm px-2 py-0.5 rounded-full"
+                      style={{
+                        color: "var(--color-background-contrast)",
+                        opacity: 0.6,
+                        backgroundColor: "rgba(var(--color-primary-rgb), 0.1)",
+                      }}
+                    >
+                      {t("containers.count", { count: onHost.length })}
+                    </span>
                   </div>
-                );
-              },
-            )}
 
-            {/* Standalone Containers (no compose project) */}
-            {standaloneContainers.length > 0 && (
-              <div className={gridClasses}>
-                {standaloneContainers.map((container) =>
-                  renderContainerCard(container),
-                )}
-              </div>
-            )}
+                  {!isCollapsed && (
+                    <div
+                      className="pl-4 border-l-2"
+                      style={{ borderColor: `${accent}55` }}
+                    >
+                      {renderComposeAndStandalone(onHost, hostKey)}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
+        ) : (
+          renderComposeAndStandalone(visibleContainers, "host:single")
         )}
       </section>
     </motion.div>

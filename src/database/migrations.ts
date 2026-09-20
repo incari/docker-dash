@@ -11,6 +11,9 @@ import {
   hasMigrationRun,
   recordMigration,
 } from "../config/database.js";
+import { createBackup } from "./backup.js";
+import { getContainerBaseName } from "../utils/containerMatching.js";
+import { hostname } from "os";
 import Docker from "dockerode";
 
 const docker = new Docker({
@@ -57,8 +60,40 @@ async function runOnceAsync(
 /**
  * Run all migrations
  */
+/** Migrations that rewrite tables or delete rows, in the order they run. */
+const MIGRATION_NAMES = [
+  "001_add_position_column",
+  "002_add_display_name_column",
+  // Must match the name passed to runOnceAsync below, or this list reports a
+  // pending migration on every boot and a pointless backup is taken each time.
+  "003_migrate_container_names",
+  "004_cleanup_duplicates",
+  "005_normalize_container_base_names",
+  "006_remove_name_column",
+  "007_make_port_nullable",
+  "008_add_container_match_name",
+  "009_add_indexes",
+  "010_cleanup_deprecated_columns",
+  "011_add_dismissed_containers",
+  "012_merge_duplicate_shortcuts",
+  "013_add_hosts",
+  "014_add_agent_access",
+];
+
 export async function runMigrations(): Promise<void> {
   console.log("[MIGRATIONS] Starting database migrations...");
+
+  // Back up before anything is rewritten. Several migrations drop and rebuild
+  // tables and 004 deletes rows outright, and there are no down migrations, so
+  // this copy is the only way back to the previous state.
+  const pending = MIGRATION_NAMES.filter((name) => !hasMigrationRun(name));
+  if (pending.length > 0) {
+    console.log(
+      `[MIGRATIONS] ${pending.length} pending; backing up first:`,
+      pending.join(", "),
+    );
+    await createBackup("premigration");
+  }
 
   // Legacy column migrations (for existing databases)
   addColumnIfMissing("shortcuts", "url", "TEXT");
@@ -100,6 +135,18 @@ export async function runMigrations(): Promise<void> {
 
   // NEW: Clean up deprecated columns (container_id is unreliable)
   runOnce("010_cleanup_deprecated_columns", cleanupDeprecatedColumns);
+
+  // NEW: Remember shortcuts the user deleted so auto-sync stops recreating them
+  runOnce("011_add_dismissed_containers", addDismissedContainersTable);
+
+  // NEW: Merge shortcuts that describe the same app
+  runOnce("012_merge_duplicate_shortcuts", mergeDuplicateShortcuts);
+
+  // NEW: Multi-host - every shortcut now belongs to a server
+  runOnce("013_add_hosts", addHostsTable);
+
+  // NEW: This installation can be read by a hub, once switched on
+  runOnce("014_add_agent_access", addAgentAccessColumns);
 
   console.log("[MIGRATIONS] All migrations complete");
 }
@@ -641,4 +688,250 @@ function cleanupDeprecatedColumns(): void {
   } catch (err) {
     console.error("[MIGRATION] Failed to cleanup deprecated columns:", err);
   }
+}
+
+/**
+ * Migration 011: Remember containers whose shortcut was deleted
+ *
+ * Auto-sync creates a shortcut for every container that does not have one, so
+ * before this table a deliberately deleted shortcut came straight back on the
+ * next startup and could not be removed at all. The row is keyed by
+ * container_match_name - the same stable identifier auto-sync matches on - so a
+ * dismissal survives the container being recreated under a new name.
+ */
+function addDismissedContainersTable(): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS dismissed_containers (
+      container_match_name TEXT PRIMARY KEY,
+      display_name TEXT,
+      dismissed_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  console.log("[MIGRATION] Created dismissed_containers table");
+}
+
+/**
+ * Migration 014: Let this installation hand out its own API key.
+ *
+ * The key used to come only from the environment, which meant generating a
+ * secret by hand on every machine before the hub could read any of them. Now
+ * each installation keeps one it generated itself, ready to be copied out of
+ * its own dashboard - and still refuses every request until agent_enabled says
+ * otherwise.
+ */
+function addAgentAccessColumns(): void {
+  addColumnIfMissing("settings", "api_key", "TEXT");
+  addColumnIfMissing("settings", "agent_enabled", "INTEGER DEFAULT 0");
+}
+
+/**
+ * Migration 013: Give every shortcut a server.
+ *
+ * Until now the dashboard read one Docker daemon over its own socket and
+ * nothing recorded where a container lived, because there was only one answer.
+ * With remote hosts in the picture two servers can both run a container called
+ * `nginx`, so the host has to be part of a shortcut's identity - otherwise a
+ * shortcut for one server's nginx matches the other server's, and dismissing a
+ * container on one server dismisses it everywhere.
+ *
+ * Row 1 is the local daemon and every existing shortcut belongs to it, which is
+ * exactly what the dashboard showed before this migration ran.
+ */
+function addHostsTable(): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS hosts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      type TEXT NOT NULL DEFAULT 'agent',
+      url TEXT,
+      api_key TEXT,
+      hostname TEXT,
+      color TEXT,
+      position INTEGER DEFAULT 0,
+      enabled INTEGER DEFAULT 1,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  const localHost = db.prepare("SELECT id FROM hosts WHERE id = 1").get();
+  if (!localHost) {
+    db.prepare(
+      `INSERT INTO hosts (id, name, type, position, enabled)
+       VALUES (1, ?, 'local', 0, 1)`,
+    ).run(process.env.HOST_NAME || hostname() || "Local");
+    console.log("[MIGRATION] Seeded the local host");
+  }
+
+  // No REFERENCES clause: SQLite refuses ADD COLUMN with a foreign key unless
+  // the default is NULL, and foreign keys are on. Databases created from
+  // scratch get the constraint from initializeSchema; deleting a host clears
+  // its shortcuts explicitly either way.
+  addColumnIfMissing("shortcuts", "host_id", "INTEGER NOT NULL DEFAULT 1");
+  db.exec("UPDATE shortcuts SET host_id = 1 WHERE host_id IS NULL");
+  db.exec(
+    "CREATE INDEX IF NOT EXISTS idx_shortcuts_host ON shortcuts(host_id)",
+  );
+
+  // dismissed_containers keyed the container name alone, so it has to be
+  // rebuilt around (host, name). SQLite cannot change a primary key in place.
+  if (!columnExists("dismissed_containers", "host_id")) {
+    db.exec(`
+      CREATE TABLE dismissed_containers_new (
+        host_id INTEGER NOT NULL DEFAULT 1,
+        container_match_name TEXT NOT NULL,
+        display_name TEXT,
+        dismissed_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (host_id, container_match_name)
+      )
+    `);
+    db.exec(`
+      INSERT INTO dismissed_containers_new
+        (host_id, container_match_name, display_name, dismissed_at)
+      SELECT 1, container_match_name, display_name, dismissed_at
+      FROM dismissed_containers
+    `);
+    db.exec("DROP TABLE dismissed_containers");
+    db.exec(
+      "ALTER TABLE dismissed_containers_new RENAME TO dismissed_containers",
+    );
+    console.log("[MIGRATION] Rebuilt dismissed_containers with host_id");
+  }
+}
+
+/**
+ * Migration 012: Merge shortcuts that describe the same app
+ *
+ * 004 already deduplicated by container_name, which misses the duplicates this
+ * codebase actually produced: rows that share a display name but were linked by
+ * different identifiers - an image name on one and a container name on the
+ * other ("logflare" vs "supabase-occams-analytics"), a hand-made shortcut with
+ * no container link next to an auto-synced one ("coolify"), or two identical
+ * rows written by two auto-sync requests racing each other.
+ *
+ * The surviving row is the one whose container link agrees with what is
+ * displayed; anything the others carry and it lacks is copied over first, so
+ * merging cannot lose a custom icon, port, URL or favourite.
+ */
+function mergeDuplicateShortcuts(): void {
+  const rows = db
+    .prepare(
+      `SELECT id, display_name, description, icon, port, url, container_name,
+              container_match_name, compose_project, section_id, position,
+              is_favorite, use_tailscale
+       FROM shortcuts ORDER BY id ASC`,
+    )
+    .all() as Array<{
+    id: number;
+    display_name: string;
+    description: string | null;
+    icon: string | null;
+    port: number | null;
+    url: string | null;
+    container_name: string | null;
+    container_match_name: string | null;
+    compose_project: string | null;
+    section_id: number | null;
+    position: number;
+    is_favorite: number;
+    use_tailscale: number | null;
+  }>;
+
+  const groups = new Map<string, typeof rows>();
+  for (const row of rows) {
+    const key = (row.display_name || "").trim().toLowerCase();
+    if (!key) continue;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(row);
+  }
+
+  const updateStmt = db.prepare(
+    `UPDATE shortcuts
+     SET description = ?, icon = ?, port = ?, url = ?, compose_project = ?,
+         section_id = ?, position = ?, is_favorite = ?, use_tailscale = ?
+     WHERE id = ?`,
+  );
+  const deleteStmt = db.prepare("DELETE FROM shortcuts WHERE id = ?");
+
+  let mergedGroups = 0;
+  let deleted = 0;
+
+  const merge = db.transaction(() => {
+    for (const [name, group] of groups) {
+      if (group.length < 2) continue;
+      // Only touch groups that auto-sync could have produced.
+      if (!group.some((r) => r.container_name)) continue;
+
+      const baseName = getContainerBaseName(name);
+      const ranked = [...group].sort((a, b) => {
+        const aAgrees = a.container_match_name === baseName ? 1 : 0;
+        const bAgrees = b.container_match_name === baseName ? 1 : 0;
+        if (aAgrees !== bAgrees) return bAgrees - aAgrees;
+        const aLinked = a.container_name ? 1 : 0;
+        const bLinked = b.container_name ? 1 : 0;
+        if (aLinked !== bLinked) return bLinked - aLinked;
+        if (a.is_favorite !== b.is_favorite) return b.is_favorite - a.is_favorite;
+        return a.id - b.id;
+      });
+
+      const [winner, ...losers] = ranked;
+      const hasIcon = (icon: string | null): boolean =>
+        !!icon && icon !== "Server";
+
+      const merged = { ...winner };
+      for (const loser of losers) {
+        if (!merged.description?.trim() && loser.description?.trim()) {
+          merged.description = loser.description;
+        }
+        if (!hasIcon(merged.icon) && hasIcon(loser.icon)) {
+          merged.icon = loser.icon;
+        }
+        if (merged.port === null && loser.port !== null) {
+          merged.port = loser.port;
+        }
+        if (merged.url === null && loser.url !== null) {
+          merged.url = loser.url;
+        }
+        if (merged.compose_project === null && loser.compose_project !== null) {
+          merged.compose_project = loser.compose_project;
+        }
+        if (merged.section_id === null && loser.section_id !== null) {
+          merged.section_id = loser.section_id;
+        }
+        // Keep the earliest slot on the dashboard so nothing appears to move.
+        merged.position = Math.min(merged.position, loser.position);
+        merged.is_favorite = merged.is_favorite || loser.is_favorite ? 1 : 0;
+        merged.use_tailscale =
+          merged.use_tailscale || loser.use_tailscale ? 1 : 0;
+      }
+
+      updateStmt.run(
+        merged.description,
+        merged.icon,
+        merged.port,
+        merged.url,
+        merged.compose_project,
+        merged.section_id,
+        merged.position,
+        merged.is_favorite,
+        merged.use_tailscale,
+        merged.id,
+      );
+
+      for (const loser of losers) {
+        deleteStmt.run(loser.id);
+        deleted++;
+      }
+      mergedGroups++;
+      console.log(
+        `[MIGRATION] Merged ${group.length} shortcuts named "${name}" into #${merged.id}`,
+      );
+    }
+  });
+
+  merge();
+
+  console.log(
+    `[MIGRATION] Merged ${mergedGroups} duplicate group(s), removed ${deleted} shortcut(s)`,
+  );
 }

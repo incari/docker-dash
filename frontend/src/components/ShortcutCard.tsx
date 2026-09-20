@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import {
   Settings,
   Trash2,
@@ -11,6 +11,7 @@ import {
 } from "../constants/icons";
 import { useTranslation } from "react-i18next";
 import type { ShortcutCardProps } from "../types";
+import { CardShell } from "./CardShell";
 import {
   getLinkIcon,
   renderShortcutIcon,
@@ -26,8 +27,9 @@ interface ExtendedShortcutCardProps extends ShortcutCardProps {
 
 /**
  * Shortcut card component displaying a single shortcut
+ * Memoized to prevent unnecessary re-renders
  */
-export const ShortcutCard: React.FC<ExtendedShortcutCardProps> = ({
+export const ShortcutCard: React.FC<ExtendedShortcutCardProps> = React.memo(({
   shortcut,
   container,
   tailscaleIP,
@@ -43,65 +45,33 @@ export const ShortcutCard: React.FC<ExtendedShortcutCardProps> = ({
   isOver,
 }) => {
   const { t } = useTranslation();
-  const isRunning = container?.state === "running";
   const [showMenu, setShowMenu] = useState(false);
 
-  // Determine if star should be shown
-  const showStar = isEditMode || alwaysShowStar;
+  // Memoize derived state
+  const isRunning = useMemo(() => container?.state === "running", [container?.state]);
+  const showStar = useMemo(() => isEditMode || alwaysShowStar, [isEditMode, alwaysShowStar]);
 
-  // Get link and subtitle using shared utility
-  const { link, subtitle } = getShortcutLink(
-    shortcut,
-    container,
-    tailscaleIP,
-    40,
+  // Memoize link calculation (expensive operation)
+  const { link, subtitle } = useMemo(
+    () => getShortcutLink(shortcut, container, tailscaleIP, 40),
+    [shortcut, container, tailscaleIP],
   );
 
-  const handleCardClick = (e: React.MouseEvent) => {
-    if (!isEditMode && link) {
-      window.open(link, "_blank");
-    } else if (isEditMode) {
-      // Prevent click in edit mode to allow dragging
-      e.preventDefault();
-    }
-  };
-
   return (
-    <div
-      {...(isEditMode && dragHandleProps ? dragHandleProps : {})}
-      onClick={isEditMode ? undefined : handleCardClick}
-      className={`group relative border rounded-2xl sm:rounded-3xl transition-all duration-300 h-full flex flex-col ${
-        isEditMode ? "" : link ? "cursor-pointer" : "cursor-default"
-      } ${showMenu ? "overflow-visible" : "overflow-hidden"}`}
-      style={{
-        backgroundColor: isOver
-          ? "rgba(var(--color-primary-rgb), 0.1)"
-          : "var(--color-card-background)",
-        borderColor: isOver
-          ? "var(--color-primary)"
-          : isEditMode
-            ? "rgba(var(--color-primary-rgb), 0.5)"
-            : "rgba(255, 255, 255, 0.05)",
-        boxShadow:
-          isOver || !isEditMode
-            ? `0 25px 50px -12px rgba(var(--color-primary-rgb), 0.05)`
-            : undefined,
-        color: "var(--color-background-contrast)",
-      }}
-      onMouseEnter={(e) => {
-        if (!isEditMode) {
-          e.currentTarget.style.borderColor = `rgba(var(--color-primary-rgb), 0.3)`;
-        } else {
-          e.currentTarget.style.borderColor = `var(--color-primary)`;
-        }
-      }}
-      onMouseLeave={(e) => {
-        if (!isEditMode) {
-          e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.05)";
-        } else {
-          e.currentTarget.style.borderColor = `rgba(var(--color-primary-rgb), 0.5)`;
-        }
-      }}
+    <CardShell
+      link={link}
+      linkLabel={t("shortcuts.openShortcut", { name: shortcut.display_name })}
+      isEditMode={isEditMode}
+      isOver={isOver}
+      dragHandleProps={dragHandleProps}
+      shadow="0 25px 50px -12px rgba(var(--color-primary-rgb), 0.05)"
+      // With the menu open the whole card is raised above its siblings. The
+      // menu is z-50 but lives inside .card-actions (z-20), and every other card
+      // has a .card-actions at the same z-20 - so cards later in the DOM painted
+      // their star and kebab on top of the open menu.
+      className={`rounded-2xl sm:rounded-3xl h-full flex flex-col ${
+        showMenu ? "overflow-visible z-50" : "overflow-hidden"
+      }`}
     >
       {/* Drag indicator - Only visible in edit mode */}
       {isEditMode && (
@@ -122,15 +92,22 @@ export const ShortcutCard: React.FC<ExtendedShortcutCardProps> = ({
 
         {/* Overlay: Title, Subtitle, and Star */}
         <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/60 to-transparent flex flex-col justify-between p-4">
-          {/* Star in top-right - Visible in edit/reorder mode or when alwaysShowStar is true */}
+          {/* Star in top-right - Visible in edit/reorder mode or when alwaysShowStar is true.
+              self-end keeps the z-raised .card-actions box the size of the button: stretched
+              to the overlay's width it would sit over the stretched link and eat taps there. */}
           {showStar && (
-            <div className="flex justify-end">
+            <div className="card-actions self-end">
               <button
+                aria-label={
+                  shortcut.is_favorite
+                    ? t("shortcuts.removeFromFavorites")
+                    : t("shortcuts.addToFavorites")
+                }
                 onClick={(e) => {
                   e.stopPropagation();
                   onToggleFavorite();
                 }}
-                className="p-2 rounded-lg bg-slate-900/80 backdrop-blur-sm transition-colors"
+                className="p-2 rounded-lg bg-slate-900/80 backdrop-blur-sm cursor-pointer transition-colors"
                 style={{
                   color: shortcut.is_favorite
                     ? "var(--color-primary)"
@@ -235,15 +212,20 @@ export const ShortcutCard: React.FC<ExtendedShortcutCardProps> = ({
         </div>
 
         {/* Star and Menu button */}
-        <div className="hidden sm:flex items-center gap-1 shrink-0">
+        <div className="card-actions hidden sm:flex items-center gap-1 shrink-0">
           {/* Star - Visible in edit/reorder mode or when alwaysShowStar is true */}
           {showStar && (
             <button
+                aria-label={
+                  shortcut.is_favorite
+                    ? t("shortcuts.removeFromFavorites")
+                    : t("shortcuts.addToFavorites")
+                }
               onClick={(e) => {
                 e.stopPropagation();
                 onToggleFavorite();
               }}
-              className="p-1 transition-colors"
+              className="p-1 cursor-pointer transition-colors"
               style={{
                 color: shortcut.is_favorite
                   ? "var(--color-primary)"
@@ -268,12 +250,17 @@ export const ShortcutCard: React.FC<ExtendedShortcutCardProps> = ({
           {!isEditMode && (
             <div className={`relative ${showMenu ? "z-50" : ""}`}>
               <button
+                aria-label={t("shortcuts.moreActions", {
+                  name: shortcut.display_name,
+                })}
+                aria-expanded={showMenu}
+                aria-haspopup="true"
                 onClick={(e) => {
                   e.stopPropagation();
                   setShowMenu(!showMenu);
                 }}
                 className="p-1 text-slate-400 hover:text-white transition-colors"
-                title="More actions"
+                title={t("shortcuts.moreActions", { name: shortcut.display_name })}
               >
                 <MoreVertical className="w-4 h-4" />
               </button>
@@ -392,6 +379,6 @@ export const ShortcutCard: React.FC<ExtendedShortcutCardProps> = ({
           {shortcut.description}
         </p>
       )}
-    </div>
+    </CardShell>
   );
-};
+});

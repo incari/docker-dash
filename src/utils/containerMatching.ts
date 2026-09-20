@@ -112,3 +112,82 @@ export function findContainerByMatchName<T extends { Names: string[] }>(
   });
 }
 
+/**
+ * A port entry as Docker reports it in `listContainers`.
+ * `PublicPort` is absent for ports that are exposed but not published.
+ */
+export interface ContainerPortInfo {
+  PrivatePort: number;
+  PublicPort?: number;
+  Type?: string;
+}
+
+/**
+ * Private ports that conventionally serve a web UI, most preferred first.
+ * A container often publishes several ports (a UI plus a peer/data/metrics
+ * port) and only the UI one is worth putting behind a shortcut.
+ */
+const WEB_UI_PRIVATE_PORTS = [80, 8080, 8000, 3000, 5000, 8081, 8008, 443, 8443];
+
+/**
+ * Every distinct host port a container actually publishes.
+ *
+ * Docker repeats an entry per listening address (0.0.0.0 and ::) and per
+ * protocol, so the raw array contains duplicates.
+ */
+export function getPublishedPorts(
+  ports: ContainerPortInfo[] | null | undefined,
+): number[] {
+  if (!ports) return [];
+
+  const published = ports
+    .filter((p) => typeof p.PublicPort === "number" && p.PublicPort > 0)
+    .map((p) => p.PublicPort as number);
+
+  return [...new Set(published)];
+}
+
+/**
+ * Pick the host port a shortcut should open.
+ *
+ * `Ports[0]` is not usable: Docker returns the array in arbitrary order and the
+ * first entry is frequently an exposed-but-unpublished port (no PublicPort at
+ * all) or the wrong one of several published ports. Observed on a real server:
+ * coolify lists 7000/tcp unpublished first and publishes its UI on 8080 -> 7000,
+ * and transmission lists the BitTorrent peer port 51413 before the 9091 web UI.
+ *
+ * Preference order among published entries:
+ *   1. TCP over UDP (a UDP-only service has no web UI to link to)
+ *   2. a conventional web-UI private port, in WEB_UI_PRIVATE_PORTS order
+ *   3. the lowest private port - UIs sit below peer/data ports by convention
+ *   4. the lowest host port, purely so the result is deterministic
+ */
+export function selectPublishedPort(
+  ports: ContainerPortInfo[] | null | undefined,
+): number | null {
+  if (!ports || ports.length === 0) return null;
+
+  const published = ports.filter(
+    (p) => typeof p.PublicPort === "number" && p.PublicPort > 0,
+  );
+  if (published.length === 0) return null;
+
+  const tcp = published.filter(
+    (p) => (p.Type || "tcp").toLowerCase() === "tcp",
+  );
+  const candidates = tcp.length > 0 ? tcp : published;
+
+  const webUiRank = (privatePort: number): number => {
+    const index = WEB_UI_PRIVATE_PORTS.indexOf(privatePort);
+    return index === -1 ? WEB_UI_PRIVATE_PORTS.length : index;
+  };
+
+  const best = [...candidates].sort((a, b) => {
+    const rankDiff = webUiRank(a.PrivatePort) - webUiRank(b.PrivatePort);
+    if (rankDiff !== 0) return rankDiff;
+    if (a.PrivatePort !== b.PrivatePort) return a.PrivatePort - b.PrivatePort;
+    return (a.PublicPort as number) - (b.PublicPort as number);
+  })[0];
+
+  return best.PublicPort as number;
+}

@@ -136,11 +136,25 @@ export const getShortcutLink = (
       link = `http://${tailscaleIP}:${shortcut.port}`;
       subtitle = `Tailscale :${shortcut.port}`;
     } else {
-      link = `http://${window.location.hostname}:${shortcut.port}`;
-      subtitle = `:${shortcut.port}`;
+      // A port on a remote server has to be opened against that server, not
+      // against whichever machine happens to be serving the dashboard. The
+      // local host sends no hostname, and then the browser's own is right
+      // however the dashboard was reached - LAN, Tailscale or a tunnel.
+      const host = shortcut.host_hostname || window.location.hostname;
+      link = `http://${host}:${shortcut.port}`;
+      // On a remote server the port alone does not say which machine will
+      // answer, and the favourites are deliberately not grouped by server.
+      subtitle = shortcut.host_hostname
+        ? `${shortcut.host_name || host} :${shortcut.port}`
+        : `:${shortcut.port}`;
     }
   } else if (container) {
-    subtitle = "Container Only";
+    // Nothing to open, so the server is all there is to say - and on a fleet it
+    // is the only thing telling two identically named containers apart.
+    subtitle =
+      shortcut.host_name && shortcut.host_hostname
+        ? `${shortcut.host_name} · Container Only`
+        : "Container Only";
   }
 
   return { link, subtitle };

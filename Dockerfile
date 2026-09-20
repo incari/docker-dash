@@ -2,12 +2,12 @@
 
 # Stage 1: Build the React frontend
 FROM node:22-alpine AS frontend-builder
-RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN corepack enable && corepack prepare pnpm@10.34.5 --activate
 WORKDIR /app
 COPY customIconMappings.json ./
 WORKDIR /app/frontend
-COPY frontend/package.json frontend/pnpm-lock.yaml* ./
-RUN pnpm install --frozen-lockfile || pnpm install
+COPY frontend/package.json frontend/pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
 COPY frontend/ ./
 RUN pnpm build
 
@@ -16,13 +16,12 @@ FROM node:22-alpine AS backend-builder
 # Install build tools (only needed in this stage, not in final image)
 # Update package index and install with retry logic
 RUN apk update && apk add --no-cache build-base python3
-RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN corepack enable && corepack prepare pnpm@10.34.5 --activate
 WORKDIR /app
-COPY package*.json ./
-COPY pnpm-lock.yaml* ./
+COPY package.json pnpm-lock.yaml ./
 ENV npm_config_build_from_source=true
 # Install ALL dependencies (including devDependencies for TypeScript compilation)
-RUN pnpm install --frozen-lockfile || pnpm install
+RUN pnpm install --frozen-lockfile
 # Compile better-sqlite3 native module
 RUN cd node_modules/better-sqlite3 && npm run build-release
 # Copy TypeScript source and compile
