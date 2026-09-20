@@ -3,7 +3,6 @@ import {
   Linkedin,
   BatteryCharging,
   Zap,
-  MessageSquare,
   RefreshCw,
 } from "../constants/icons";
 import { useTranslation } from "react-i18next";
@@ -63,19 +62,6 @@ export function Footer({
                 </a>
               </div>
             </div>
-
-            {/* Feedback Button */}
-            <a
-              href="https://pslg.app/docker-dash-feedback"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1.5 sm:gap-2 bg-slate-800/50 hover:bg-slate-800 border border-white/5 hover:border-purple-500/30 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg transition-all duration-300"
-            >
-              <MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-purple-400" />
-              <span className="text-slate-300 text-xs sm:text-sm hover:text-purple-400 transition-colors">
-                {t("footer.feedback")}
-              </span>
-            </a>
 
             {/* Migration Button */}
             <button
