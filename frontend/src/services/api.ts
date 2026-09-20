@@ -4,7 +4,13 @@
  */
 import axios from "axios";
 import { API_BASE, API_ENDPOINTS } from "../constants/api";
-import type { DockerContainer, Shortcut, Section } from "../types";
+import type {
+  DockerContainer,
+  Host,
+  HostFormData,
+  Shortcut,
+  Section,
+} from "../types";
 import type { TailscaleInfoExtended } from "../appTypes";
 
 // ==================== Shortcuts API ====================
@@ -145,21 +151,91 @@ export const sectionsApi = {
 // ==================== Containers API ====================
 
 export const containersApi = {
+  /** Every container on every enabled server, in one list. */
   getAll: async (): Promise<DockerContainer[]> => {
     const response = await axios.get(API_ENDPOINTS.CONTAINERS);
     return response.data;
   },
 
-  start: async (id: string): Promise<void> => {
-    await axios.post(API_ENDPOINTS.CONTAINER_START(id));
+  start: async (hostId: number, id: string): Promise<void> => {
+    await axios.post(API_ENDPOINTS.CONTAINER_ACTION(hostId, id, "start"));
   },
 
-  stop: async (id: string): Promise<void> => {
-    await axios.post(API_ENDPOINTS.CONTAINER_STOP(id));
+  stop: async (hostId: number, id: string): Promise<void> => {
+    await axios.post(API_ENDPOINTS.CONTAINER_ACTION(hostId, id, "stop"));
   },
 
-  restart: async (id: string): Promise<void> => {
-    await axios.post(API_ENDPOINTS.CONTAINER_RESTART(id));
+  restart: async (hostId: number, id: string): Promise<void> => {
+    await axios.post(API_ENDPOINTS.CONTAINER_ACTION(hostId, id, "restart"));
+  },
+};
+
+// ==================== Hosts (servers) API ====================
+
+export interface HostTestResult {
+  ok: boolean;
+  containers?: number;
+  name?: string;
+  version?: string;
+  error?: string;
+  error_code?: string;
+}
+
+export const hostsApi = {
+  getAll: async (): Promise<Host[]> => {
+    const response = await axios.get(API_ENDPOINTS.HOSTS);
+    return response.data;
+  },
+
+  create: async (data: Partial<HostFormData>): Promise<Host> => {
+    const response = await axios.post(API_ENDPOINTS.HOSTS, data);
+    return response.data;
+  },
+
+  update: async (id: number, data: Partial<HostFormData>): Promise<Host> => {
+    const response = await axios.put(API_ENDPOINTS.HOST_BY_ID(id), data);
+    return response.data;
+  },
+
+  delete: async (id: number): Promise<void> => {
+    await axios.delete(API_ENDPOINTS.HOST_BY_ID(id));
+  },
+
+  /**
+   * Check an address and key before saving them, so a typo is caught while the
+   * form is still open. An omitted key means "use the saved one".
+   */
+  test: async (data: {
+    id?: number;
+    url?: string;
+    api_key?: string;
+  }): Promise<HostTestResult> => {
+    const response = await axios.post(API_ENDPOINTS.HOSTS_TEST, data);
+    return response.data;
+  },
+
+  /** Let a hub read this installation, or stop it. */
+  setAgentEnabled: async (id: number, enabled: boolean): Promise<Host> => {
+    const response = await axios.put(API_ENDPOINTS.HOST_BY_ID(id), {
+      agent_enabled: enabled,
+    });
+    return response.data;
+  },
+
+  /**
+   * Try a server that is being skipped, right now.
+   * A failing server is left alone for up to a minute at a time, which is wrong
+   * the moment someone switches it back on.
+   */
+  retry: async (id: number): Promise<Host> => {
+    const response = await axios.post(API_ENDPOINTS.HOST_RETRY(id));
+    return response.data;
+  },
+
+  /** Replace this machine's key, locking out whoever held the old one. */
+  rotateApiKey: async (id: number): Promise<Host> => {
+    const response = await axios.post(API_ENDPOINTS.HOST_API_KEY(id));
+    return response.data;
   },
 };
 

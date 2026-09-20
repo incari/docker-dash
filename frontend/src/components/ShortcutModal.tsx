@@ -34,6 +34,8 @@ interface FormData {
   url: string;
   icon: string;
   container_id: string;
+  /** The server this shortcut belongs to; its container lives there. */
+  host_id: string;
   type: "port" | "url";
   use_tailscale: boolean;
 }
@@ -45,6 +47,7 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
   isOpen,
   shortcut,
   containers,
+  hosts,
   tailscaleInfo,
   onSave,
   onClose,
@@ -58,6 +61,7 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
     url: "",
     icon: "Server",
     container_id: "",
+    host_id: "1",
     type: "port",
     use_tailscale: false,
   });
@@ -76,6 +80,7 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
         url: shortcut.url || "",
         icon: shortcut.icon || "Server",
         container_id: shortcut.container_id || "",
+        host_id: String(shortcut.host_id ?? 1),
         type: shortcut.url ? "url" : "port",
         use_tailscale:
           (shortcut as any).use_tailscale === 1 ||
@@ -94,6 +99,7 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
         url: "",
         icon: "Server",
         container_id: "",
+        host_id: String(hosts[0]?.id ?? 1),
         type: "port",
         use_tailscale: false,
       });
@@ -101,7 +107,7 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
       setHasManuallySelectedIcon(false);
     }
     setSelectedFile(null);
-  }, [shortcut, isOpen]);
+  }, [shortcut, isOpen, hosts]);
 
   const titleId = useId();
   const dialogRef = useModalA11y<HTMLDivElement>(isOpen, onClose);
@@ -217,6 +223,10 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
       if (formData.container_id)
         data.append("container_id", formData.container_id);
 
+      // Only on create: a shortcut does not move between servers, and the
+      // backend ignores the field on update.
+      if (!shortcut?.id) data.append("host_id", formData.host_id);
+
       try {
         if (shortcut?.id) {
           await axios.put(`${API_BASE}/shortcuts/${shortcut.id}`, data);
@@ -296,6 +306,8 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
                     port: c ? c.ports[0]?.public?.toString() || "" : prev.port,
                     // Auto-select icon from docker-icon-vault based on container name
                     icon: newIcon,
+                    // The container decides the server: it only exists on one.
+                    host_id: c ? String(c.hostId) : prev.host_id,
                   }));
                   // Mark as manually selected when selecting a container
                   if (c) {
@@ -316,7 +328,37 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
                     key={c.id}
                     value={c.id}
                   >
-                    {c.name}
+                    {hosts.length > 1 ? `${c.name} — ${c.hostName}` : c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Server - only worth asking once there is more than one, and only
+              for a shortcut that is not already tied to a container. */}
+          {!shortcut?.id && hosts.length > 1 && !formData.container_id && (
+            <div className="space-y-2">
+              <label
+                htmlFor="shortcut-host"
+                className="text-sm font-semibold text-slate-300"
+              >
+                {t("hosts.server")}
+              </label>
+              <select
+                id="shortcut-host"
+                value={formData.host_id}
+                onChange={(e) =>
+                  setFormData((prev) => ({ ...prev, host_id: e.target.value }))
+                }
+                className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-white appearance-none"
+              >
+                {hosts.map((host) => (
+                  <option
+                    key={host.id}
+                    value={String(host.id)}
+                  >
+                    {host.name}
                   </option>
                 ))}
               </select>

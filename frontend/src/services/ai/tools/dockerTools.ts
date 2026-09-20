@@ -28,6 +28,7 @@ async function findContainersByName(params: { name: string }): Promise<any> {
       state: c.state,
       status: c.status,
       image: c.image,
+      host: c.hostName,
     })),
   };
 }
@@ -48,6 +49,7 @@ async function getContainerHealth(params: { containerId: string }): Promise<any>
   return {
     id: container.id,
     name: container.name,
+    host: container.hostName,
     state: container.state,
     status: container.status,
     isRunning: container.state === "running",
@@ -75,6 +77,7 @@ async function listAllContainers(): Promise<any> {
       state: c.state,
       status: c.status,
       image: c.image,
+      host: c.hostName,
     })),
   };
 }
@@ -134,16 +137,35 @@ async function openContainerUrl(params: { url: string }): Promise<any> {
 }
 
 /**
+ * Which server a container lives on.
+ *
+ * The agent is given container IDs, and an ID is only unique within one Docker
+ * daemon, so the server has to be looked up before anything can be done to it.
+ */
+async function resolveContainer(containerId: string) {
+  const containers = await containersApi.getAll();
+  const container = containers.find((c) => c.id === containerId);
+
+  if (!container) {
+    throw new Error(`Container with ID ${containerId} not found`);
+  }
+
+  return container;
+}
+
+/**
  * Start a Docker container (requires confirmation)
  * @param containerId - Container ID to start
  * @returns Confirmation result
  */
 async function startContainer(params: { containerId: string }): Promise<any> {
-  await containersApi.start(params.containerId);
+  const container = await resolveContainer(params.containerId);
+  await containersApi.start(container.hostId, container.id);
   return {
     success: true,
     containerId: params.containerId,
-    message: "Container started successfully",
+    host: container.hostName,
+    message: `Container started successfully on ${container.hostName}`,
   };
 }
 
@@ -153,11 +175,13 @@ async function startContainer(params: { containerId: string }): Promise<any> {
  * @returns Confirmation result
  */
 async function stopContainer(params: { containerId: string }): Promise<any> {
-  await containersApi.stop(params.containerId);
+  const container = await resolveContainer(params.containerId);
+  await containersApi.stop(container.hostId, container.id);
   return {
     success: true,
     containerId: params.containerId,
-    message: "Container stopped successfully",
+    host: container.hostName,
+    message: `Container stopped successfully on ${container.hostName}`,
   };
 }
 
@@ -167,11 +191,13 @@ async function stopContainer(params: { containerId: string }): Promise<any> {
  * @returns Confirmation result
  */
 async function restartContainer(params: { containerId: string }): Promise<any> {
-  await containersApi.restart(params.containerId);
+  const container = await resolveContainer(params.containerId);
+  await containersApi.restart(container.hostId, container.id);
   return {
     success: true,
     containerId: params.containerId,
-    message: "Container restarted successfully",
+    host: container.hostName,
+    message: `Container restarted successfully on ${container.hostName}`,
   };
 }
 

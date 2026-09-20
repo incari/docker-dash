@@ -96,6 +96,86 @@ You can configure the application using environment variables. Create a `.env` f
 | `DB_PATH`       | Path to the SQLite database file.              | `./data/dashboard.db`  |
 | `UPLOAD_DIR`    | Path to store uploaded images.                 | `./data/images`        |
 | `NODE_ENV`      | Environment mode (`development`/`production`). | `production`           |
+| `HOST_NAME`       | Name this machine goes by in the dashboard and when a hub asks. | container/host name |
+| `API_KEY`         | Pins the key another dashboard must present to read this machine, and switches reading on. Leave unset to let the machine generate its own and switch it on from the dashboard. | _(unset)_ |
+| `HOST_TIMEOUT_MS` | Hub only: how long to wait for a remote server before giving up on it. | `6000` |
+| `HOST_CACHE_MS`   | Hub only: how long one read across all servers is reused. | `2000` |
+| `HOST_DEADLINE_MS`  | Hub only: how long a read of all servers may take before answering with what has arrived. | `2000` |
+| `AUTO_SYNC_INTERVAL_MS` | Hub only: the least time between two real auto-syncs. Cleared whenever a server is added, removed or re-pointed. | `60000` |
+| `SHUTDOWN_GRACE_MS` | How long in-flight requests get after `SIGTERM` before the process exits anyway. | `8000` |
+
+## Several servers, one dashboard
+
+You can run Docker Dashboard on every machine you own and still open a single
+page that lists, searches and controls all of their containers.
+
+One installation is the **hub** - the dashboard you actually open. The others
+just allow the hub to read them. No terminal and no secret to invent: each
+installation generates its own API key and shows it to you.
+
+### 1. On the machine you want to read
+
+Install Docker Dashboard as usual (see [docker-compose.agent.yml](docker-compose.agent.yml)),
+open its dashboard, and in **Shortcuts** → **Servers** find the card for that
+machine:
+
+- Tick **let another dashboard read this server**.
+- Its **API key** appears, with buttons to reveal, copy and replace it. Copy it.
+
+Until you tick that box nothing is exposed: `/api/agent` answers 404 and the
+installation is just a dashboard for its own machine, as before.
+
+> Prefer to pin the key from your compose file or a secrets manager? Set
+> `API_KEY` there instead. That switches reading on by itself, and the key can
+> then only be changed there.
+
+### 2. On the hub
+
+1. Open the hub and go to **Shortcuts**.
+2. In the **Servers** panel, click **Add server**.
+3. Fill in a **name** (`NAS`), its **address** (`http://192.168.1.10:3080`, a
+   Tailscale name, anything the hub can reach) and paste the **API key** you
+   copied.
+4. **Test** checks the address and the key before you save, so a typo is caught
+   while the form is still open.
+5. **Create**. That server's containers appear below, grouped under its name.
+
+Each server card then reports whether it answered and how many containers it
+has, so an unreachable machine says so instead of silently showing nothing.
+
+### What lives where
+
+- The hub holds all the shortcuts, sections and settings in its own database.
+  Every shortcut records which server it belongs to.
+- The other installations keep serving their own local dashboard on their own
+  port; the hub never writes to them. It only lists containers and starts,
+  stops and restarts them.
+- Containers are grouped by server in the Shortcuts list, and search covers
+  every server at once - typing a server's name narrows the list to that
+  machine. Favourites stay ungrouped, with the server named on each card.
+- Removing a server from the hub deletes its shortcuts on the hub. The server
+  itself and its containers are untouched.
+- Export and import carry the servers and each shortcut's server. Keys are
+  never written to an export, so restored servers arrive switched off until you
+  enter their key.
+
+### Security
+
+The API key is the only thing standing between a caller and the ability to stop
+containers on that machine, so:
+
+- Prefer a private network for hub-to-server traffic - a LAN, a VPN or
+  Tailscale - or put the server behind HTTPS. The key is sent as a bearer
+  header, so plain HTTP over the open internet would expose it.
+- If a key does leak, **Replace key** on that machine's own card issues a new
+  one and locks out whoever held the old one.
+- A machine's own key is shown in its own dashboard on purpose: that dashboard
+  has no login and can already start and stop those containers, so displaying
+  the key there gives away nothing new. It is never shown for a *remote*
+  server, and never leaves the hub.
+- The hub's own dashboard has no login either. Keep it on a private network, or
+  behind a reverse proxy that authenticates, exactly as with a single-server
+  install.
 
 ## Running Locally
 
@@ -162,6 +242,7 @@ services:
 
 ### Container Management
 
+- **Several servers, one dashboard**: Run Docker Dashboard on every machine and read them all from one page - containers grouped by server, search across the whole fleet, start/stop on the right machine. See [Several servers, one dashboard](#several-servers-one-dashboard).
 - **Real-time Container Discovery**: Automatically detects and displays all running Docker containers on your server.
 - **Container Controls**: Start, Stop, and Restart containers directly from the dashboard _note_ Editing the container to use a URL will still track the container to start/stop the container.
 - **Quick Add from Containers**: Star icon on running containers to instantly create shortcuts

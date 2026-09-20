@@ -7,7 +7,12 @@ import type { DockerContainer, Shortcut, Section } from "../types";
 import type { TailscaleInfoExtended } from "../appTypes";
 
 const DB_NAME = "DockerDashDB";
-const DB_VERSION = 1;
+/**
+ * 2: containers are keyed by [hostId, id] rather than id alone. A container's
+ * identity is the pair once the dashboard reads several servers - a Docker ID
+ * is only unique within the daemon that issued it.
+ */
+const DB_VERSION = 2;
 
 // Store names
 const STORES = {
@@ -37,9 +42,20 @@ function openDB(): Promise<IDBDatabase> {
     request.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result;
 
-      // Create object stores if they don't exist
+      // A store's key path cannot be changed in place, so the containers store
+      // from version 1 is dropped and rebuilt. Nothing is lost that matters:
+      // it only ever held a copy of what the server would say next.
+      if (db.objectStoreNames.contains(STORES.CONTAINERS)) {
+        const existing = (event.target as IDBOpenDBRequest).transaction
+          ?.objectStore(STORES.CONTAINERS);
+        if (!Array.isArray(existing?.keyPath)) {
+          db.deleteObjectStore(STORES.CONTAINERS);
+        }
+      }
       if (!db.objectStoreNames.contains(STORES.CONTAINERS)) {
-        db.createObjectStore(STORES.CONTAINERS, { keyPath: "id" });
+        db.createObjectStore(STORES.CONTAINERS, {
+          keyPath: ["hostId", "id"],
+        });
       }
 
       if (!db.objectStoreNames.contains(STORES.SHORTCUTS)) {
@@ -72,8 +88,10 @@ async function saveToStore<T>(storeName: string, data: T[]): Promise<void> {
   // Clear existing data
   store.clear();
 
-  // Add new data
-  data.forEach((item) => store.add(item));
+  // put, not add: add throws on a key that is already in the batch, which
+  // aborts the whole transaction. The store was just cleared, so overwriting is
+  // the right behaviour for a duplicate anyway.
+  data.forEach((item) => store.put(item));
 
   return new Promise((resolve, reject) => {
     transaction.oncomplete = () => {

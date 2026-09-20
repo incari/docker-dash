@@ -4,6 +4,7 @@
 
 import Database, { Database as DatabaseType } from "better-sqlite3";
 import path from "path";
+import { hostname } from "os";
 import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -18,6 +19,32 @@ export const db: DatabaseType = new Database(dbPath);
 
 // Enable foreign keys
 db.pragma("foreign_keys = ON");
+
+/**
+ * Write-ahead logging, so a reader is never blocked by a writer.
+ *
+ * Two processes end up on the same file more often than it looks: an update
+ * starts the new container before the old one has exited, and running the dev
+ * server against the live data directory does the same thing. Without WAL one
+ * of them fails outright; with it they take turns.
+ *
+ * WAL is unavailable on some network filesystems, where SQLite quietly stays in
+ * its previous mode - hence the check rather than a bare call.
+ */
+try {
+  const mode = db.pragma("journal_mode = WAL", { simple: true });
+  if (String(mode).toLowerCase() !== "wal") {
+    console.warn(
+      `[DATABASE] Write-ahead logging is not available here (mode: ${mode}).`,
+    );
+  }
+} catch (err) {
+  console.warn("[DATABASE] Could not enable write-ahead logging:", err);
+}
+
+// Wait for a lock rather than failing immediately: the other holder is another
+// docker-dash on the same volume, and it is about to finish.
+db.pragma("busy_timeout = 5000");
 
 // Export database type for use in other modules
 export type DatabaseInstance = DatabaseType;
@@ -36,6 +63,32 @@ export function initializeSchema(): void {
     )
   `);
 
+  // Create hosts table. Row 1 is always the Docker daemon this process talks
+  // to over its own socket; remote docker-dash installations are added as
+  // 'agent' rows and reached over HTTP.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS hosts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      type TEXT NOT NULL DEFAULT 'agent',
+      url TEXT,
+      api_key TEXT,
+      hostname TEXT,
+      color TEXT,
+      position INTEGER DEFAULT 0,
+      enabled INTEGER DEFAULT 1,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // Shortcuts carry a host_id that defaults to 1, so row 1 has to exist before
+  // anything can be written to that table.
+  db.prepare(
+    `INSERT OR IGNORE INTO hosts (id, name, type, position, enabled)
+     VALUES (1, ?, 'local', 0, 1)`,
+  ).run(process.env.HOST_NAME || hostname() || "Local");
+
   // Create sections table
   db.exec(`
     CREATE TABLE IF NOT EXISTS sections (
@@ -51,6 +104,7 @@ export function initializeSchema(): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS shortcuts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      host_id INTEGER NOT NULL DEFAULT 1 REFERENCES hosts(id) ON DELETE CASCADE,
       display_name TEXT NOT NULL,
       description TEXT,
       icon TEXT DEFAULT 'Server',
@@ -75,9 +129,11 @@ export function initializeSchema(): void {
   // startup, so a deliberate deletion could never stick.
   db.exec(`
     CREATE TABLE IF NOT EXISTS dismissed_containers (
-      container_match_name TEXT PRIMARY KEY,
+      host_id INTEGER NOT NULL DEFAULT 1,
+      container_match_name TEXT NOT NULL,
       display_name TEXT,
-      dismissed_at TEXT DEFAULT CURRENT_TIMESTAMP
+      dismissed_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (host_id, container_match_name)
     )
   `);
 
@@ -90,6 +146,11 @@ export function initializeSchema(): void {
       view_mode TEXT DEFAULT 'default',
       mobile_columns INTEGER DEFAULT 2,
       migration_dismissed INTEGER DEFAULT 0,
+      -- This machine's own API key, and whether a hub is allowed to use it.
+      -- Generated on first boot so it can be copied from the dashboard; inert
+      -- until agent_enabled is set.
+      api_key TEXT,
+      agent_enabled INTEGER DEFAULT 0,
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
   `);
@@ -104,6 +165,9 @@ export function initializeSchema(): void {
     );
     db.exec(
       `CREATE INDEX IF NOT EXISTS idx_sections_position ON sections(position)`,
+    );
+    db.exec(
+      `CREATE INDEX IF NOT EXISTS idx_shortcuts_host ON shortcuts(host_id)`,
     );
   } catch {
     // Indexes may already exist, ignore errors
@@ -172,7 +236,29 @@ export function tableExists(tableName: string): boolean {
 }
 
 /**
- * Graceful shutdown - close database connection
+ * Can the database still be read?
+ *
+ * Used by the health endpoint. A dashboard whose database has gone away answers
+ * every request with an error, and until this existed it still reported itself
+ * healthy, so nothing ever restarted it.
+ */
+export function isDatabaseHealthy(): boolean {
+  try {
+    db.prepare("SELECT 1").get();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Close the database connection.
+ *
+ * Called from the shutdown sequence in server.ts, after the HTTP server has
+ * stopped accepting requests. It used to be wired straight to SIGTERM, which
+ * was worse than doing nothing: installing a signal listener removes Node's
+ * default exit, so the process stayed up with a closed database and answered
+ * every request with an error until Docker gave up and killed it.
  */
 export function closeDatabase(): void {
   try {
@@ -182,7 +268,3 @@ export function closeDatabase(): void {
     console.error("[DATABASE] Error closing connection:", err);
   }
 }
-
-// Handle process termination
-process.on("SIGTERM", closeDatabase);
-process.on("SIGINT", closeDatabase);

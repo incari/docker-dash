@@ -21,6 +21,7 @@ import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
 import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
 import Cloud from "lucide-react/dist/esm/icons/cloud";
 import Code from "lucide-react/dist/esm/icons/code";
+import Copy from "lucide-react/dist/esm/icons/copy";
 import Cpu from "lucide-react/dist/esm/icons/cpu";
 import Database from "lucide-react/dist/esm/icons/database";
 import Dock from "lucide-react/dist/esm/icons/dock";
@@ -28,6 +29,8 @@ import Download from "lucide-react/dist/esm/icons/download";
 import Edit2 from "lucide-react/dist/esm/icons/edit-2";
 import Edit3 from "lucide-react/dist/esm/icons/edit-3";
 import ExternalLink from "lucide-react/dist/esm/icons/external-link";
+import Eye from "lucide-react/dist/esm/icons/eye";
+import EyeOff from "lucide-react/dist/esm/icons/eye-off";
 import File from "lucide-react/dist/esm/icons/file";
 import Film from "lucide-react/dist/esm/icons/film";
 import Folder from "lucide-react/dist/esm/icons/folder";
@@ -106,6 +109,7 @@ export {
   ChevronRight,
   Cloud,
   Code,
+  Copy,
   Cpu,
   Database,
   Dock,
@@ -113,6 +117,8 @@ export {
   Edit2,
   Edit3,
   ExternalLink,
+  Eye,
+  EyeOff,
   File,
   Film,
   Folder,

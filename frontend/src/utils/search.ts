@@ -37,6 +37,8 @@ export function matchesShortcut(
     shortcut.url,
     shortcut.port,
     shortcut.compose_project,
+    // Typing a server's name narrows the dashboard to that machine.
+    shortcut.host_name,
     container?.name,
     container?.image,
     container?.composeProject,
@@ -57,6 +59,8 @@ export function matchesContainer(
     container.composeProject,
     container.composeService,
     container.state,
+    // Typing a server's name narrows the list to that machine.
+    container.hostName,
     ...container.ports.map((p) => p.public),
   ]);
 

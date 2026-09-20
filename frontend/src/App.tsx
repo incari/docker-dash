@@ -10,6 +10,7 @@ import {
 import { AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
 
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Header } from "./components/Header";
 import { Footer } from "./components/Footer";
 import { ConfirmModal } from "./components/ConfirmModal";
@@ -74,10 +75,12 @@ function App() {
     shortcuts,
     sections,
     containers,
+    hosts,
     tailscaleInfo,
     loading,
     refreshAll,
     mutateShortcuts,
+    mutateHosts,
     updateShortcutsOptimistic,
     updateSectionsOptimistic,
   } = useDashboardSWR();
@@ -289,15 +292,15 @@ function App() {
 
   // ==================== Container Action Handlers ====================
   const handleStart = useCallback(
-    (id: string) => {
-      containerActions.handleStart(id);
+    (hostId: number, id: string) => {
+      containerActions.handleStart(hostId, id);
     },
     [containerActions],
   );
 
   const handleStop = useCallback(
-    (id: string) => {
-      containerActions.handleStop(id, (onConfirm) => {
+    (hostId: number, id: string) => {
+      containerActions.handleStop(hostId, id, (onConfirm) => {
         modals.showConfirm(
           t("modals.confirm.stopContainer"),
           t("modals.confirm.stopContainerMessage"),
@@ -309,10 +312,43 @@ function App() {
   );
 
   const handleRestart = useCallback(
-    (id: string) => {
-      containerActions.handleRestart(id);
+    (hostId: number, id: string) => {
+      containerActions.handleRestart(hostId, id);
     },
     [containerActions],
+  );
+
+  // ==================== Server Handlers ====================
+  /**
+   * Adding, editing or removing a server changes which containers exist, so
+   * the whole dashboard is refetched rather than only the server list.
+   *
+   * The server list is then read a second time, on purpose: reading the
+   * containers is what discovers whether a server answers, and a list fetched
+   * in parallel with it would still say "not read yet" about the server that
+   * was just added - for up to a polling interval.
+   */
+  const handleHostsChanged = useCallback(async () => {
+    // A server that was just added has containers with no shortcuts yet, and
+    // waiting for the next page load to notice is a poor first impression. The
+    // backend reuses a recent sweep, so calling this after a change that needs
+    // no sweep - the agent toggle, a colour - costs nothing.
+    try {
+      await shortcutsApi.autoSync();
+    } catch (err) {
+      console.warn("Auto-sync after a server change failed:", err);
+    }
+    await refreshAll();
+    await mutateHosts();
+  }, [mutateHosts, refreshAll]);
+
+  // Removing a server and replacing its key are both one-way, so both ask
+  // first. The title is generic because the message says which one it is.
+  const showHostConfirm = useCallback(
+    (message: string, onConfirm: () => Promise<void>) => {
+      modals.showConfirm(t("hosts.confirmTitle"), message, onConfirm);
+    },
+    [modals, t],
   );
 
   // ==================== Section Handlers ====================
@@ -555,6 +591,9 @@ function App() {
         )}
 
       <main className="container mx-auto px-6 py-8">
+        {/* Scoped to the views: a card that throws leaves the header, the
+            search and the navigation working, so there is somewhere to go. */}
+        <ErrorBoundary label="view">
         <AnimatePresence mode="wait">
           {view === "dashboard" ? (
             <DashboardView
@@ -587,6 +626,7 @@ function App() {
             <ManagementView
               containers={containers}
               shortcuts={shortcuts}
+              hosts={hosts}
               tailscaleInfo={tailscaleInfo}
               setView={setView}
               setEditingShortcut={handleSetEditingShortcut}
@@ -602,9 +642,15 @@ function App() {
               viewMode={viewMode}
               mobileColumns={mobileColumns}
               searchQuery={searchQuery}
+              onHostsChanged={handleHostsChanged}
+              onError={(title: string, message: string) =>
+                toast.error(title, message)
+              }
+              showHostConfirm={showHostConfirm}
             />
           )}
         </AnimatePresence>
+        </ErrorBoundary>
       </main>
 
       <Footer
@@ -622,6 +668,7 @@ function App() {
               isOpen={modals.shortcutModal.isOpen}
               shortcut={modals.shortcutModal.shortcut}
               containers={containers}
+              hosts={hosts}
               tailscaleInfo={tailscaleInfo}
               onSave={handleShortcutSaved}
               onClose={modals.closeShortcutModal}

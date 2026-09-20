@@ -15,6 +15,9 @@ import path from "node:path";
 
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "dockerdash-test-"));
 process.env.DB_PATH = path.join(tmpDir, "test.db");
+// These exercise what a sweep does, not how often it is allowed to run, so the
+// throttle is off here. autoSyncThrottle.test.ts covers the throttle itself.
+process.env.AUTO_SYNC_INTERVAL_MS = "0";
 
 const listContainers = vi.fn();
 

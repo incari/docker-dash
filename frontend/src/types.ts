@@ -16,11 +16,75 @@ export interface DockerContainer {
   // Docker Compose grouping info
   composeProject: string | null;
   composeService: string | null;
+  /**
+   * The server this container runs on. A Docker ID is only unique within one
+   * daemon, so every action has to name the host as well as the container.
+   */
+  hostId: number;
+  hostName: string;
+}
+
+// Host (server) Types
+export type HostType = "local" | "agent";
+
+export interface HostStatus {
+  online: boolean;
+  checked_at: string | null;
+  container_count: number | null;
+  /** The backend's own wording, used when the code is not one we know. */
+  error: string | null;
+  /** Looked up in hosts.errors so the reason is shown in the UI language. */
+  error_code: string | null;
+  /** Consecutive failures; the backoff grows on this. */
+  failures: number;
+  /** When this server will be tried again, while it is being skipped. */
+  retry_after: string | null;
+}
+
+export interface Host {
+  id: number;
+  name: string;
+  type: HostType;
+  url: string | null;
+  /** Hostname a port-based link opens; null means "this machine". */
+  hostname: string | null;
+  color: string | null;
+  position: number;
+  enabled: boolean;
+  has_api_key: boolean;
+  status: HostStatus;
+  /**
+   * Only on the local host: whether a hub may read this installation, and the
+   * key it would have to present. This is the key the user copies into a hub.
+   */
+  agent?: AgentAccess;
+}
+
+export interface AgentAccess {
+  enabled: boolean;
+  /** True when API_KEY is set, which makes the key read-only in the UI. */
+  managed_by_env: boolean;
+  api_key: string;
+}
+
+export interface HostFormData {
+  name: string;
+  url: string;
+  api_key: string;
+  hostname: string;
+  color: string;
+  enabled: boolean;
 }
 
 // Shortcut Types
 export interface Shortcut {
   id: number;
+  /** The server this shortcut belongs to; 1 is the local one. */
+  host_id: number;
+  /** Joined by the API so a card can label itself without a second lookup. */
+  host_name?: string | null;
+  /** Hostname a port-based link opens; null means the browser's own host. */
+  host_hostname?: string | null;
   display_name: string;
   description: string | null;
   url: string | null;
@@ -60,6 +124,7 @@ export interface ModalState {
 
 // Form Data Types
 export interface ShortcutFormData {
+  host_id: string;
   display_name: string;
   description: string;
   url: string;
@@ -139,6 +204,7 @@ export interface ShortcutModalProps {
   isOpen: boolean;
   shortcut: Shortcut | null;
   containers: DockerContainer[];
+  hosts: Host[];
   tailscaleInfo: TailscaleInfo & { available: boolean };
   onSave: () => void;
   onClose: () => void;

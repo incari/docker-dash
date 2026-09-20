@@ -72,11 +72,14 @@ export function useShortcutActions(
       // Use container base name for stable matching (removes instance number suffix)
       const containerBaseName = getContainerBaseName(container.name);
 
-      // Check if a shortcut already exists for this container
+      // Check if a shortcut already exists for this container, on its own
+      // server: the same container name on another machine is a different
+      // container and must get its own shortcut.
       const existingShortcut = shortcuts.find(
         (s) =>
-          s.container_name === containerBaseName ||
-          s.container_match_name === containerBaseName,
+          s.host_id === container.hostId &&
+          (s.container_name === containerBaseName ||
+            s.container_match_name === containerBaseName),
       );
 
       if (existingShortcut) {
@@ -89,6 +92,7 @@ export function useShortcutActions(
       }
 
       const formData = new FormData();
+      formData.append("host_id", String(container.hostId));
       formData.append("display_name", container.name);
       if (port) formData.append("port", String(port));
       formData.append("container_name", containerBaseName); // Use container_name for stable matching
@@ -121,11 +125,14 @@ export function useShortcutActions(
       // Use container base name for stable matching (removes instance number suffix)
       const containerBaseName = getContainerBaseName(container.name);
 
-      // Check if a shortcut already exists for this container
+      // Check if a shortcut already exists for this container, on its own
+      // server: the same container name on another machine is a different
+      // container and must get its own shortcut.
       const existingShortcut = shortcuts.find(
         (s) =>
-          s.container_name === containerBaseName ||
-          s.container_match_name === containerBaseName,
+          s.host_id === container.hostId &&
+          (s.container_name === containerBaseName ||
+            s.container_match_name === containerBaseName),
       );
 
       if (existingShortcut) {
@@ -149,6 +156,7 @@ export function useShortcutActions(
       }
 
       const formData = new FormData();
+      formData.append("host_id", String(container.hostId));
       formData.append("display_name", container.name);
       if (port) formData.append("port", String(port));
       formData.append("container_name", containerBaseName); // Use container_name for stable matching

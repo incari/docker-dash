@@ -30,6 +30,8 @@ describe('DockerAgent', () => {
         ports: [],
         composeProject: null,
         composeService: null,
+        hostId: 1,
+        hostName: 'Local',
       },
       {
         id: 'container2',
@@ -40,12 +42,15 @@ describe('DockerAgent', () => {
         ports: [],
         composeProject: null,
         composeService: null,
+        hostId: 1,
+        hostName: 'Local',
       },
     ];
 
     mockShortcuts = [
       {
         id: 1,
+        host_id: 1,
         display_name: 'Web Server',
         description: 'Nginx web server',
         url: 'http://localhost:8080',

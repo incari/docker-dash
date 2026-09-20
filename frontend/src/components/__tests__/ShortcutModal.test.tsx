@@ -21,7 +21,33 @@ const mockProps = {
             image: "test-image",
             state: "running",
             status: "Up 2 hours",
-            ports: [{ private: 80, public: 8080, type: "tcp" }]
+            ports: [{ private: 80, public: 8080, type: "tcp" }],
+            composeProject: null,
+            composeService: null,
+            hostId: 1,
+            hostName: "Local"
+        }
+    ],
+    hosts: [
+        {
+            id: 1,
+            name: "Local",
+            type: "local" as const,
+            url: null,
+            hostname: null,
+            color: null,
+            position: 0,
+            enabled: true,
+            has_api_key: false,
+            status: {
+                online: true,
+                checked_at: null,
+                container_count: 1,
+                error: null,
+                error_code: null,
+                failures: 0,
+                retry_after: null
+            }
         }
     ],
     tailscaleInfo: { available: true, enabled: true, ip: "100.100.100.100" },

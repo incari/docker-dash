@@ -54,7 +54,9 @@ export function formatContextForLLM(context: DashboardContext): string {
   const containersList = limitedContainers
     .map(
       (c) =>
-        `- ${c.name} (${c.state}) - ID: ${c.id.substring(0, 12)} - Image: ${c.image}`
+        // The server is part of a container's identity once the dashboard
+        // covers more than one: two machines can both run `nginx`.
+        `- ${c.name} (${c.state}) on ${c.hostName} - ID: ${c.id.substring(0, 12)} - Image: ${c.image}`
     )
     .join("\n");
 

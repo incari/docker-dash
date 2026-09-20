@@ -46,9 +46,9 @@ interface DashboardViewProps {
   handleReorderSections: (sections: Section[]) => Promise<void>;
   openEditModal: (shortcut: Shortcut) => void;
   handleDelete: (id: number) => void;
-  handleStart: (id: string) => void;
-  handleStop: (id: string) => void;
-  handleRestart: (id: string) => void;
+  handleStart: (hostId: number, id: string) => void;
+  handleStop: (hostId: number, id: string) => void;
+  handleRestart: (hostId: number, id: string) => void;
   handleToggleFavorite: (id: number, currentStatus: boolean | number) => void;
   setView: (view: "dashboard" | "add") => void;
   viewMode: ViewMode;
@@ -115,9 +115,11 @@ export function DashboardView({
         tailscaleIP={tailscaleInfo.ip}
         onEdit={() => openEditModal(shortcut)}
         onDelete={() => handleDelete(shortcut.id)}
-        onStart={() => container && handleStart(container.id)}
-        onStop={() => container && handleStop(container.id)}
-        onRestart={() => container && handleRestart(container.id)}
+        onStart={() => container && handleStart(container.hostId, container.id)}
+        onStop={() => container && handleStop(container.hostId, container.id)}
+        onRestart={() =>
+          container && handleRestart(container.hostId, container.id)
+        }
         onToggleFavorite={() =>
           handleToggleFavorite(shortcut.id, shortcut.is_favorite)
         }

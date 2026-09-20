@@ -18,9 +18,19 @@ import { uploadDir, upload } from "./config/multer.js";
 // Database
 import { runMigrations } from "./database/index.js";
 
+// Process lifecycle
+import { installLifecycleHandlers } from "./lifecycle.js";
+
+// Hosts
+import { ensureLocalHost } from "./hosts/registry.js";
+import { ensureApiKey } from "./hosts/agentAccess.js";
+
 // Routes
 import {
+  agentRouter,
   containersRouter,
+  healthRouter,
+  hostsRouter,
   uploadsRouter,
   sectionsRouter,
   shortcutsRouter,
@@ -54,6 +64,14 @@ initializeSchema();
 // Run migrations
 await runMigrations();
 
+// A database that predates the hosts table, or one edited by hand, still needs
+// the local server to exist before any shortcut can point at it.
+ensureLocalHost();
+
+// Give this installation a key of its own, ready to be copied into a hub. It
+// does nothing until reading this server is switched on.
+ensureApiKey();
+
 // Upload endpoint (needs upload middleware)
 app.post("/api/upload", upload.single("image"), (req, res): void => {
   if (!req.file) {
@@ -70,6 +88,11 @@ app.post("/api/upload", upload.single("image"), (req, res): void => {
 });
 
 // Mount route modules
+// Health first: whatever else is wrong, something has to be able to answer.
+app.use(healthRouter);
+// Agent next: it owns /api/agent and refuses anything without the key.
+app.use(agentRouter);
+app.use(hostsRouter);
 app.use(containersRouter);
 app.use(uploadsRouter);
 app.use(sectionsRouter);
@@ -94,6 +117,9 @@ app.get("*", (req, res): void => {
 });
 
 // Start server
-app.listen(PORT, "0.0.0.0", () => {
+const server = app.listen(PORT, "0.0.0.0", () => {
   console.log(`Docker Dashboard running on http://0.0.0.0:${PORT}`);
 });
+
+// Stop cleanly on SIGTERM, and say something before dying on a crash.
+installLifecycleHandlers(server);

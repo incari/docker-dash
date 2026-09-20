@@ -13,6 +13,7 @@ import {
   shortcutsApi,
   sectionsApi,
   containersApi,
+  hostsApi,
   tailscaleApi,
 } from "../services/api";
 import {
@@ -21,7 +22,7 @@ import {
   indexedDBSections,
   indexedDBTailscale,
 } from "../services/indexedDB";
-import type { DockerContainer, Shortcut, Section } from "../types";
+import type { DockerContainer, Host, Shortcut, Section } from "../types";
 import type { TailscaleInfoExtended } from "../appTypes";
 
 // SWR configuration for automatic polling and deduplication
@@ -34,14 +35,35 @@ const SWR_CONFIG = {
   errorRetryCount: 0, // No retries (we'll use IndexedDB fallback)
 };
 
+/**
+ * Write to the offline cache without letting it affect the result.
+ *
+ * The cache used to be filled inside the same try that guards the request, so a
+ * failed *write* was indistinguishable from a failed *fetch*: the catch fell
+ * back to whatever was cached and the dashboard quietly showed stale data even
+ * though the server had just answered correctly. That is exactly what happened
+ * when two servers reported a container with the same ID and the write hit a
+ * key collision.
+ */
+async function cache(
+  label: string,
+  write: () => Promise<void>,
+  count: number,
+): Promise<void> {
+  try {
+    await write();
+    console.log(`[IndexedDB] Saved ${count} ${label} to cache`);
+  } catch (error) {
+    console.warn(`[IndexedDB] Could not cache ${label}:`, error);
+  }
+}
+
 // Fetcher functions with IndexedDB fallback (network-first strategy)
 const fetchers = {
   shortcuts: async (): Promise<Shortcut[]> => {
     try {
       const data = await shortcutsApi.getAll();
-      // Save to IndexedDB on success
-      await indexedDBShortcuts.save(data);
-      console.log(`[IndexedDB] Saved ${data.length} shortcuts to cache`);
+      await cache("shortcuts", () => indexedDBShortcuts.save(data), data.length);
       return data;
     } catch (error) {
       console.warn("[IndexedDB] Failed to fetch shortcuts from server, using cached data:", error);
@@ -55,9 +77,7 @@ const fetchers = {
   sections: async (): Promise<Section[]> => {
     try {
       const data = await sectionsApi.getAll();
-      // Save to IndexedDB on success
-      await indexedDBSections.save(data);
-      console.log(`[IndexedDB] Saved ${data.length} sections to cache`);
+      await cache("sections", () => indexedDBSections.save(data), data.length);
       return data;
     } catch (error) {
       console.warn("[IndexedDB] Failed to fetch sections from server, using cached data:", error);
@@ -71,9 +91,7 @@ const fetchers = {
   containers: async (): Promise<DockerContainer[]> => {
     try {
       const data = await containersApi.getAll();
-      // Save to IndexedDB on success
-      await indexedDBContainers.save(data);
-      console.log(`[IndexedDB] Saved ${data.length} containers to cache`);
+      await cache("containers", () => indexedDBContainers.save(data), data.length);
       return data;
     } catch (error) {
       console.warn("[IndexedDB] Failed to fetch containers from server, using cached data:", error);
@@ -84,12 +102,15 @@ const fetchers = {
     }
   },
 
+  // Servers are not cached in IndexedDB: an offline dashboard that listed
+  // servers would be claiming to know their state, and status is exactly the
+  // part that cannot survive going offline.
+  hosts: async (): Promise<Host[]> => hostsApi.getAll(),
+
   tailscale: async (): Promise<TailscaleInfoExtended> => {
     try {
       const data = await tailscaleApi.getInfo();
-      // Save to IndexedDB on success
-      await indexedDBTailscale.save(data);
-      console.log("[IndexedDB] Saved tailscale info to cache");
+      await cache("tailscale info", () => indexedDBTailscale.save(data), 1);
       return data;
     } catch (error) {
       console.warn("[IndexedDB] Failed to fetch tailscale info from server, using cached data:", error);
@@ -165,6 +186,31 @@ export function useContainers() {
 }
 
 /**
+ * Hook for fetching the servers the dashboard reads.
+ *
+ * Polled like the rest so a server going down, or coming back, shows up without
+ * a reload - the status travels with the list.
+ */
+export function useHosts() {
+  const { data, error, isLoading, mutate } = useSWR<Host[]>(
+    "/api/hosts",
+    fetchers.hosts,
+    {
+      ...SWR_CONFIG,
+      refreshInterval: 15000,
+      fallbackData: [],
+    },
+  );
+
+  return {
+    hosts: data ?? [],
+    isLoading,
+    isError: error,
+    mutate,
+  };
+}
+
+/**
  * Hook for fetching Tailscale info with SWR and IndexedDB fallback
  * Uses longer refresh interval since this data changes less frequently
  */
@@ -214,6 +260,7 @@ export function useDashboardSWR() {
   const { shortcuts, isLoading: shortcutsLoading, mutate: mutateShortcuts } = useShortcuts();
   const { sections, isLoading: sectionsLoading, mutate: mutateSections } = useSections();
   const { containers, isLoading: containersLoading, mutate: mutateContainers } = useContainers();
+  const { hosts, mutate: mutateHosts } = useHosts();
   const { tailscaleInfo, isLoading: tailscaleLoading } = useTailscale();
 
   // Overall loading state - true only if ALL are loading (initial load)
@@ -226,8 +273,9 @@ export function useDashboardSWR() {
       mutateShortcuts(),
       mutateSections(),
       mutateContainers(),
+      mutateHosts(),
     ]);
-  }, [mutateShortcuts, mutateSections, mutateContainers]);
+  }, [mutateShortcuts, mutateSections, mutateContainers, mutateHosts]);
 
   // SWR shows `optimisticData` immediately, keeps the value the request settles
   // on, rolls back to the previous list if it throws, and revalidates
@@ -268,11 +316,13 @@ export function useDashboardSWR() {
     shortcuts,
     sections,
     containers,
+    hosts,
     tailscaleInfo,
     loading,
     refreshAll,
     mutateShortcuts,
     mutateSections,
+    mutateHosts,
     updateShortcutsOptimistic,
     updateSectionsOptimistic,
   };

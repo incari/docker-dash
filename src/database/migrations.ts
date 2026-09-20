@@ -13,6 +13,7 @@ import {
 } from "../config/database.js";
 import { createBackup } from "./backup.js";
 import { getContainerBaseName } from "../utils/containerMatching.js";
+import { hostname } from "os";
 import Docker from "dockerode";
 
 const docker = new Docker({
@@ -75,6 +76,8 @@ const MIGRATION_NAMES = [
   "010_cleanup_deprecated_columns",
   "011_add_dismissed_containers",
   "012_merge_duplicate_shortcuts",
+  "013_add_hosts",
+  "014_add_agent_access",
 ];
 
 export async function runMigrations(): Promise<void> {
@@ -138,6 +141,12 @@ export async function runMigrations(): Promise<void> {
 
   // NEW: Merge shortcuts that describe the same app
   runOnce("012_merge_duplicate_shortcuts", mergeDuplicateShortcuts);
+
+  // NEW: Multi-host - every shortcut now belongs to a server
+  runOnce("013_add_hosts", addHostsTable);
+
+  // NEW: This installation can be read by a hub, once switched on
+  runOnce("014_add_agent_access", addAgentAccessColumns);
 
   console.log("[MIGRATIONS] All migrations complete");
 }
@@ -699,6 +708,95 @@ function addDismissedContainersTable(): void {
     )
   `);
   console.log("[MIGRATION] Created dismissed_containers table");
+}
+
+/**
+ * Migration 014: Let this installation hand out its own API key.
+ *
+ * The key used to come only from the environment, which meant generating a
+ * secret by hand on every machine before the hub could read any of them. Now
+ * each installation keeps one it generated itself, ready to be copied out of
+ * its own dashboard - and still refuses every request until agent_enabled says
+ * otherwise.
+ */
+function addAgentAccessColumns(): void {
+  addColumnIfMissing("settings", "api_key", "TEXT");
+  addColumnIfMissing("settings", "agent_enabled", "INTEGER DEFAULT 0");
+}
+
+/**
+ * Migration 013: Give every shortcut a server.
+ *
+ * Until now the dashboard read one Docker daemon over its own socket and
+ * nothing recorded where a container lived, because there was only one answer.
+ * With remote hosts in the picture two servers can both run a container called
+ * `nginx`, so the host has to be part of a shortcut's identity - otherwise a
+ * shortcut for one server's nginx matches the other server's, and dismissing a
+ * container on one server dismisses it everywhere.
+ *
+ * Row 1 is the local daemon and every existing shortcut belongs to it, which is
+ * exactly what the dashboard showed before this migration ran.
+ */
+function addHostsTable(): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS hosts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      type TEXT NOT NULL DEFAULT 'agent',
+      url TEXT,
+      api_key TEXT,
+      hostname TEXT,
+      color TEXT,
+      position INTEGER DEFAULT 0,
+      enabled INTEGER DEFAULT 1,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  const localHost = db.prepare("SELECT id FROM hosts WHERE id = 1").get();
+  if (!localHost) {
+    db.prepare(
+      `INSERT INTO hosts (id, name, type, position, enabled)
+       VALUES (1, ?, 'local', 0, 1)`,
+    ).run(process.env.HOST_NAME || hostname() || "Local");
+    console.log("[MIGRATION] Seeded the local host");
+  }
+
+  // No REFERENCES clause: SQLite refuses ADD COLUMN with a foreign key unless
+  // the default is NULL, and foreign keys are on. Databases created from
+  // scratch get the constraint from initializeSchema; deleting a host clears
+  // its shortcuts explicitly either way.
+  addColumnIfMissing("shortcuts", "host_id", "INTEGER NOT NULL DEFAULT 1");
+  db.exec("UPDATE shortcuts SET host_id = 1 WHERE host_id IS NULL");
+  db.exec(
+    "CREATE INDEX IF NOT EXISTS idx_shortcuts_host ON shortcuts(host_id)",
+  );
+
+  // dismissed_containers keyed the container name alone, so it has to be
+  // rebuilt around (host, name). SQLite cannot change a primary key in place.
+  if (!columnExists("dismissed_containers", "host_id")) {
+    db.exec(`
+      CREATE TABLE dismissed_containers_new (
+        host_id INTEGER NOT NULL DEFAULT 1,
+        container_match_name TEXT NOT NULL,
+        display_name TEXT,
+        dismissed_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (host_id, container_match_name)
+      )
+    `);
+    db.exec(`
+      INSERT INTO dismissed_containers_new
+        (host_id, container_match_name, display_name, dismissed_at)
+      SELECT 1, container_match_name, display_name, dismissed_at
+      FROM dismissed_containers
+    `);
+    db.exec("DROP TABLE dismissed_containers");
+    db.exec(
+      "ALTER TABLE dismissed_containers_new RENAME TO dismissed_containers",
+    );
+    console.log("[MIGRATION] Rebuilt dismissed_containers with host_id");
+  }
 }
 
 /**
