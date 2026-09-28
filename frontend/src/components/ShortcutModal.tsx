@@ -1,4 +1,11 @@
-import React, { useState, useEffect, useCallback, useMemo, useId } from "react";
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  useId,
+  useRef,
+} from "react";
 import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
 import axios from "axios";
@@ -71,7 +78,20 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
   const [iconUrlError, setIconUrlError] = useState("");
   const [hasManuallySelectedIcon, setHasManuallySelectedIcon] = useState(false);
 
+  // Initializes the form once per open session (new vs. editing shortcut id).
+  // `hosts` must NOT be a dependency: it revalidates via SWR (new array
+  // identity every ~15s) and used to wipe the whole form while typing.
+  const openSessionKeyRef = useRef<string | null>(null);
+  const shortcutId = shortcut?.id ?? null;
   useEffect(() => {
+    if (!isOpen) {
+      openSessionKeyRef.current = null;
+      return;
+    }
+    const sessionKey = `shortcut-${shortcutId ?? "new"}`;
+    if (openSessionKeyRef.current === sessionKey) return;
+    openSessionKeyRef.current = sessionKey;
+
     if (shortcut) {
       setFormData({
         display_name: shortcut.display_name || "",
@@ -107,7 +127,10 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
       setHasManuallySelectedIcon(false);
     }
     setSelectedFile(null);
-  }, [shortcut, isOpen, hosts]);
+    setUrlError("");
+    setIconUrlError("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, shortcutId]);
 
   const titleId = useId();
   const dialogRef = useModalA11y<HTMLDivElement>(isOpen, onClose);
@@ -1188,15 +1211,23 @@ const IconSelector: React.FC<IconSelectorProps> = ({
   }, [selectedFile]);
 
   // Handle URL preview
+  // Shows the raw text being typed (not only http-prefixed values) so an
+  // invalid URL stays visible instead of looking "reset". Known non-URL
+  // icons (Lucide names, uploaded files) still show an empty field.
+  const iconInputValue =
+    icon.startsWith("uploads/") || AVAILABLE_ICONS.hasOwnProperty(icon)
+      ? ""
+      : icon;
+
   useEffect(() => {
-    if (activeTab === "url" && icon.startsWith("http")) {
+    if (activeTab === "url" && icon && !icon.startsWith("uploads/")) {
       setUrlPreviewError(false);
       setUrlPreview(null);
 
       // Debounce the preview loading
       const timer = setTimeout(() => {
         if (isValidUrl(icon)) {
-          setUrlPreview(icon);
+          setUrlPreview(normalizeUrl(icon));
         }
       }, 500);
 
@@ -1267,7 +1298,7 @@ const IconSelector: React.FC<IconSelectorProps> = ({
                 type="text"
                 className="bg-transparent flex-1 focus:outline-none text-white text-sm"
                 placeholder={t("shortcuts.imageUrlPlaceholder")}
-                value={icon.startsWith("http") ? icon : ""}
+                value={iconInputValue}
                 onChange={(e) => {
                   setIcon(e.target.value);
                   setIconUrlError("");
