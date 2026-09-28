@@ -111,6 +111,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Cached Image Spinner**: Fixed issue where spinners would persist when reopening the migration modal with cached images
 - **Custom Links Visibility**: Fixed issue where custom links (non-container shortcuts) were incorrectly hidden from the dashboard
 
+#### Correct container ports (2026-09-29)
+
+- **Quick-add and launch buttons opened the wrong port**: Docker reports a
+  container's `Ports` in arbitrary order, so Transmission showed its 51413
+  peer port instead of its 9091 web UI, and Jellyfin could list 8920 or a
+  discovery port before its 8096 UI. The API now sends `ports` ordered
+  best-first (TCP, then a conventional web-UI private port, then the lowest
+  private port - the same preference auto-sync already used), and the
+  quick-add, launch, preview and modal-preselect paths pick that best port
+  instead of the first entry. Covered by backend and frontend tests with
+  Transmission- and Jellyfin-shaped fixtures.
+
 ## [0.2.0] - 2026-02-11
 
 ### Added

@@ -30,6 +30,10 @@ import {
   normalizeUrl,
   cleanDescription,
 } from "../utils/validation";
+import {
+  selectBestContainerPort,
+  orderContainerPorts,
+} from "../utils/containerPorts";
 import { uploadsApi, type UploadedImage } from "../services/api";
 import { useModalA11y } from "../hooks/useModalA11y";
 import { getContainerIcon } from "../utils/dockerIconVault";
@@ -179,8 +183,10 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
     [containers, formData.container_id],
   );
 
+  // Best-first so the dropdown lists the web UI port first even with
+  // stale unordered data; the API already sends ports ordered.
   const availablePorts = useMemo(
-    () => linkedContainer?.ports?.map((p) => p.public).filter(Boolean) || [],
+    () => orderContainerPorts(linkedContainer?.ports),
     [linkedContainer],
   );
 
@@ -326,7 +332,10 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
                     ...prev,
                     container_id: e.target.value,
                     display_name: c ? c.name : prev.display_name,
-                    port: c ? c.ports[0]?.public?.toString() || "" : prev.port,
+                    // Best published port, not ports[0] (arbitrary Docker order)
+                    port: c
+                      ? selectBestContainerPort(c.ports)?.toString() || ""
+                      : prev.port,
                     // Auto-select icon from docker-icon-vault based on container name
                     icon: newIcon,
                     // The container decides the server: it only exists on one.

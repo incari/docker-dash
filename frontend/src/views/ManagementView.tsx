@@ -19,6 +19,7 @@ import {
   ShortcutCardTable,
 } from "../components";
 import { getContainerIcon } from "../utils/dockerIconVault";
+import { selectBestContainerPort } from "../utils/containerPorts";
 import {
   parseQuery,
   matchesContainer,
@@ -250,8 +251,9 @@ export function ManagementView({
           s.container_name?.toLowerCase() === container.name.toLowerCase()),
     );
 
-    // Get the first public port from the container
-    const containerPort = container.ports.find((p) => p.public)?.public || null;
+    // Best published port for the preview shortcut, not the first entry:
+    // Docker reports ports in arbitrary order (peer/data port before the UI).
+    const containerPort = selectBestContainerPort(container.ports);
 
     const displayShortcut = existingShortcut || {
       id: -1,

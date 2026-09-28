@@ -8,7 +8,10 @@
 
 import Docker from "dockerode";
 import { docker } from "../config/docker.js";
-import { getContainerBaseName } from "../utils/containerMatching.js";
+import {
+  getContainerBaseName,
+  orderPortsForDisplay,
+} from "../utils/containerMatching.js";
 import type { NormalizedContainer } from "../types/index.js";
 
 export type ContainerAction = "start" | "stop" | "restart";
@@ -42,22 +45,14 @@ export function normalizeContainer(
     labels["maintainer"] ||
     "";
 
-  const allPorts = (c.Ports || [])
-    .filter((p) => p && p.PublicPort)
-    .map((p) => ({
-      private: p.PrivatePort,
-      public: p.PublicPort!,
-      type: p.Type,
-    }));
-
-  const uniquePorts: NormalizedContainer["ports"] = [];
-  const seenPublicPorts = new Set<number>();
-  for (const port of allPorts) {
-    if (!seenPublicPorts.has(port.public)) {
-      seenPublicPorts.add(port.public);
-      uniquePorts.push(port);
-    }
-  }
+  // Ordered so the first entry is the port a shortcut should open (same
+  // preference as selectPublishedPort): Docker reports Ports in arbitrary
+  // order, so callers must not rely on Ports[0] being the web UI.
+  const orderedPorts = orderPortsForDisplay(c.Ports).map((p) => ({
+    private: p.private,
+    public: p.public,
+    type: p.type || "tcp",
+  }));
 
   return {
     id: c.Id,
@@ -66,7 +61,7 @@ export function normalizeContainer(
     state: c.State,
     status: c.Status,
     description,
-    ports: uniquePorts,
+    ports: orderedPorts,
     rawPorts: (c.Ports || []).map((p) => ({
       PrivatePort: p.PrivatePort,
       PublicPort: p.PublicPort,

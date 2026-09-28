@@ -148,6 +148,73 @@ export function getPublishedPorts(
 }
 
 /**
+ * Preference order among published entries, shared by selectPublishedPort
+ * (auto-sync) and orderPortsForDisplay (the list the browser receives), so
+ * both agree on which port a shortcut should open.
+ *
+ *   1. TCP over UDP (a UDP-only service has no web UI to link to)
+ *   2. a conventional web-UI private port, in WEB_UI_PRIVATE_PORTS order
+ *   3. the lowest private port - UIs sit below peer/data ports by convention
+ *   4. the lowest host port, purely so the result is deterministic
+ */
+function webUiRank(privatePort: number): number {
+  const index = WEB_UI_PRIVATE_PORTS.indexOf(privatePort);
+  return index === -1 ? WEB_UI_PRIVATE_PORTS.length : index;
+}
+
+function isTcp(port: { Type?: string }): boolean {
+  return (port.Type || "tcp").toLowerCase() === "tcp";
+}
+
+/** A published port in the shape the browser receives. */
+export interface DisplayPort {
+  private: number;
+  public: number;
+  type?: string;
+}
+
+/**
+ * Published ports ordered so the first entry is the one a shortcut should
+ * open. Same preference as selectPublishedPort, plus dedupe: Docker repeats an
+ * entry per listening address and per protocol, so entries sharing a host port
+ * collapse into one, preferring the TCP row. When TCP rows exist, UDP rows are
+ * dropped: a shortcut cannot open a UDP port, and the host port stays listed
+ * through its TCP row (or on its own when the service is UDP-only).
+ */
+export function orderPortsForDisplay(
+  ports: ContainerPortInfo[] | null | undefined,
+): DisplayPort[] {
+  if (!ports) return [];
+
+  const byPublic = new Map<number, ContainerPortInfo>();
+  for (const p of ports) {
+    if (!p || typeof p.PublicPort !== "number" || p.PublicPort <= 0) continue;
+    const prev = byPublic.get(p.PublicPort);
+    if (!prev) {
+      byPublic.set(p.PublicPort, p);
+    } else if (!isTcp(prev) && isTcp(p)) {
+      byPublic.set(p.PublicPort, p);
+    }
+  }
+
+  const deduped = [...byPublic.values()];
+  const tcp = deduped.filter(isTcp);
+  const candidates = tcp.length > 0 ? tcp : deduped;
+
+  return candidates
+    .map((p) => ({
+      private: p.PrivatePort,
+      public: p.PublicPort as number,
+      type: p.Type,
+    }))
+    .sort((a, b) => {
+      const rankDiff = webUiRank(a.private) - webUiRank(b.private);
+      if (rankDiff !== 0) return rankDiff;
+      if (a.private !== b.private) return a.private - b.private;
+      return a.public - b.public;
+    });
+}
+/**
  * Pick the host port a shortcut should open.
  *
  * `Ports[0]` is not usable: Docker returns the array in arbitrary order and the
@@ -155,12 +222,6 @@ export function getPublishedPorts(
  * all) or the wrong one of several published ports. Observed on a real server:
  * coolify lists 7000/tcp unpublished first and publishes its UI on 8080 -> 7000,
  * and transmission lists the BitTorrent peer port 51413 before the 9091 web UI.
- *
- * Preference order among published entries:
- *   1. TCP over UDP (a UDP-only service has no web UI to link to)
- *   2. a conventional web-UI private port, in WEB_UI_PRIVATE_PORTS order
- *   3. the lowest private port - UIs sit below peer/data ports by convention
- *   4. the lowest host port, purely so the result is deterministic
  */
 export function selectPublishedPort(
   ports: ContainerPortInfo[] | null | undefined,
@@ -172,15 +233,8 @@ export function selectPublishedPort(
   );
   if (published.length === 0) return null;
 
-  const tcp = published.filter(
-    (p) => (p.Type || "tcp").toLowerCase() === "tcp",
-  );
+  const tcp = published.filter(isTcp);
   const candidates = tcp.length > 0 ? tcp : published;
-
-  const webUiRank = (privatePort: number): number => {
-    const index = WEB_UI_PRIVATE_PORTS.indexOf(privatePort);
-    return index === -1 ? WEB_UI_PRIVATE_PORTS.length : index;
-  };
 
   const best = [...candidates].sort((a, b) => {
     const rankDiff = webUiRank(a.PrivatePort) - webUiRank(b.PrivatePort);
