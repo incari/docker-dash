@@ -19,10 +19,12 @@ services:
     image: tecnativa/docker-socket-proxy:latest
     container_name: docker-socket-proxy
     restart: unless-stopped
-    # The proxy writes nothing but its own runtime state.
+    # The proxy writes nothing but its own runtime state: the haproxy config
+    # its entrypoint renders into /tmp, and its pid under /run.
     read_only: true
     tmpfs:
       - /run
+      - /tmp
     security_opt:
       - no-new-privileges:true
     environment:
