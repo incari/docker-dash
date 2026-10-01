@@ -11,7 +11,7 @@ import { hostname } from "os";
 import { db } from "../config/database.js";
 import type { HostResponse, HostRow, HostStatus } from "../types/index.js";
 import type { HostErrorCode } from "./client.js";
-import { getAgentAccess } from "./agentAccess.js";
+import { hostnameOf } from "./hostUrl.js";
 
 /** Row 1 is always the daemon this process reaches over its own socket. */
 export const LOCAL_HOST_ID = 1;
@@ -158,21 +158,19 @@ export function forgetHostStatus(id: number): void {
 export function resolveHostHostname(host: HostRow): string | null {
   if (host.type === "local") return null;
   if (host.hostname && host.hostname.trim()) return host.hostname.trim();
-  if (!host.url) return null;
+  const fromAddress = hostnameOf(host.url);
+  if (fromAddress) return fromAddress;
+  // A server migrated from the old agent still has its http:// address until
+  // someone edits it, and its shortcuts should keep opening the right machine
+  // in the meantime.
   try {
-    return new URL(host.url).hostname;
+    return host.url ? new URL(host.url).hostname || null : null;
   } catch {
     return null;
   }
 }
 
-/** Whether a hub may read this machine, without the key it would present. */
-function agentSummary(): { enabled: boolean; managed_by_env: boolean } {
-  const { enabled, managed_by_env } = getAgentAccess();
-  return { enabled, managed_by_env };
-}
-
-/** Strips the keys and attaches the live status, ready to send to the browser. */
+/** Attaches the live status, ready to send to the browser. */
 export function toHostResponse(host: HostRow): HostResponse {
   return {
     id: host.id,
@@ -183,14 +181,9 @@ export function toHostResponse(host: HostRow): HostResponse {
     color: host.color,
     position: host.position,
     enabled: host.enabled === 1,
-    has_api_key: Boolean(host.api_key),
     status:
       host.enabled === 1
         ? getHostStatus(host.id)
         : { ...UNKNOWN_STATUS },
-    // Only this machine's own card can be opened up to a hub. The key itself
-    // is not in this listing - every tab polls it, and a proxy may log it -
-    // but is fetched on demand from GET /api/hosts/:id/api-key.
-    ...(host.type === "local" ? { agent: agentSummary() } : {}),
   };
 }

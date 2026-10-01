@@ -1,11 +1,15 @@
 /**
- * The hub reads other servers over HTTP.
+ * The dashboard reads other servers' Docker daemons directly.
  *
  * This is the part of multi-host that cannot be checked by reading the code:
- * that an agent refuses a request without its key, that the hub labels each
- * container with the server it came from, that a server which is down costs
- * only its own containers, and that a start/stop is sent to the machine the
- * container actually runs on.
+ * that each container is labelled with the server it came from, that a server
+ * which is down costs only its own containers, that a start/stop is sent to the
+ * machine the container actually runs on, and that ssh:// really does carry
+ * the Docker API through the ssh binary.
+ *
+ * The remote "daemon" is a small HTTP server answering the handful of Docker
+ * API endpoints the dashboard uses, reached through the real dockerode client
+ * over tcp:// - or over ssh://, with a fake ssh binary that pipes to it.
  */
 
 import {
@@ -23,7 +27,11 @@ import path from "node:path";
 
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "dockerdash-hosts-test-"));
 process.env.DB_PATH = path.join(tmpDir, "test.db");
-process.env.API_KEY = "s3cret-key";
+process.env.SSH_BINARY = path.join(
+  path.dirname(new URL(import.meta.url).pathname),
+  "fixtures/fake-ssh.mjs",
+);
+process.env.FAKE_SSH_LOG = path.join(tmpDir, "ssh.log");
 // Keep a dead host from holding the suite up for the default six seconds.
 process.env.HOST_TIMEOUT_MS = "800";
 process.env.HOST_CACHE_MS = "0";
@@ -59,7 +67,6 @@ vi.mock("../../utils/dockerIconVault.js", async (importOriginal) => {
 });
 
 const { db, initializeSchema } = await import("../../config/database.js");
-const { default: agentRouter } = await import("../agent.js");
 const { default: containersRouter } = await import("../containers.js");
 const { default: hostsRouter } = await import("../hosts.js");
 const { default: shortcutsRouter } = await import("../shortcuts.js");
@@ -78,27 +85,62 @@ function container(id: string, name: string) {
   };
 }
 
-let hubUrl: string;
-let agentUrl: string;
-let hub: ReturnType<ReturnType<typeof express>["listen"]>;
-let agent: ReturnType<ReturnType<typeof express>["listen"]>;
+/** What the remote daemon has, and what it was asked to do. */
+const remoteList = vi.fn(() => [container("bbb", "nginx")] as unknown[]);
+const remoteAction = vi.fn((_id: string, _action: string) => undefined);
 
-async function listen(app: ReturnType<typeof express>): Promise<[typeof hub, string]> {
-  const server = app.listen(0);
+let hubUrl: string;
+let daemonPort: number;
+let hub: ReturnType<ReturnType<typeof express>["listen"]>;
+let daemon: ReturnType<ReturnType<typeof express>["listen"]>;
+
+async function listen(
+  app: ReturnType<typeof express>,
+): Promise<[typeof hub, number]> {
+  const server = app.listen(0, "127.0.0.1");
   await new Promise<void>((resolve) => server.once("listening", () => resolve()));
   const address = server.address();
   const port = typeof address === "object" && address ? address.port : 0;
-  return [server, `http://127.0.0.1:${port}`];
+  return [server, port];
+}
+
+/** The endpoints of the Docker API the dashboard actually calls. */
+function fakeDaemon(): ReturnType<typeof express> {
+  const app = express();
+  const v = "(?:/v[\\d.]+)?";
+  app.get(new RegExp(`^${v}/_ping$`), (_req, res) => {
+    res.send("OK");
+  });
+  app.get(new RegExp(`^${v}/version$`), (_req, res) => {
+    res.json({ Version: "27.3.1" });
+  });
+  app.get(new RegExp(`^${v}/containers/json$`), (_req, res) => {
+    res.json(remoteList());
+  });
+  app.get(new RegExp(`^${v}/containers/([^/]+)/json$`), (req, res) => {
+    const id = (req.params as Record<string, string>)[0];
+    const found = (remoteList() as Array<{ Id: string }>).find(
+      (c) => c.Id === id,
+    );
+    if (found) res.json(found);
+    else res.status(404).json({ message: `No such container: ${id}` });
+  });
+  app.post(
+    new RegExp(`^${v}/containers/([^/]+)/(start|stop|restart)$`),
+    (req, res) => {
+      const params = req.params as Record<string, string>;
+      remoteAction(params[0] as string, params[1] as string);
+      res.status(204).end();
+    },
+  );
+  return app;
 }
 
 beforeAll(async () => {
   initializeSchema();
 
-  // The agent: this machine's Docker daemon, served to whoever holds the key.
-  const agentApp = express();
-  agentApp.use(express.json());
-  agentApp.use(agentRouter);
-  [agent, agentUrl] = await listen(agentApp);
+  [daemon, daemonPort] = await listen(fakeDaemon());
+  process.env.FAKE_DOCKER_PORT = String(daemonPort);
 
   // The hub: the dashboard the browser talks to.
   const hubApp = express();
@@ -106,12 +148,14 @@ beforeAll(async () => {
   hubApp.use(hostsRouter);
   hubApp.use(containersRouter);
   hubApp.use(shortcutsRouter);
-  [hub, hubUrl] = await listen(hubApp);
+  const [hubServer, hubPort] = await listen(hubApp);
+  hub = hubServer;
+  hubUrl = `http://127.0.0.1:${hubPort}`;
 });
 
 afterAll(() => {
   hub?.close();
-  agent?.close();
+  daemon?.close();
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
@@ -123,125 +167,152 @@ beforeEach(() => {
   invalidateContainerCache();
   listContainers.mockResolvedValue([container("aaa", "nginx")]);
   startContainer.mockClear();
+  remoteList.mockImplementation(() => [container("bbb", "nginx")]);
+  remoteAction.mockClear();
 });
 
-function addAgentHost(name: string, url: string, apiKey: string): number {
+/** Nothing listens here: a server that is switched off. */
+const DEAD = "tcp://127.0.0.1:49517";
+
+const tcpUrl = () => `tcp://127.0.0.1:${daemonPort}`;
+
+function addHost(name: string, url: string): number {
   const result = db
     .prepare(
-      `INSERT INTO hosts (name, type, url, api_key, position, enabled)
-       VALUES (?, 'agent', ?, ?, 1, 1)`,
+      `INSERT INTO hosts (name, type, url, position, enabled)
+       VALUES (?, 'docker', ?, 1, 1)`,
     )
-    .run(name, url, apiKey);
+    .run(name, url);
   invalidateContainerCache();
   return Number(result.lastInsertRowid);
 }
 
-describe("agent endpoints", () => {
-  it("refuses a request with no key", async () => {
-    const response = await fetch(`${agentUrl}/api/agent/containers`);
-    expect(response.status).toBe(401);
-  });
-
-  it("refuses a request with the wrong key", async () => {
-    const response = await fetch(`${agentUrl}/api/agent/containers`, {
-      headers: { Authorization: "Bearer not-the-key" },
-    });
-    expect(response.status).toBe(401);
-  });
-
-  it("serves containers to a caller holding the key", async () => {
-    const response = await fetch(`${agentUrl}/api/agent/containers`, {
-      headers: { Authorization: "Bearer s3cret-key" },
-    });
-    expect(response.status).toBe(200);
-
-    const body = (await response.json()) as Array<{ name: string }>;
-    expect(body.map((c) => c.name)).toEqual(["nginx"]);
-  });
-});
+async function statusOf(name: string) {
+  const hosts = (await (await fetch(`${hubUrl}/api/hosts`)).json()) as Array<{
+    id: number;
+    name: string;
+    status: {
+      online: boolean;
+      checked_at: string | null;
+      error: string | null;
+      error_code: string | null;
+      failures: number;
+      retry_after: string | null;
+    };
+  }>;
+  return hosts.find((h) => h.name === name)!;
+}
 
 describe("GET /api/containers across servers", () => {
   it("labels every container with the server it came from", async () => {
-    addAgentHost("NAS", agentUrl, "s3cret-key");
+    addHost("NAS", tcpUrl());
 
     const response = await fetch(`${hubUrl}/api/containers`);
     const body = (await response.json()) as Array<{
+      id: string;
       name: string;
       hostId: number;
       hostName: string;
     }>;
 
     expect(body).toHaveLength(2);
-    expect(body.map((c) => c.hostName).sort()).toEqual(["Local", "NAS"]);
+    expect(body.map((c) => `${c.hostName}:${c.id}`).sort()).toEqual([
+      "Local:aaa",
+      "NAS:bbb",
+    ]);
     // Same container name on two servers, told apart by the host.
     expect(new Set(body.map((c) => c.hostId)).size).toBe(2);
   });
 
+  it("reads a server over ssh, through the ssh binary", async () => {
+    fs.rmSync(process.env.FAKE_SSH_LOG as string, { force: true });
+    addHost("Pi", "ssh://pi@raspberry:2222");
+
+    const body = (await (await fetch(`${hubUrl}/api/containers`)).json()) as Array<{
+      id: string;
+      hostName: string;
+    }>;
+
+    expect(body.find((c) => c.hostName === "Pi")?.id).toBe("bbb");
+
+    // What the remote machine was asked to run, and as whom.
+    const args = JSON.parse(
+      fs.readFileSync(process.env.FAKE_SSH_LOG as string, "utf8").split("\n")[0] as string,
+    ) as string[];
+    expect(args).toEqual(expect.arrayContaining(["-p", "2222", "-l", "pi", "-o", "BatchMode=yes"]));
+    expect(args.slice(-5)).toEqual(["--", "raspberry", "docker", "system", "dial-stdio"]);
+  });
+
+  it("says what ssh complained about", async () => {
+    addHost("Denied", "ssh://me@denied");
+    addHost("Unknown", "ssh://unknownkey");
+    addHost("NoCli", "ssh://nodocker");
+
+    await fetch(`${hubUrl}/api/containers`);
+
+    expect((await statusOf("Denied")).status.error_code).toBe("ssh_auth");
+    expect((await statusOf("Unknown")).status.error_code).toBe("ssh_host_key");
+    expect((await statusOf("NoCli")).status.error_code).toBe("no_docker_cli");
+  });
+
   it("keeps the other servers' containers when one is unreachable", async () => {
-    // Nothing listens on this port: the request fails at connect.
-    addAgentHost("Dead", "http://127.0.0.1:49517", "s3cret-key");
+    addHost("Dead", DEAD);
 
     const response = await fetch(`${hubUrl}/api/containers`);
     const body = (await response.json()) as Array<{ hostName: string }>;
 
     expect(body.map((c) => c.hostName)).toEqual(["Local"]);
 
-    const hosts = (await (await fetch(`${hubUrl}/api/hosts`)).json()) as Array<{
-      name: string;
-      status: { online: boolean; error: string | null };
-    }>;
-    const dead = hosts.find((h) => h.name === "Dead");
-    expect(dead?.status.online).toBe(false);
-    expect(dead?.status.error).toMatch(/refused/i);
+    const dead = await statusOf("Dead");
+    expect(dead.status.online).toBe(false);
+    expect(dead.status.error_code).toBe("refused");
   });
 
-  it("rejects a key the agent does not recognise, and says so", async () => {
-    addAgentHost("Typo", agentUrl, "wrong-key");
+  it("tells a server still pointing at the old agent apart from one that is down", async () => {
+    addHost("Old", "http://nas.local:3080");
 
     await fetch(`${hubUrl}/api/containers`);
 
-    const hosts = (await (await fetch(`${hubUrl}/api/hosts`)).json()) as Array<{
-      name: string;
-      status: { online: boolean; error: string | null };
-    }>;
-    expect(hosts.find((h) => h.name === "Typo")?.status.error).toMatch(
-      /api key/i,
-    );
-  });
-
-  it("never sends another server's key to the browser", async () => {
-    addAgentHost("NAS", agentUrl, "a-remote-servers-key");
-
-    const raw = await (await fetch(`${hubUrl}/api/hosts`)).text();
-    const hosts = JSON.parse(raw);
-
-    // A remote server's key is the hub's business, not the browser's.
-    expect(raw).not.toContain("a-remote-servers-key");
-    expect(hosts[1].has_api_key).toBe(true);
-
-    // This machine's own key is what the person copies into a hub, but it is
-    // not in a listing that every tab polls either: the card asks for it.
-    expect(raw).not.toContain("s3cret-key");
-    expect(hosts[0].agent).toEqual({ enabled: true, managed_by_env: true });
-    expect(hosts[1].agent).toBeUndefined();
-
-    const own = await (await fetch(`${hubUrl}/api/hosts/1/api-key`)).json();
-    expect(own).toEqual({ api_key: "s3cret-key" });
+    expect((await statusOf("Old")).status.error_code).toBe("legacy_agent");
   });
 });
 
 describe("container actions", () => {
   it("runs the action on the server the container belongs to", async () => {
-    const hostId = addAgentHost("NAS", agentUrl, "s3cret-key");
+    const hostId = addHost("NAS", tcpUrl());
 
     const response = await fetch(
-      `${hubUrl}/api/hosts/${hostId}/containers/aaa/start`,
+      `${hubUrl}/api/hosts/${hostId}/containers/bbb/restart`,
       { method: "POST" },
     );
 
     expect(response.status).toBe(200);
-    // The hub reached the agent, which started it on its own daemon.
-    expect(startContainer).toHaveBeenCalledTimes(1);
+    expect(remoteAction).toHaveBeenCalledWith("bbb", "restart");
+    expect(startContainer).not.toHaveBeenCalled();
+  });
+
+  it("finds the server from the container alone on the older route", async () => {
+    addHost("NAS", tcpUrl());
+    await fetch(`${hubUrl}/api/containers`);
+
+    const response = await fetch(`${hubUrl}/api/containers/bbb/stop`, {
+      method: "POST",
+    });
+
+    expect(response.status).toBe(200);
+    expect(remoteAction).toHaveBeenCalledWith("bbb", "stop");
+  });
+
+  it("answers 404 for a container that server does not have", async () => {
+    const hostId = addHost("NAS", tcpUrl());
+
+    const response = await fetch(
+      `${hubUrl}/api/hosts/${hostId}/containers/zzz/start`,
+      { method: "POST" },
+    );
+
+    expect(response.status).toBe(404);
+    expect(remoteAction).not.toHaveBeenCalled();
   });
 
   it("answers 404 for a server that does not exist", async () => {
@@ -265,35 +336,56 @@ describe("container actions", () => {
 });
 
 describe("POST /api/hosts", () => {
-  it("requires a name, an address and a key", async () => {
+  async function create(url: string) {
     const response = await fetch(`${hubUrl}/api/hosts`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: "NAS", url: agentUrl }),
+      body: JSON.stringify({ name: "NAS", url }),
     });
+    return {
+      status: response.status,
+      body: (await response.json()) as {
+        url: string;
+        hostname: string;
+        error_code?: string;
+      },
+    };
+  }
 
-    expect(response.status).toBe(400);
-    expect(((await response.json()) as { error: string }).error).toMatch(
-      /api key/i,
-    );
+  it("stores ssh and tcp addresses in one canonical form", async () => {
+    expect((await create("ssh://me@nas.local/")).body.url).toBe("ssh://me@nas.local");
+    expect((await create("tcp://nas.local")).body.url).toBe("tcp://nas.local:2375");
+    // "machine:port" is what people type for a proxy.
+    const bare = await create("nas.local:2375");
+    expect(bare.body.url).toBe("tcp://nas.local:2375");
+    // Port links on that server open the server itself, not this one.
+    expect(bare.body.hostname).toBe("nas.local");
   });
 
-  it("accepts an address without a scheme", async () => {
-    const response = await fetch(`${hubUrl}/api/hosts`, {
+  it("turns away the old agent's http:// address, and says why", async () => {
+    const { status, body } = await create("http://nas.local:3080");
+    expect(status).toBe(400);
+    expect(body.error_code).toBe("legacy_agent");
+  });
+
+  it("turns away an address with no transport", async () => {
+    const { status, body } = await create("nas.local");
+    expect(status).toBe(400);
+    expect(body.error_code).toBe("bad_url");
+  });
+
+  it("tests an address before it is saved", async () => {
+    const response = await fetch(`${hubUrl}/api/hosts/test`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: "NAS",
-        url: "nas.local:3080",
-        api_key: "abc",
-      }),
+      body: JSON.stringify({ url: tcpUrl() }),
     });
 
-    expect(response.status).toBe(200);
-    const body = (await response.json()) as { url: string; hostname: string };
-    expect(body.url).toBe("http://nas.local:3080");
-    // Port links on that server open the server itself, not the hub.
-    expect(body.hostname).toBe("nas.local");
+    expect(await response.json()).toEqual({
+      ok: true,
+      containers: 1,
+      version: "27.3.1",
+    });
   });
 
   it("will not delete the local server", async () => {
@@ -302,7 +394,7 @@ describe("POST /api/hosts", () => {
   });
 
   it("takes a server's shortcuts with it when it is removed", async () => {
-    const hostId = addAgentHost("NAS", agentUrl, "s3cret-key");
+    const hostId = addHost("NAS", tcpUrl());
     db.prepare(
       "INSERT INTO shortcuts (host_id, display_name) VALUES (?, 'Plex')",
     ).run(hostId);
@@ -322,9 +414,9 @@ describe("POST /api/hosts", () => {
 
 describe("auto-sync across servers", () => {
   it("gives the same container name on two servers a shortcut each", async () => {
-    // Both servers are backed by the same mocked daemon here, which is exactly
-    // the awkward case: identical container names on two machines.
-    const hostId = addAgentHost("NAS", agentUrl, "s3cret-key");
+    // Both servers run a container called nginx, which is exactly the awkward
+    // case: identical names on two machines.
+    const hostId = addHost("NAS", tcpUrl());
 
     const response = await fetch(`${hubUrl}/api/shortcuts/auto-sync`, {
       method: "POST",
@@ -344,7 +436,7 @@ describe("auto-sync across servers", () => {
   });
 
   it("keeps a dismissal on the server it was made on", async () => {
-    const hostId = addAgentHost("NAS", agentUrl, "s3cret-key");
+    const hostId = addHost("NAS", tcpUrl());
     await fetch(`${hubUrl}/api/shortcuts/auto-sync`, { method: "POST" });
 
     const local = db
@@ -367,22 +459,8 @@ describe("auto-sync across servers", () => {
 });
 
 describe("backing off a server that keeps failing", () => {
-  async function statusOf(name: string) {
-    const hosts = (await (await fetch(`${hubUrl}/api/hosts`)).json()) as Array<{
-      id: number;
-      name: string;
-      status: {
-        online: boolean;
-        checked_at: string | null;
-        failures: number;
-        retry_after: string | null;
-      };
-    }>;
-    return hosts.find((h) => h.name === name)!;
-  }
-
   it("stops reading a failing server until its backoff expires", async () => {
-    addAgentHost("Dead", "http://127.0.0.1:49517", "s3cret-key");
+    addHost("Dead", DEAD);
 
     await fetch(`${hubUrl}/api/containers`);
     const first = await statusOf("Dead");
@@ -409,7 +487,7 @@ describe("backing off a server that keeps failing", () => {
   });
 
   it("tries again at once when asked to", async () => {
-    const hostId = addAgentHost("Dead", "http://127.0.0.1:49517", "s3cret-key");
+    const hostId = addHost("Dead", DEAD);
 
     await fetch(`${hubUrl}/api/containers`);
     const skipped = await statusOf("Dead");
@@ -424,13 +502,13 @@ describe("backing off a server that keeps failing", () => {
   });
 
   it("forgets the backoff as soon as the server answers again", async () => {
-    const hostId = addAgentHost("Flaky", "http://127.0.0.1:49517", "s3cret-key");
+    const hostId = addHost("Flaky", DEAD);
 
     await fetch(`${hubUrl}/api/containers`);
     expect((await statusOf("Flaky")).status.failures).toBe(1);
 
-    // The server comes back: point the host at the agent that is actually up.
-    db.prepare("UPDATE hosts SET url = ? WHERE id = ?").run(agentUrl, hostId);
+    // The server comes back: point the host at the daemon that is actually up.
+    db.prepare("UPDATE hosts SET url = ? WHERE id = ?").run(tcpUrl(), hostId);
     invalidateContainerCache();
 
     await fetch(`${hubUrl}/api/hosts/${hostId}/retry`, { method: "POST" });

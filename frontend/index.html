@@ -35,5 +35,14 @@
       type="module"
       src="/src/main.tsx"
     ></script>
+    <!-- Feedback widget. Cross-origin, so the service worker lets it straight
+         through without caching it, and `async` keeps it off the critical path:
+         if devotion.racana.dev is unreachable the dashboard does not notice.
+         The key is a publishable one, which is why it can sit in the page. -->
+    <script
+      src="https://devotion.racana.dev/w.js"
+      data-key="pk_live_hohce9de8akvjz676b8zxz2x"
+      async
+    ></script>
   </body>
 </html>

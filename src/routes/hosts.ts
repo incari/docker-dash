@@ -22,16 +22,29 @@ import {
   invalidateContainerCache,
   pingHost,
 } from "../hosts/client.js";
-import {
-  getAgentAccess,
-  rotateApiKey,
-  setAgentEnabled,
-} from "../hosts/agentAccess.js";
-import { normalizeHostUrl } from "../utils/hostUrl.js";
+import { forgetDockerClients } from "../hosts/dockerClients.js";
+import { HostUrlError, parseHostUrl } from "../hosts/hostUrl.js";
 import { invalidateAutoSync } from "../hosts/syncState.js";
 import type { CreateHostBody, HostRow, UpdateHostBody } from "../types/index.js";
 
 const router: RouterType = Router();
+
+/**
+ * The stored form of an address, or the reason it cannot be stored, ready to
+ * send back as a 400.
+ */
+function normalizeHostUrl(
+  raw: string | undefined,
+): { url: string } | { error: string; error_code: string } {
+  try {
+    return { url: parseHostUrl(raw).url };
+  } catch (error) {
+    if (error instanceof HostUrlError) {
+      return { error: error.message, error_code: error.code };
+    }
+    throw error;
+  }
+}
 
 function parseBoolean(value: unknown, fallback: boolean): boolean {
   if (typeof value === "boolean") return value;
@@ -51,19 +64,18 @@ router.get("/api/hosts", (_req: Request, res: Response) => {
 });
 
 /**
- * Try a server's address and key before it is saved.
+ * Try a server's address before it is saved.
  *
- * Takes the credentials from the body rather than the database, so the form can
- * report a bad key while the person is still typing it. `id` alone re-tests a
+ * Takes the address from the body rather than the database, so the form can
+ * report a bad one while the person is still typing it. `id` alone re-tests a
  * server that is already saved.
  */
 router.post(
   "/api/hosts/test",
   async (req: Request, res: Response): Promise<void> => {
-    const { id, url, api_key } = req.body as {
+    const { id, url } = req.body as {
       id?: number;
       url?: string;
-      api_key?: string;
     };
 
     try {
@@ -74,28 +86,9 @@ router.post(
         return;
       }
 
-      const normalizedUrl = url ? normalizeHostUrl(url) : saved?.url || null;
-      if (!normalizedUrl) {
-        res.status(400).json({ ok: false, error: "A server address is required" });
-        return;
-      }
-
-      // An empty key in the body means "keep the saved one": the browser is
-      // never sent the key back, so a blank field is the normal state when
-      // editing a server that already works. But the saved key only ever goes
-      // to the saved address. Sending it to whatever URL is in the body would
-      // hand that server's key to anyone who can reach this endpoint.
-      const typedKey = api_key?.trim() || "";
-      const savedKeyApplies =
-        !!saved?.api_key && (!url || normalizedUrl === saved.url);
-      const effectiveKey = typedKey || (savedKeyApplies ? saved.api_key! : "");
-
-      if (!effectiveKey) {
-        res.status(400).json({
-          ok: false,
-          error: "Enter that server's API key to test a new address",
-          error_code: "key_required",
-        });
+      const normalized = normalizeHostUrl(url ?? saved?.url ?? "");
+      if ("error" in normalized) {
+        res.status(400).json({ ok: false, ...normalized });
         return;
       }
 
@@ -104,10 +97,8 @@ router.post(
       res.json(
         await pingHost({
           id: saved?.id ?? 0,
-          name: saved?.name ?? "New server",
-          type: "agent",
-          url: normalizedUrl,
-          api_key: effectiveKey,
+          type: "docker",
+          url: normalized.url,
         }),
       );
     } catch (error) {
@@ -119,8 +110,7 @@ router.post(
 
 // Add a server
 router.post("/api/hosts", (req: Request, res: Response): void => {
-  const { name, url, api_key, hostname, color, enabled } =
-    req.body as CreateHostBody;
+  const { name, url, hostname, color, enabled } = req.body as CreateHostBody;
 
   const trimmedName = (name || "").trim();
   if (!trimmedName) {
@@ -128,19 +118,9 @@ router.post("/api/hosts", (req: Request, res: Response): void => {
     return;
   }
 
-  const normalizedUrl = normalizeHostUrl(url || "");
-  if (!normalizedUrl) {
-    res.status(400).json({
-      error: "A server address is required, for example http://192.168.1.10:3080",
-    });
-    return;
-  }
-
-  if (!(api_key || "").trim()) {
-    res.status(400).json({
-      error:
-        "An API key is required. Copy it from that server's own dashboard, under Servers.",
-    });
+  const normalized = normalizeHostUrl(url);
+  if ("error" in normalized) {
+    res.status(400).json(normalized);
     return;
   }
 
@@ -154,13 +134,12 @@ router.post("/api/hosts", (req: Request, res: Response): void => {
 
     const result = db
       .prepare(
-        `INSERT INTO hosts (name, type, url, api_key, hostname, color, position, enabled)
-         VALUES (?, 'agent', ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO hosts (name, type, url, hostname, color, position, enabled)
+         VALUES (?, 'docker', ?, ?, ?, ?, ?)`,
       )
       .run(
         trimmedName,
-        normalizedUrl,
-        (api_key || "").trim(),
+        normalized.url,
         (hostname || "").trim() || null,
         (color || "").trim() || null,
         nextPosition + 1,
@@ -190,7 +169,7 @@ router.put(
       return;
     }
 
-    const { name, url, api_key, hostname, color, enabled, position, agent_enabled } =
+    const { name, url, hostname, color, enabled, position } =
       req.body as UpdateHostBody;
 
     const trimmedName = name === undefined ? host.name : (name || "").trim();
@@ -199,42 +178,27 @@ router.put(
       return;
     }
 
-    // The local host is the socket this process already holds; an address or a
-    // key for it would be ignored, so they are not accepted.
+    // The local host is the socket this process already holds; an address for
+    // it would be ignored, so one is not accepted.
     let nextUrl = host.url;
-    if (host.type === "agent" && url !== undefined) {
-      nextUrl = normalizeHostUrl(url);
-      if (!nextUrl) {
-        res.status(400).json({ error: "That server address is not valid" });
+    if (host.type !== "local" && url !== undefined) {
+      const normalized = normalizeHostUrl(url);
+      if ("error" in normalized) {
+        res.status(400).json(normalized);
         return;
       }
+      nextUrl = normalized.url;
     }
-
-    // A blank key leaves the stored one alone - the browser never receives it
-    // and so cannot send it back. Unless the address changed: the stored key
-    // belongs to the old address, and carrying it over would send it to the
-    // new one on the next read.
-    const typedKey = api_key && api_key.trim() ? api_key.trim() : "";
-    if (host.type === "agent" && nextUrl !== host.url && !typedKey) {
-      res.status(400).json({
-        error:
-          "Enter the server's API key again when changing its address. The saved key is only ever sent to the address it was saved with.",
-      });
-      return;
-    }
-    const nextApiKey =
-      host.type === "agent" && typedKey ? typedKey : host.api_key;
 
     try {
       db.prepare(
         `UPDATE hosts
-         SET name = ?, url = ?, api_key = ?, hostname = ?, color = ?,
+         SET name = ?, url = ?, hostname = ?, color = ?,
              position = ?, enabled = ?, updated_at = CURRENT_TIMESTAMP
          WHERE id = ?`,
       ).run(
         trimmedName,
         nextUrl,
-        nextApiKey,
         hostname === undefined
           ? host.hostname
           : (hostname || "").trim() || null,
@@ -244,28 +208,23 @@ router.put(
         id,
       );
 
-      // Only this machine can be opened up to a hub, and only when the key is
-      // not pinned by the environment.
-      if (host.type === "local" && agent_enabled !== undefined) {
-        setAgentEnabled(parseBoolean(agent_enabled, false));
-      }
-
       invalidateContainerCache();
 
       // Only drop what is known about reachability when something that decides
-      // it actually changed. Toggling anything else - a colour, a name, whether
-      // a hub may read this machine - would otherwise blank out a server that
-      // is plainly online until the next read comes back.
+      // it actually changed. Toggling anything else - a colour, a name - would
+      // otherwise blank out a server that is plainly online until the next
+      // read comes back.
       const enabledChanged =
         (parseBoolean(enabled, host.enabled === 1) ? 1 : 0) !== host.enabled;
       if (enabledChanged) {
         invalidateAutoSync();
       }
 
-      const addressChanged = nextUrl !== host.url || nextApiKey !== host.api_key;
+      const addressChanged = nextUrl !== host.url;
       if (addressChanged) {
         invalidateAutoSync();
         forgetHostStatus(id);
+        forgetDockerClients(id);
         // Pointed somewhere else: what it used to have says nothing about
         // what is there now.
         forgetHostContainers(id);
@@ -309,66 +268,6 @@ router.post(
   },
 );
 
-/**
- * This machine's own API key, for copying into a hub.
- *
- * Served on request rather than with every host listing, so it is not in a
- * response that every open tab fetches on a timer and that a proxy or browser
- * extension may log. Only the local host has a key to show; a remote server's
- * key never leaves this process.
- */
-router.get(
-  "/api/hosts/:id/api-key",
-  (req: Request<{ id: string }>, res: Response): void => {
-    const id = parseInt(req.params.id, 10);
-    const host = getHost(id);
-
-    if (!host || host.type !== "local") {
-      res.status(404).json({
-        error: "Only this machine's own key can be read from here.",
-      });
-      return;
-    }
-
-    const access = getAgentAccess();
-    res.setHeader("Cache-Control", "no-store");
-    res.json({ api_key: access.api_key });
-  },
-);
-
-/**
- * Replace this machine's API key.
- *
- * A credential that cannot be changed is a credential you cannot recover from,
- * so this exists for the day one leaks. Every hub still holding the old key
- * stops being able to read this machine immediately.
- */
-router.post(
-  "/api/hosts/:id/api-key",
-  (req: Request<{ id: string }>, res: Response): void => {
-    const id = parseInt(req.params.id, 10);
-    const host = getHost(id);
-
-    if (!host || host.type !== "local") {
-      res.status(404).json({
-        error: "Only this machine's own key can be replaced from here.",
-      });
-      return;
-    }
-
-    const key = rotateApiKey();
-    if (!key) {
-      res.status(400).json({
-        error:
-          "This key comes from the API_KEY environment variable. Change it there instead.",
-      });
-      return;
-    }
-
-    res.json(toHostResponse(getHost(id) as HostRow));
-  },
-);
-
 // Remove a server, and every shortcut that pointed at it
 router.delete(
   "/api/hosts/:id",
@@ -403,6 +302,7 @@ router.delete(
       invalidateAutoSync();
       forgetHostStatus(id);
       forgetHostContainers(id);
+      forgetDockerClients(id);
       res.json({ success: true });
     } catch (error) {
       console.error("Failed to delete host:", error);

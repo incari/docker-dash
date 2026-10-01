@@ -1,18 +1,21 @@
 /**
  * Reading containers from a host, whichever kind of host it is.
  *
- * A `local` host goes straight to the Docker socket. An `agent` host is another
- * docker-dash installation, reached over HTTP at /api/agent with a shared
- * token. Callers do not care which: they get the same containers back either
- * way, and a host that cannot be reached fails on its own without taking the
- * other servers' containers down with it.
+ * Every host is a Docker daemon reached directly: the local one over this
+ * process's own socket, the rest over ssh or through a socket proxy (see
+ * dockerClients.ts). Callers do not care which: they get the same containers
+ * back either way, and a host that cannot be reached fails on its own without
+ * taking the other servers' containers down with it.
  */
 
 import {
-  listLocalContainers,
-  runLocalContainerAction,
+  listContainers,
+  runContainerAction,
   type ContainerAction,
-} from "./localDocker.js";
+} from "./dockerOps.js";
+import { READ_TIMEOUT_MS, buildDocker, dockerFor } from "./dockerClients.js";
+import { HostUrlError } from "./hostUrl.js";
+import { SshTransportError } from "./sshTransport.js";
 import {
   LOCAL_HOST_ID,
   isBackingOff,
@@ -23,18 +26,12 @@ import {
 import { isDockerUnavailable } from "../utils/dockerErrors.js";
 import type { HostRow, NormalizedContainer } from "../types/index.js";
 
-/** A remote server that is down must not hold the whole dashboard hostage. */
-const REQUEST_TIMEOUT_MS = parseInt(
-  process.env.HOST_TIMEOUT_MS || "6000",
-  10,
-);
-
 /**
  * How long a fan-out result is reused.
  *
  * The dashboard polls every 5 seconds per open tab, and each poll would
- * otherwise become one HTTP request per server per tab. Two seconds keeps the
- * UI as fresh as it was with a single host while collapsing the fan-out.
+ * otherwise become one request per server per tab. Two seconds keeps the UI as
+ * fresh as it was with a single host while collapsing the fan-out.
  */
 const CONTAINER_CACHE_MS = parseInt(
   process.env.HOST_CACHE_MS || "2000",
@@ -86,13 +83,17 @@ function after<T>(ms: number, value: T): Promise<T> {
  */
 export type HostErrorCode =
   | "no_url"
-  | "key_rejected"
-  | "not_an_agent"
+  | "legacy_agent"
+  | "bad_url"
   | "bad_response"
   | "refused"
   | "dns"
   | "timeout"
-  | "tls"
+  | "ssh_auth"
+  | "ssh_host_key"
+  | "no_docker_cli"
+  | "socket_permission"
+  | "forbidden"
   | "docker_down"
   | "unreachable";
 
@@ -106,39 +107,51 @@ export class HostRequestError extends Error {
 }
 
 /** The code behind any failure, so the browser can phrase it itself. */
-export function hostErrorCode(error: unknown): HostErrorCode {
+export function hostErrorCode(
+  error: unknown,
+  host?: Pick<HostRow, "type">,
+): HostErrorCode {
   if (error instanceof HostRequestError) return error.code;
-  if (isDockerUnavailable(error)) return "docker_down";
-  return "unreachable";
-}
-
-function agentBaseUrl(host: HostRow): string {
-  const base = (host.url || "").trim().replace(/\/+$/, "");
-  if (!base) {
-    throw new HostRequestError("This server has no URL configured", "no_url");
-  }
-  return base;
+  return describeDockerFailure(error, host).code;
 }
 
 /**
- * Say why a request never got an answer.
+ * Say why a daemon never answered.
  *
- * fetch reports every transport failure as "fetch failed" and hides the real
- * reason in `cause`, which would leave the person adding a server staring at a
- * message that does not distinguish a typo in the URL from a closed port.
+ * dockerode surfaces whatever the transport threw - a socket error for tcp://,
+ * ssh's own complaint for ssh://, an HTTP status when a proxy says no - and
+ * none of those tell the person adding a server what to fix on their own.
  */
-function describeFetchFailure(error: unknown): HostRequestError {
-  if (error instanceof Error && error.name === "AbortError") {
+export function describeDockerFailure(
+  error: unknown,
+  host?: Pick<HostRow, "type">,
+): HostRequestError {
+  if (error instanceof HostRequestError) return error;
+
+  // The local socket refusing or missing is the ordinary case of Docker not
+  // running on a laptop, not a network problem to go and debug.
+  if (host?.type === "local" && isDockerUnavailable(error)) {
     return new HostRequestError(
-      `No answer within ${Math.round(REQUEST_TIMEOUT_MS / 1000)}s`,
-      "timeout",
+      "Docker is not running on this server",
+      "docker_down",
     );
   }
 
-  const cause = (error as { cause?: { code?: string; message?: string } })
-    ?.cause;
+  if (error instanceof HostUrlError) {
+    return new HostRequestError(error.message, error.code);
+  }
 
-  switch (cause?.code) {
+  if (error instanceof SshTransportError) {
+    return new HostRequestError(error.message, error.code);
+  }
+
+  const err = error as {
+    code?: string;
+    statusCode?: number;
+    message?: string;
+  };
+
+  switch (err?.code) {
     case "ECONNREFUSED":
       return new HostRequestError(
         "Connection refused - nothing is listening on that address and port",
@@ -148,85 +161,42 @@ function describeFetchFailure(error: unknown): HostRequestError {
     case "EAI_AGAIN":
       return new HostRequestError("That hostname does not resolve", "dns");
     case "ETIMEDOUT":
+    case "ESOCKETTIMEDOUT":
       return new HostRequestError(
         "The connection timed out - check the address and any firewall",
         "timeout",
-      );
-    case "CERT_HAS_EXPIRED":
-    case "DEPTH_ZERO_SELF_SIGNED_CERT":
-    case "UNABLE_TO_VERIFY_LEAF_SIGNATURE":
-      return new HostRequestError(
-        "The TLS certificate was rejected. Use http:// or a certificate this machine trusts.",
-        "tls",
       );
     default:
       break;
   }
 
+  // docker-modem reports its own timeout as a plain message.
+  if (err?.message && /timeout/i.test(err.message) && !err.statusCode) {
+    return new HostRequestError(
+      `No answer within ${Math.round(READ_TIMEOUT_MS / 1000)}s`,
+      "timeout",
+    );
+  }
+
+  // A socket proxy answers 403 for every section it was not told to open.
+  if (err?.statusCode === 403) {
+    return new HostRequestError(
+      "The socket proxy refused this. Give it CONTAINERS=1, and POST=1 to start and stop.",
+      "forbidden",
+    );
+  }
+
+  if (isDockerUnavailable(error)) {
+    return new HostRequestError(
+      "Docker is not running on this server",
+      "docker_down",
+    );
+  }
+
   return new HostRequestError(
-    cause?.message ||
-      (error instanceof Error ? error.message : "Unreachable"),
+    err?.message || "Unreachable",
     "unreachable",
   );
-}
-
-/**
- * One request to a remote agent, with a timeout and messages that say what the
- * person has to fix rather than quoting a status code at them.
- */
-async function agentRequest<T>(
-  host: HostRow,
-  path: string,
-  init: RequestInit = {},
-): Promise<T> {
-  const url = `${agentBaseUrl(host)}/api/agent${path}`;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-
-  let response: Response;
-  try {
-    response = await fetch(url, {
-      ...init,
-      signal: controller.signal,
-      headers: {
-        ...(init.headers || {}),
-        Accept: "application/json",
-        Authorization: `Bearer ${host.api_key || ""}`,
-      },
-    });
-  } catch (error) {
-    throw describeFetchFailure(error);
-  } finally {
-    clearTimeout(timer);
-  }
-
-  if (response.status === 401 || response.status === 403) {
-    throw new HostRequestError(
-      "The API key was rejected by this server. Copy the key from that server's own dashboard, under Servers.",
-      "key_rejected",
-    );
-  }
-  if (response.status === 404) {
-    throw new HostRequestError(
-      "This server is not set up to be read by a hub. Switch it on in its own dashboard, under Servers, and make sure it runs docker-dash 0.3 or newer.",
-      "not_an_agent",
-    );
-  }
-  if (!response.ok) {
-    throw new HostRequestError(
-      `Server answered ${response.status}`,
-      response.status === 503 ? "docker_down" : "bad_response",
-    );
-  }
-
-  try {
-    return (await response.json()) as T;
-  } catch {
-    throw new HostRequestError(
-      "This server answered something that is not JSON - is the URL pointing at docker-dash?",
-      "bad_response",
-    );
-  }
 }
 
 function withHost(
@@ -244,22 +214,7 @@ function withHost(
 export async function fetchHostContainers(
   host: HostRow,
 ): Promise<NormalizedContainer[]> {
-  if (host.type === "local") {
-    return withHost(host, await listLocalContainers());
-  }
-
-  const containers = await agentRequest<
-    Array<Omit<NormalizedContainer, "hostId" | "hostName">>
-  >(host, "/containers");
-
-  if (!Array.isArray(containers)) {
-    throw new HostRequestError(
-      "This server did not return a container list",
-      "bad_response",
-    );
-  }
-
-  return withHost(host, containers);
+  return withHost(host, await listContainers(dockerFor(host)));
 }
 
 /**
@@ -289,15 +244,8 @@ export async function fetchAllContainers(): Promise<NormalizedContainer[]> {
           lastKnown.set(host.id, containers);
           return containers;
         } catch (error) {
-          // A local daemon that is simply not running is the ordinary case on
-          // a laptop, and says so rather than looking like a broken
-          // configuration.
-          const message = isDockerUnavailable(error)
-            ? "Docker is not running on this server"
-            : error instanceof Error
-              ? error.message
-              : "Unreachable";
-          recordHostOffline(host.id, message, hostErrorCode(error));
+          const { message, code } = describeDockerFailure(error, host);
+          recordHostOffline(host.id, message, code);
           lastKnown.delete(host.id);
           console.warn(`[HOSTS] ${host.name} unavailable: ${message}`);
           return [] as NormalizedContainer[];
@@ -360,26 +308,17 @@ export async function runHostContainerAction(
   action: ContainerAction,
 ): Promise<boolean> {
   invalidateContainerCache();
-
-  if (host.type === "local") {
-    return runLocalContainerAction(containerId, action);
-  }
-
   try {
-    await agentRequest(
-      host,
-      `/containers/${encodeURIComponent(containerId)}/${action}`,
-      { method: "POST" },
+    return await runContainerAction(
+      dockerFor(host, "action"),
+      containerId,
+      action,
     );
-    return true;
   } catch (error) {
-    if (
-      error instanceof HostRequestError &&
-      error.message.startsWith("Server answered 404")
-    ) {
-      return false;
-    }
-    throw error;
+    // A container that is already in the state asked for is not a failure
+    // anyone needs to hear about.
+    if ((error as { statusCode?: number })?.statusCode === 304) return true;
+    throw host.type === "local" ? error : describeDockerFailure(error, host);
   }
 }
 
@@ -400,48 +339,33 @@ export async function findHostForContainer(
 }
 
 /**
- * Check a server before it is saved, using credentials that are not in the
+ * Check a server before it is saved, using an address that is not in the
  * database yet.
  */
 export async function pingHost(
-  host: Pick<HostRow, "id" | "name" | "type" | "url" | "api_key">,
+  host: Pick<HostRow, "id" | "type" | "url">,
 ): Promise<{
   ok: boolean;
   containers?: number;
-  name?: string;
   version?: string;
   error?: string;
   error_code?: HostErrorCode;
 }> {
   try {
-    if (host.type === "local") {
-      const containers = await listLocalContainers();
-      return { ok: true, containers: containers.length };
-    }
-
-    const result = await agentRequest<{
-      ok: boolean;
-      name?: string;
-      version?: string;
-      containers?: number;
-    }>(host as HostRow, "/ping");
-
+    // Uncached: an address being tried out may never be saved.
+    const docker = buildDocker(host);
+    const [version, containers] = await Promise.all([
+      docker.version().catch(() => null),
+      listContainers(docker),
+    ]);
     return {
       ok: true,
-      containers: result.containers,
-      name: result.name,
-      version: result.version,
+      containers: containers.length,
+      version: version?.Version,
     };
   } catch (error) {
-    return {
-      ok: false,
-      error: isDockerUnavailable(error)
-        ? "Docker is not running on this server"
-        : error instanceof Error
-          ? error.message
-          : "Unreachable",
-      error_code: hostErrorCode(error),
-    };
+    const failure = describeDockerFailure(error, host);
+    return { ok: false, error: failure.message, error_code: failure.code };
   }
 }
 

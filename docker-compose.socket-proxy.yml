@@ -1,70 +1,40 @@
-# docker-dash behind a Docker socket proxy.
+# Lets another machine's Docker Dashboard read THIS machine over tcp://.
 #
-# Mounting /var/run/docker.sock into a container hands that container the
-# whole daemon, which is root on the host - the :ro on the mount changes
-# nothing, a socket is not a file you read. This dashboard only ever lists
-# containers and starts, stops or restarts them, so it does not need the rest.
+# Run it on the machine whose containers you want to see, then add the server
+# in the dashboard as tcp://this-machine:2375. Prefer ssh:// if you can: it
+# needs nothing here at all - see "Several servers, one dashboard" in the
+# README.
 #
-# The proxy below lets exactly those calls through and refuses everything
-# else: no exec, no new containers, no volumes, no images. A dashboard that
-# were somehow taken over could stop your containers; it could not run
-# `docker run --privileged -v /:/host`.
+# There is no authentication. The proxy limits which parts of the Docker API
+# answer, not who asks, and POST=1 (needed to start and stop) also allows
+# creating containers - root-equivalent on this machine. Only publish the port
+# on a network you trust.
 #
-# The dashboard reaches the proxy over TCP on a network nothing else is on.
+# The same proxy can also stand between a dashboard and ITS OWN daemon, so the
+# dashboard container never holds the socket: put both on an internal network,
+# drop the `ports:` below, and give the dashboard
+# DOCKER_HOST=tcp://docker-socket-proxy:2375 instead of the socket mount.
 services:
   docker-socket-proxy:
     image: tecnativa/docker-socket-proxy:latest
     container_name: docker-socket-proxy
     restart: unless-stopped
+    # The proxy writes nothing but its own runtime state.
     read_only: true
     tmpfs:
       - /run
     security_opt:
       - no-new-privileges:true
+    environment:
+      # Listing and inspecting containers - and, with POST, everything else
+      # under /containers, which is why ALLOW_START and friends add nothing.
+      - CONTAINERS=1
+      # Start, stop and restart. Leave it out for a read-only server.
+      - POST=1
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
-    environment:
-      # What the dashboard needs
-      - CONTAINERS=1 # list and inspect containers
-      - POST=1 # needed for start / stop / restart
-      - ALLOW_START=1
-      - ALLOW_STOP=1
-      - ALLOW_RESTARTS=1
-      # Everything else stays off (the proxy's defaults): EXEC, IMAGES,
-      # VOLUMES, NETWORKS, BUILD, COMMIT, SECRETS, SWARM, SYSTEM...
-    networks:
-      - docker-socket
-
-  docker-dashboard:
-    image: ghcr.io/incari/docker-dash:latest
-    container_name: docker-dashboard
-    restart: unless-stopped
-    depends_on:
-      - docker-socket-proxy
-    read_only: true
-    tmpfs:
-      - /tmp
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
     ports:
-      - "3080:3000"
-    volumes:
-      # No Docker socket here - only its own data.
-      - ./data:/app/data
-    environment:
-      - NODE_ENV=production
-      - PORT=3000
-      - DB_PATH=/app/data/dashboard.db
-      - UPLOAD_DIR=/app/data/images
-      # Reach Docker through the proxy instead of a socket.
-      - DOCKER_HOST=tcp://docker-socket-proxy:2375
-    networks:
-      - docker-socket
-      - default
-
-networks:
-  docker-socket:
-    # No route out: the proxy is reachable from the dashboard and nowhere else.
-    internal: true
+      # Bound to one address on purpose. Replace it with this machine's
+      # Tailscale (100.x) or LAN address; "2375:2375" alone would answer on
+      # every interface, the internet included if this machine is exposed.
+      - "100.64.0.1:2375:2375"

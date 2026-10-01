@@ -16,25 +16,27 @@ Y una cuestión de despliegue que condiciona todo: el contenedor corre como **ro
 
 ## Estado tras la remediación (2026-10-02)
 
-Todo lo de abajo se implementó en esta misma rama. Resumen de lo que cambió por hallazgo:
+Fusionado con `feat/direct-docker-hosts`, que entre tanto **retiró el agente** (`/api/agent`, la API key, `agentAccess.ts`) y lee los servidores remotos directamente por `ssh://` o `tcp://`, y añadió un **servidor MCP** en `/mcp` protegido por `MCP_TOKEN`. Eso cambia el estado de varios hallazgos:
 
 | Hallazgo | Estado | Cómo |
 |---|---|---|
-| A1 CORS abierto | Corregido | `cors` eliminado del proyecto. El frontend es same-origin. |
-| A2 Clave remota a URL arbitraria | Corregido | `/api/hosts/test` sólo usa la clave guardada si la URL es la guardada; `PUT` exige la clave al cambiar la dirección. Tests en `hosts.keyLeak.test.ts`. |
-| A3 Subidas sin validar | Corregido | Extensión + mimetype en allow-list y coincidentes, nombre generado, magic bytes verificados tras escribir, SVG fuera, `/uploads` con `nosniff` + CSP `sandbox`. Tests en `uploads.test.ts`. |
-| A4 Clave local en el listado | Corregido | `GET /api/hosts` ya no la incluye; se pide bajo demanda en `GET /api/hosts/1/api-key` con `Cache-Control: no-store`. |
-| A5 Import sin validar | Corregido | Validación campo a campo antes de borrar nada; URLs con las mismas reglas que los formularios. |
-| A6 SSRF | Mitigado | Se rechazan link-local, `0.0.0.0`, `::` y esquemas distintos de http(s). Las IPs privadas siguen permitidas: es donde están los servidores. |
-| A7 Cabeceras | Corregido | `helmet` con CSP sin inline scripts, `frame-ancestors 'none'`. El registro del SW se movió al bundle. HSTS deliberadamente apagado. |
-| A8 Root + socket | Mitigado | Compose con `read_only`, `cap_drop: ALL`, `no-new-privileges`. Nuevo `docker-compose.socket-proxy.yml` y soporte de `DOCKER_HOST`. El `USER` del Dockerfile se mantiene en root para no romper instalaciones existentes que montan el socket directamente; el proxy es la vía recomendada. |
+| A1 CORS abierto | Corregido | `cors` eliminado del proyecto. El frontend es same-origin. El MCP habla por loopback, no desde un navegador. |
+| A2 Clave remota a URL arbitraria | Sin objeto | Ya no hay claves por servidor: ssh usa la clave del contenedor y el proxy no tiene ninguna. |
+| A3 Subidas sin validar | Corregido | Extensión + mimetype en allow-list y coincidentes, nombre generado, magic bytes verificados tras escribir, SVG fuera (también en la herramienta MCP `upload_icon`), `/uploads` con `nosniff` + CSP `sandbox`. Tests en `uploads.test.ts`. |
+| A4 Clave local en el listado | Sin objeto | La API key ya no existe. |
+| A5 Import sin validar | Corregido | Validación campo a campo antes de borrar nada; URLs de shortcuts con las mismas reglas que los formularios. Las direcciones de servidor ilegibles se conservan deshabilitadas, como ya hacía la rama destino. |
+| A6 SSRF | Mitigado | `parseHostUrl` rechaza link-local, `0.0.0.0`, `::`. Las IPs privadas siguen permitidas: es donde están los servidores. |
+| A7 Cabeceras | Corregido | `helmet` con CSP sin inline scripts (el widget de feedback de `devotion.racana.dev` está nombrado explícitamente), `frame-ancestors 'none'`, `X-Frame-Options: DENY`. El registro del SW se movió al bundle. HSTS deliberadamente apagado. |
+| A8 Root + socket | Mitigado | Compose con `read_only`, `cap_drop: ALL`, `no-new-privileges`. `DOCKER_HOST` permite que el dashboard lea su propio daemon a través de un socket proxy. El `USER` del Dockerfile se mantiene en root para no romper instalaciones que montan el socket. |
 | A9 Backend servido como estático | Corregido | Frontend en `/app/public`, backend en `/app/dist`. |
-| A10 Dependencias | Parcial | `multer` 2.4, `express` 4.22.3, `axios` 1.20, `cors` fuera, `@xenova/transformers` fuera (frontend pasa de 65 a 15 avisos, todos en tooling de build: vite, postcss, rollup, nanoid, picomatch). Queda `@grpc/grpc-js` y `uuid` vía `dockerode`, código que esta app no ejecuta. |
-| A11 Rate limiting | Corregido | `express-rate-limit` en `/api/agent`, `/api/upload`, `/api/hosts/test`, `/api/import`. `TRUST_PROXY` para detrás de un proxy. |
-| A12 Chat IA | Eliminado | Código, dependencia, traducciones y carga diferida en `App.tsx`. |
+| A10 Dependencias | Parcial | `multer` 2.4, `express` 4.22.3, `axios` 1.20, `cors` fuera, `@xenova/transformers` fuera. Queda `@grpc/grpc-js` y `uuid` vía `dockerode`, código que esta app no ejecuta; en el frontend sólo tooling de build. |
+| A11 Rate limiting | Corregido | `express-rate-limit` en `/api/upload`, `/api/hosts/test`, `/api/import` y `/mcp`. `TRUST_PROXY` para detrás de un proxy. |
+| A12 Chat IA | Eliminado | Ambas ramas lo quitaron. |
 | A13 SW cachea uploads | Sin cambio | Con A3 y A7 corregidos deja de tener recorrido. |
 
-Pendiente que no se puede resolver en código: **autenticación**. Sigue siendo necesario un proxy inverso con login delante.
+**Nuevo en la rama destino, revisado de paso:** el endpoint `/mcp` compara el token con hashes en tiempo constante, responde 404 si no está configurado, sólo acepta POST, y las herramientas pasan por las mismas rutas HTTP que el navegador, así que heredan todas las validaciones de arriba. Un token MCP equivale a todo lo que puede hacer la UI, incluido parar contenedores en todos los servidores; el README ya lo dice. Un servidor `ssh://` da al contenedor del dashboard una clave SSH con acceso al grupo `docker` de otra máquina, que es root allí: la carpeta de claves debe ser de sólo lectura y propiedad de root.
+
+Pendiente que no se puede resolver en código: **autenticación** para la UI y la API REST. Sigue siendo necesario un proxy inverso con login delante.
 
 ## Hallazgos (estado original)
 

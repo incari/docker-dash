@@ -13,37 +13,33 @@ A review of the whole surface - API, uploads, fleet, container image - and the
 fixes that came out of it. None of these change how the dashboard is used.
 
 - **No more CORS.** The API used to answer any origin, so a web page open in
-  another tab on the same network could read this machine's API key, stop
-  containers or replace the database through the import endpoint. The frontend
-  is same-origin and never needed it.
+  another tab on the same network could stop containers or replace the
+  database through the import endpoint. The frontend is same-origin and never
+  needed it.
 - **Security headers** via helmet: a content-security-policy that allows no
-  inline scripts, `frame-ancestors 'none'` against clickjacking, `nosniff`. The
-  service worker is registered from the bundle instead of an inline script so
-  the policy can be strict. HSTS is deliberately left off: the usual install is
-  plain HTTP on a LAN.
-- **A saved server's key only travels to the saved address.** Testing or editing
-  a server with a new address and a blank key used to send the stored key to the
-  new address. Both now ask for the key again.
-- **This machine's own API key is fetched on request** (`GET /api/hosts/1/api-key`)
-  rather than included in the host listing every tab polls.
+  inline scripts (the feedback widget's origin is named explicitly),
+  `frame-ancestors 'none'` against clickjacking, `nosniff`. The service worker
+  is registered from the bundle instead of an inline script so the policy can
+  be strict. HSTS is deliberately left off: the usual install is plain HTTP on
+  a LAN.
 - **Uploads are checked three times**: extension and declared type must agree
   and be on the allow-list, the stored name is generated, and the file's own
-  bytes are sniffed after the write. SVG is no longer accepted. `/uploads` is
-  served with `nosniff` and a sandboxing policy, so a file from before these
-  checks cannot run as code on this origin either.
-- **Import files are validated** with the same rules as the forms before
-  anything is deleted: a `javascript:` URL or an unparseable server address is
-  refused with a message naming the field.
-- **Server addresses** may not point at link-local or wildcard addresses.
-  `ftp://` and other schemes are refused instead of prefixed.
-- **Rate limits** on `/api/agent`, `/api/upload`, `/api/hosts/test` and
-  `/api/import`. `TRUST_PROXY` makes them see the real client behind a proxy.
+  bytes are sniffed after the write. SVG is no longer accepted, in the UI or
+  through the MCP `upload_icon` tool. `/uploads` is served with `nosniff` and a
+  sandboxing policy, so a file from before these checks cannot run as code on
+  this origin either.
+- **Import files are validated** field by field before anything is deleted: a
+  `javascript:` URL or a field of the wrong type is refused with a message
+  naming the field.
+- **Server addresses** may not point at link-local or wildcard addresses
+  (`169.254.x.x`, `0.0.0.0`, `::`).
+- **Rate limits** on `/api/upload`, `/api/hosts/test`, `/api/import` and
+  `/mcp`. `TRUST_PROXY` makes them see the real client behind a proxy.
 - **The frontend build lives in its own folder** (`/app/public`); it used to
   share `dist/` with the backend, which `express.static` then served too.
 - **Compose files** run the container read-only with all capabilities dropped
-  and `no-new-privileges`. New `docker-compose.socket-proxy.yml` reaches Docker
-  through a socket proxy that allows only list/start/stop/restart; `DOCKER_HOST`
-  configures it.
+  and `no-new-privileges`. `DOCKER_HOST` lets the dashboard reach its own
+  daemon through a socket proxy instead of holding the socket.
 - **Dependencies**: `multer` 2.4, `express` 4.22.3, `axios` 1.20; `cors`
   removed.
 
@@ -56,18 +52,30 @@ fixes that came out of it. None of these change how the dashboard is used.
 
 ### Added
 
+#### Agents can run the dashboard (MCP)
+
+- **MCP endpoint** at `/mcp`, so Claude, Cursor or any MCP client can manage
+  shortcuts, set the port that is really a container's web UI, group tiles into
+  sections and order them, find and fix missing or broken icons (including
+  uploading an image), add servers and start, stop or restart containers.
+  Creating or removing containers is deliberately not offered.
+- Off unless `MCP_TOKEN` is set; every request must carry it as a bearer token.
+
 #### Several servers, one dashboard
 
-- **Multi-server support**: one installation (the hub) can now read every other
-  installation and show the whole fleet on one page.
-  - Each installation generates its own API key on first boot and shows it in
-    its own **Servers** card, with reveal, copy and replace buttons, so setting
-    up a fleet needs no terminal and no invented secret. Reading stays off until
-    "let another dashboard read this server" is ticked, and `/api/agent` answers
-    404 until then. `API_KEY` pins the key from the environment instead, for a
-    compose file or a secrets manager.
+- **Multi-server support**: one dashboard reads the Docker daemon of every
+  machine you add and shows the whole fleet on one page. Nothing of docker-dash
+  is installed on the other machines.
+  - Servers are added as `ssh://user@machine` (through the system ssh client,
+    so `known_hosts` and `~/.ssh/config` work as in a terminal) or
+    `tcp://machine:2375` (a socket proxy on a trusted network).
+    [docker-compose.socket-proxy.yml](docker-compose.socket-proxy.yml) is a
+    starting point for the latter.
   - **Servers** panel in the Shortcuts view: add, edit, remove and test a
-    server, with its reachability and container count on the card.
+    server, with its reachability, Docker version and container count. ssh's
+    own complaints - key not accepted, unknown host key, no `docker` on the
+    PATH, no access to the socket - are shown on the card in the dashboard's
+    language.
   - Containers in the Shortcuts list are grouped by server, with compose
     projects nested inside each server; favourites stay ungrouped and name their
     server on the card.
@@ -75,23 +83,21 @@ fixes that came out of it. None of these change how the dashboard is used.
   - A port-based shortcut opens the machine the container runs on, not the
     machine serving the dashboard.
   - A server that cannot be reached costs only its own containers: the rest of
-    the fleet stays on screen and the reason is shown on that server's card, in
-    the dashboard's language.
-  - Shortcuts, sections and settings all live on the hub. Every shortcut records
-    its server, so the same container name on two machines gets a tile each and
-    dismissing one does not dismiss the other.
-  - Export/import carries the servers and each shortcut's server (export
-    version 2; version 1 files still import, filed under the local server).
-    Keys are never written to an export, so restored servers arrive switched
-    off until their key is entered.
+    the fleet stays on screen, a read answers within about two seconds, and a
+    failing server is backed off with a **Try again now** button.
+  - Every shortcut records its server, so the same container name on two
+    machines gets a tile each and dismissing one does not dismiss the other.
+  - Export/import carries the servers, by address, and each shortcut's server
+    (export version 2; version 1 files still import, filed under the local
+    server).
   - The offline cache keys containers by server as well as by ID, and a failed
     cache write no longer counts as a failed fetch - it used to make the
     dashboard quietly fall back to stale data even though the server had just
     answered.
-  - New env vars: `HOST_NAME`, `API_KEY`, `HOST_TIMEOUT_MS`, `HOST_CACHE_MS`.
-    Migrations `013_add_hosts` and `014_add_agent_access` file every existing
-    shortcut under the local server, so an upgrade looks exactly as it did
-    before.
+  - New env vars: `HOST_NAME`, `HOST_TIMEOUT_MS`, `HOST_CACHE_MS`,
+    `HOST_DEADLINE_MS`. Migration `013_add_hosts` files every existing shortcut
+    under the local server, so an upgrade looks exactly as it did before.
+  - The image now ships `openssh-client`.
 
 #### Toast Notifications (2026-02-13)
 
@@ -113,6 +119,14 @@ fixes that came out of it. None of these change how the dashboard is used.
 - **Smart Selection**: Only shortcuts that need updating are pre-selected
   - Shortcuts already using the correct icon show "Already set" but remain unchecked
   - You can still select them if you want to update anyway
+
+### Removed
+
+- **The agent.** Development builds read other servers through another
+  docker-dash installation's `/api/agent` endpoints and an API key. Migration
+  `015_retire_agents` keeps those servers and their shortcuts but switches them
+  off until they are given an `ssh://` or `tcp://` address, and deletes the
+  keys. `API_KEY` and `docker-compose.agent.yml` are gone.
 
 ### Fixed
 
@@ -157,6 +171,18 @@ fixes that came out of it. None of these change how the dashboard is used.
 
 - **Cached Image Spinner**: Fixed issue where spinners would persist when reopening the migration modal with cached images
 - **Custom Links Visibility**: Fixed issue where custom links (non-container shortcuts) were incorrectly hidden from the dashboard
+
+#### Correct container ports (2026-09-29)
+
+- **Quick-add and launch buttons opened the wrong port**: Docker reports a
+  container's `Ports` in arbitrary order, so Transmission showed its 51413
+  peer port instead of its 9091 web UI, and Jellyfin could list 8920 or a
+  discovery port before its 8096 UI. The API now sends `ports` ordered
+  best-first (TCP, then a conventional web-UI private port, then the lowest
+  private port - the same preference auto-sync already used), and the
+  quick-add, launch, preview and modal-preselect paths pick that best port
+  instead of the first entry. Covered by backend and frontend tests with
+  Transmission- and Jellyfin-shaped fixtures.
 
 ## [0.2.0] - 2026-02-11
 

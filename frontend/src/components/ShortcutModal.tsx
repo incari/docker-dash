@@ -1,4 +1,11 @@
-import React, { useState, useEffect, useCallback, useMemo, useId } from "react";
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  useId,
+  useRef,
+} from "react";
 import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
 import axios from "axios";
@@ -23,6 +30,10 @@ import {
   normalizeUrl,
   cleanDescription,
 } from "../utils/validation";
+import {
+  selectBestContainerPort,
+  orderContainerPorts,
+} from "../utils/containerPorts";
 import { uploadsApi, type UploadedImage } from "../services/api";
 import { useModalA11y } from "../hooks/useModalA11y";
 import { getContainerIcon } from "../utils/dockerIconVault";
@@ -71,7 +82,20 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
   const [iconUrlError, setIconUrlError] = useState("");
   const [hasManuallySelectedIcon, setHasManuallySelectedIcon] = useState(false);
 
+  // Initializes the form once per open session (new vs. editing shortcut id).
+  // `hosts` must NOT be a dependency: it revalidates via SWR (new array
+  // identity every ~15s) and used to wipe the whole form while typing.
+  const openSessionKeyRef = useRef<string | null>(null);
+  const shortcutId = shortcut?.id ?? null;
   useEffect(() => {
+    if (!isOpen) {
+      openSessionKeyRef.current = null;
+      return;
+    }
+    const sessionKey = `shortcut-${shortcutId ?? "new"}`;
+    if (openSessionKeyRef.current === sessionKey) return;
+    openSessionKeyRef.current = sessionKey;
+
     if (shortcut) {
       setFormData({
         display_name: shortcut.display_name || "",
@@ -107,7 +131,10 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
       setHasManuallySelectedIcon(false);
     }
     setSelectedFile(null);
-  }, [shortcut, isOpen, hosts]);
+    setUrlError("");
+    setIconUrlError("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, shortcutId]);
 
   const titleId = useId();
   const dialogRef = useModalA11y<HTMLDivElement>(isOpen, onClose);
@@ -156,8 +183,10 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
     [containers, formData.container_id],
   );
 
+  // Best-first so the dropdown lists the web UI port first even with
+  // stale unordered data; the API already sends ports ordered.
   const availablePorts = useMemo(
-    () => linkedContainer?.ports?.map((p) => p.public).filter(Boolean) || [],
+    () => orderContainerPorts(linkedContainer?.ports),
     [linkedContainer],
   );
 
@@ -303,7 +332,10 @@ export const ShortcutModal: React.FC<ShortcutModalProps> = ({
                     ...prev,
                     container_id: e.target.value,
                     display_name: c ? c.name : prev.display_name,
-                    port: c ? c.ports[0]?.public?.toString() || "" : prev.port,
+                    // Best published port, not ports[0] (arbitrary Docker order)
+                    port: c
+                      ? selectBestContainerPort(c.ports)?.toString() || ""
+                      : prev.port,
                     // Auto-select icon from docker-icon-vault based on container name
                     icon: newIcon,
                     // The container decides the server: it only exists on one.
@@ -1188,15 +1220,23 @@ const IconSelector: React.FC<IconSelectorProps> = ({
   }, [selectedFile]);
 
   // Handle URL preview
+  // Shows the raw text being typed (not only http-prefixed values) so an
+  // invalid URL stays visible instead of looking "reset". Known non-URL
+  // icons (Lucide names, uploaded files) still show an empty field.
+  const iconInputValue =
+    icon.startsWith("uploads/") || AVAILABLE_ICONS.hasOwnProperty(icon)
+      ? ""
+      : icon;
+
   useEffect(() => {
-    if (activeTab === "url" && icon.startsWith("http")) {
+    if (activeTab === "url" && icon && !icon.startsWith("uploads/")) {
       setUrlPreviewError(false);
       setUrlPreview(null);
 
       // Debounce the preview loading
       const timer = setTimeout(() => {
         if (isValidUrl(icon)) {
-          setUrlPreview(icon);
+          setUrlPreview(normalizeUrl(icon));
         }
       }, 500);
 
@@ -1267,7 +1307,7 @@ const IconSelector: React.FC<IconSelectorProps> = ({
                 type="text"
                 className="bg-transparent flex-1 focus:outline-none text-white text-sm"
                 placeholder={t("shortcuts.imageUrlPlaceholder")}
-                value={icon.startsWith("http") ? icon : ""}
+                value={iconInputValue}
                 onChange={(e) => {
                   setIcon(e.target.value);
                   setIconUrlError("");

@@ -22,13 +22,12 @@ const props = {
 const saved: Host = {
   id: 2,
   name: "NAS",
-  type: "agent",
-  url: "http://nas.local:3080",
+  type: "docker",
+  url: "ssh://me@nas.local",
   hostname: "nas.local",
   color: "#22c55e",
   position: 1,
   enabled: true,
-  has_api_key: true,
   status: {
     online: true,
     checked_at: null,
@@ -48,94 +47,87 @@ describe("checking a server before saving it", () => {
   it("says what is wrong in the dashboard's language", async () => {
     const user = userEvent.setup();
     (axios.post as any).mockResolvedValue({
-      data: { ok: false, error: "Invalid API key", error_code: "key_rejected" },
+      data: {
+        ok: false,
+        error: "me@nas: Permission denied (publickey).",
+        error_code: "ssh_auth",
+      },
     });
 
     render(<HostModal {...props} />);
     await user.type(
-      screen.getByPlaceholderText("http://192.168.1.10:3080"),
-      "nas.local:3080",
+      screen.getByPlaceholderText("ssh://user@192.168.1.10"),
+      "ssh://me@nas.local",
     );
     await user.click(screen.getByRole("button", { name: "Test" }));
 
     // The backend sends a code alongside its own English sentence, so the
     // message the user reads is the translated one.
     expect(
-      await screen.findByText(/Copy the key from that server's own dashboard/),
+      await screen.findByText(/Authorise it on that machine with ssh-copy-id/),
+    ).toBeInTheDocument();
+  });
+
+  it("explains an old agent address instead of only refusing it", async () => {
+    const user = userEvent.setup();
+    // The backend answers 400 for an address it will not store.
+    (axios.post as any).mockRejectedValue({
+      response: {
+        data: { ok: false, error: "no longer", error_code: "legacy_agent" },
+      },
+    });
+
+    render(<HostModal {...props} />);
+    await user.type(
+      screen.getByPlaceholderText("ssh://user@192.168.1.10"),
+      "http://nas.local:3080",
+    );
+    await user.click(screen.getByRole("button", { name: "Test" }));
+
+    expect(
+      await screen.findByText(/no longer reads other dashboards/),
     ).toBeInTheDocument();
   });
 
   it("reports what it found when the server answers", async () => {
     const user = userEvent.setup();
     (axios.post as any).mockResolvedValue({
-      data: { ok: true, containers: 4 },
+      data: { ok: true, containers: 4, version: "27.3.1" },
     });
 
     render(<HostModal {...props} />);
     await user.type(
-      screen.getByPlaceholderText("http://192.168.1.10:3080"),
-      "nas.local:3080",
+      screen.getByPlaceholderText("ssh://user@192.168.1.10"),
+      "ssh://me@nas.local",
     );
     await user.click(screen.getByRole("button", { name: "Test" }));
 
     expect(
-      await screen.findByText("Reachable - 4 containers"),
+      await screen.findByText("Reachable - Docker 27.3.1, 4 containers"),
     ).toBeInTheDocument();
   });
 });
 
-describe("the API key field", () => {
-  it("starts empty when editing, and an empty field keeps the saved key", async () => {
-    const user = userEvent.setup();
-    (axios.put as any).mockResolvedValue({ data: saved });
-
-    render(
-      <HostModal
-        {...props}
-        host={saved}
-      />,
-    );
-
-    // The browser is never sent the key, so there is nothing to prefill with.
-    const field = screen.getByPlaceholderText(
-      "Leave empty to keep the saved key",
-    );
-    expect(field).toHaveValue("");
-
-    await user.click(screen.getByRole("button", { name: "Save" }));
-
-    await waitFor(() => expect(axios.put).toHaveBeenCalled());
-    const [, payload] = (axios.put as any).mock.calls[0];
-    expect(payload).not.toHaveProperty("api_key");
-    expect(payload.name).toBe("NAS");
-  });
-
-  it("sends a key that was typed", async () => {
+describe("saving a server", () => {
+  it("sends the address as typed, with no key to go with it", async () => {
     const user = userEvent.setup();
     (axios.post as any).mockResolvedValue({ data: saved });
 
     render(<HostModal {...props} />);
     await user.type(screen.getByPlaceholderText("NAS, VPS, office…"), "NAS");
     await user.type(
-      screen.getByPlaceholderText("http://192.168.1.10:3080"),
-      "nas.local:3080",
-    );
-    await user.type(
-      screen.getByPlaceholderText("Paste that server's API key"),
-      "abc123",
+      screen.getByPlaceholderText("ssh://user@192.168.1.10"),
+      "ssh://me@nas.local",
     );
     await user.click(screen.getByRole("button", { name: "Create" }));
 
     await waitFor(() => expect(axios.post).toHaveBeenCalled());
     const [, payload] = (axios.post as any).mock.calls[0];
-    expect(payload).toMatchObject({
-      name: "NAS",
-      url: "nas.local:3080",
-      api_key: "abc123",
-    });
+    expect(payload).toMatchObject({ name: "NAS", url: "ssh://me@nas.local" });
+    expect(payload).not.toHaveProperty("api_key");
   });
 
-  it("is not asked for on the local server, which has no address to reach", () => {
+  it("asks for no address on the local server, which already has its socket", () => {
     render(
       <HostModal
         {...props}
@@ -143,7 +135,7 @@ describe("the API key field", () => {
       />,
     );
 
-    expect(screen.queryByText("API key")).toBeNull();
+    expect(screen.queryByPlaceholderText("ssh://user@192.168.1.10")).toBeNull();
     expect(screen.queryByRole("button", { name: "Test" })).toBeNull();
   });
 });

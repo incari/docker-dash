@@ -14,12 +14,7 @@ import { fileURLToPath } from "url";
 
 // Configuration
 import { PORT, initializeSchema } from "./config/index.js";
-import {
-  uploadDir,
-  upload,
-  rejectNonImageUpload,
-  uploadErrorHandler,
-} from "./config/multer.js";
+import { uploadDir, uploadErrorHandler } from "./config/multer.js";
 
 // Database
 import { runMigrations } from "./database/index.js";
@@ -29,11 +24,9 @@ import { installLifecycleHandlers } from "./lifecycle.js";
 
 // Hosts
 import { ensureLocalHost } from "./hosts/registry.js";
-import { ensureApiKey } from "./hosts/agentAccess.js";
 
 // Routes
 import {
-  agentRouter,
   containersRouter,
   healthRouter,
   hostsRouter,
@@ -42,6 +35,7 @@ import {
   shortcutsRouter,
   settingsRouter,
   dataRouter,
+  mcpRouter,
 } from "./routes/index.js";
 
 // ES module equivalents of __dirname and __filename
@@ -71,6 +65,13 @@ if (process.env.TRUST_PROXY) {
 app.disable("x-powered-by");
 
 /**
+ * Where the feedback widget in index.html comes from. The only script this
+ * page runs that it did not ship itself, so it is named rather than opening
+ * script-src to every https: origin.
+ */
+const FEEDBACK_ORIGIN = "https://devotion.racana.dev";
+
+/**
  * Security headers.
  *
  * This dashboard has no login, so the browser's own rules are what keeps a
@@ -91,7 +92,7 @@ app.use(
       useDefaults: false,
       directives: {
         "default-src": ["'self'"],
-        "script-src": ["'self'"],
+        "script-src": ["'self'", FEEDBACK_ORIGIN],
         // React and framer-motion set style attributes; a nonce cannot cover
         // those, and this directive does not let scripts in.
         "style-src": ["'self'", "'unsafe-inline'"],
@@ -99,7 +100,8 @@ app.use(
         // services are plain http - and from uploads on this origin.
         "img-src": ["'self'", "data:", "blob:", "https:", "http:"],
         "font-src": ["'self'", "data:"],
-        "connect-src": ["'self'"],
+        "connect-src": ["'self'", FEEDBACK_ORIGIN],
+        "frame-src": [FEEDBACK_ORIGIN],
         "manifest-src": ["'self'"],
         "worker-src": ["'self'"],
         "object-src": ["'none'"],
@@ -150,14 +152,11 @@ await runMigrations();
 // the local server to exist before any shortcut can point at it.
 ensureLocalHost();
 
-// Give this installation a key of its own, ready to be copied into a hub. It
-// does nothing until reading this server is switched on.
-ensureApiKey();
-
 /**
  * Rate limits, on the endpoints where a loop would cost something: outbound
- * connections, disk, or a full rewrite of the database. The dashboard's own
- * polling of /api/containers and /api/hosts is not limited.
+ * connections, disk, a full rewrite of the database, or guessing the MCP
+ * token. The dashboard's own polling of /api/containers and /api/hosts is not
+ * limited.
  */
 const limiter = (max: number, what: string) =>
   rateLimit({
@@ -168,36 +167,14 @@ const limiter = (max: number, what: string) =>
     message: { error: `Too many ${what} - try again in a minute` },
   });
 
-app.use("/api/agent", limiter(300, "requests"));
 app.use("/api/upload", limiter(30, "uploads"));
 app.use("/api/hosts/test", limiter(20, "connection tests"));
 app.use("/api/import", limiter(10, "imports"));
-
-// Upload endpoint (needs upload middleware)
-app.post(
-  "/api/upload",
-  upload.single("image"),
-  rejectNonImageUpload,
-  (req, res): void => {
-    if (!req.file) {
-      res.status(400).json({ error: "No image file provided" });
-      return;
-    }
-
-    const imageUrl = `uploads/${req.file.filename}`;
-    res.json({
-      success: true,
-      url: imageUrl,
-      filename: req.file.filename,
-    });
-  },
-);
+app.use("/mcp", limiter(300, "requests"));
 
 // Mount route modules
 // Health first: whatever else is wrong, something has to be able to answer.
 app.use(healthRouter);
-// Agent next: it owns /api/agent and refuses anything without the key.
-app.use(agentRouter);
 app.use(hostsRouter);
 app.use(containersRouter);
 app.use(uploadsRouter);
@@ -205,6 +182,8 @@ app.use(sectionsRouter);
 app.use(shortcutsRouter);
 app.use(settingsRouter);
 app.use(dataRouter);
+// For LLM agents; answers nothing unless MCP_TOKEN is set.
+app.use(mcpRouter);
 
 // Catch-all route for SPA (React Router support)
 app.get("*", (req, res): void => {

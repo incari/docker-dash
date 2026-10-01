@@ -8,23 +8,21 @@
  * A Docker host the dashboard reads containers from.
  *
  * `local` is the daemon this process talks to over its own socket; there is
- * exactly one, it is row 1, and it cannot be deleted. `agent` is another
- * docker-dash installation reached over HTTP with a shared token.
+ * exactly one, it is row 1, and it cannot be deleted. `docker` is any other
+ * daemon, reached directly at its API over ssh:// or tcp://.
  */
-export type HostType = "local" | "agent";
+export type HostType = "local" | "docker";
 
 export interface HostRow {
   id: number;
   name: string;
   type: HostType;
-  /** Base URL of the remote docker-dash, e.g. https://nas.tailnet.ts.net:3080 */
+  /** The daemon's address, e.g. ssh://me@nas or tcp://nas:2375 */
   url: string | null;
-  /** Key sent as `Authorization: Bearer <key>` to the agent. */
-  api_key: string | null;
   /**
    * Hostname port-based shortcuts on this host are opened against. Empty for
    * the local host (the browser's own hostname is used) and derived from `url`
-   * for agents that do not set it.
+   * for remote servers that do not set it.
    */
   hostname: string | null;
   /** Badge colour, so servers stay distinguishable at a glance. */
@@ -44,18 +42,7 @@ export interface HostResponse {
   color: string | null;
   position: number;
   enabled: boolean;
-  /** The key itself is never sent to the browser. */
-  has_api_key: boolean;
   status: HostStatus;
-  /**
-   * Only on the local host: whether a hub may read this installation, and the
-   * key it would have to present. Absent for remote servers, whose own access
-   * settings are their business.
-   */
-  agent?: {
-    enabled: boolean;
-    managed_by_env: boolean;
-  };
 }
 
 export interface HostStatus {
@@ -75,7 +62,6 @@ export interface HostStatus {
 export interface CreateHostBody {
   name?: string;
   url?: string;
-  api_key?: string;
   hostname?: string;
   color?: string;
   enabled?: boolean;
@@ -83,8 +69,6 @@ export interface CreateHostBody {
 
 export interface UpdateHostBody extends CreateHostBody {
   position?: number;
-  /** Local host only: allow a hub to read this installation. */
-  agent_enabled?: boolean;
 }
 
 export interface ShortcutRow {
@@ -168,7 +152,7 @@ export interface SettingsResponse {
 
 /**
  * A container as the dashboard passes it around, normalised so that the local
- * daemon and a remote agent are indistinguishable downstream.
+ * daemon and a remote one are indistinguishable downstream.
  */
 export interface NormalizedContainer {
   id: string;

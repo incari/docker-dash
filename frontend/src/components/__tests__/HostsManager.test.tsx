@@ -1,10 +1,8 @@
 /**
- * The Servers panel: what it says about each machine, and the two things only
- * this machine's own card offers - its API key and the switch that makes the
- * key mean anything.
+ * The Servers panel: what it says about each machine.
  */
 
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import axios from "axios";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -12,9 +10,6 @@ import { HostsManager } from "../HostsManager";
 import type { Host } from "../../types";
 
 vi.mock("axios");
-
-const LOCAL_KEY =
-  "baf8c0e1e88ba8ffa60fa091fd7e18abbd86d9f9873352ad82aef776dc100d5c";
 
 function host(overrides: Partial<Host> = {}): Host {
   return {
@@ -26,7 +21,6 @@ function host(overrides: Partial<Host> = {}): Host {
     color: null,
     position: 0,
     enabled: true,
-    has_api_key: false,
     status: {
       online: true,
       checked_at: "2026-09-19T00:00:00.000Z",
@@ -61,9 +55,8 @@ describe("what a server card reports", () => {
     const dead = host({
       id: 2,
       name: "NAS",
-      type: "agent",
-      url: "http://nas.local:3080",
-      has_api_key: true,
+      type: "docker",
+      url: "tcp://nas.local:2375",
       status: {
         online: false,
         checked_at: "2026-09-19T00:00:00.000Z",
@@ -91,7 +84,7 @@ describe("what a server card reports", () => {
     const dead = host({
       id: 2,
       name: "NAS",
-      type: "agent",
+      type: "docker",
       status: { ...host().status, online: false, error_code: "timeout" },
     });
 
@@ -117,99 +110,34 @@ describe("what a server card reports", () => {
   });
 });
 
-describe("this machine's own API key", () => {
-  const localWithKey = (enabled: boolean, managedByEnv = false) =>
-    host({
-      agent: { enabled, managed_by_env: managedByEnv },
-    });
-
-  beforeEach(() => {
-    // The key is not in the host list; the card asks for it when needed.
-    (axios.get as any).mockResolvedValue({ data: { api_key: LOCAL_KEY } });
-  });
-
-  it("stays hidden until the machine is opened up to a hub", () => {
-    render(<HostsManager hosts={[localWithKey(false)]} {...props} />);
-
-    expect(
-      screen.getByLabelText(/Let another dashboard read this server/),
-    ).not.toBeChecked();
-    expect(screen.queryByText(/baf8c0e1/)).toBeNull();
-    expect(axios.get).not.toHaveBeenCalled();
-  });
-
-  it("is fetched only when asked for, and then shown in full", async () => {
-    const user = userEvent.setup();
-    render(<HostsManager hosts={[localWithKey(true)]} {...props} />);
-
-    // Nothing of the key is on the page, and nothing has been asked for yet.
-    expect(screen.queryByText(/baf8c0e1/)).toBeNull();
-    expect(axios.get).not.toHaveBeenCalled();
-
-    await user.click(screen.getByRole("button", { name: "Show key" }));
-
-    expect(axios.get).toHaveBeenCalledWith("/api/hosts/1/api-key");
-    // In full, because a machine with no clipboard access still has to be able
-    // to copy it by hand.
-    expect(await screen.findByText(LOCAL_KEY)).toBeInTheDocument();
-  });
-
-  it("saves the switch as soon as it is flipped", async () => {
-    const user = userEvent.setup();
-    (axios.put as any).mockResolvedValue({ data: {} });
-
-    render(<HostsManager hosts={[localWithKey(false)]} {...props} />);
-    await user.click(
-      screen.getByLabelText(/Let another dashboard read this server/),
-    );
-
-    expect(axios.put).toHaveBeenCalledWith("/api/hosts/1", {
-      agent_enabled: true,
-    });
-  });
-
-  it("is read-only when the environment pins it", () => {
-    render(<HostsManager hosts={[localWithKey(true, true)]} {...props} />);
-
-    expect(
-      screen.getByLabelText(/Let another dashboard read this server/),
-    ).toBeDisabled();
-    expect(screen.getByText(/Set by the API_KEY environment/)).toBeInTheDocument();
-    // Nor can it be replaced from here - that would be undone by a restart.
-    expect(screen.queryByRole("button", { name: "Replace key" })).toBeNull();
-  });
-
-  it("asks before replacing a key that other dashboards are using", async () => {
-    const user = userEvent.setup();
-    render(<HostsManager hosts={[localWithKey(true)]} {...props} />);
-
-    await user.click(screen.getByRole("button", { name: "Replace key" }));
-
-    expect(props.showConfirm).toHaveBeenCalledWith(
-      expect.stringContaining("stops being able to read this server"),
-      expect.any(Function),
-    );
-    // Nothing happens until the user says yes.
-    expect(axios.post).not.toHaveBeenCalled();
-  });
-
-  it("is never offered for a remote server", () => {
-    const remote = host({
+describe("a server switched off by the upgrade", () => {
+  it("says it needs a new address, not just that it is off", () => {
+    const migrated = host({
       id: 2,
       name: "NAS",
-      type: "agent",
-      has_api_key: true,
-      agent: undefined,
+      type: "docker",
+      url: "http://nas.local:3080",
+      enabled: false,
     });
 
-    const { container } = render(
-      <HostsManager hosts={[remote]} {...props} />,
-    );
+    render(<HostsManager hosts={[migrated]} {...props} />);
 
     expect(
-      within(container).queryByLabelText(
-        /Let another dashboard read this server/,
-      ),
-    ).toBeNull();
+      screen.getByText(/it was read through the old agent/),
+    ).toBeInTheDocument();
+  });
+
+  it("says plainly that a server someone switched off is off", () => {
+    const off = host({
+      id: 2,
+      name: "NAS",
+      type: "docker",
+      url: "ssh://me@nas.local",
+      enabled: false,
+    });
+
+    render(<HostsManager hosts={[off]} {...props} />);
+
+    expect(screen.getByText("Not being read")).toBeInTheDocument();
   });
 });

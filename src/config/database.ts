@@ -64,15 +64,14 @@ export function initializeSchema(): void {
   `);
 
   // Create hosts table. Row 1 is always the Docker daemon this process talks
-  // to over its own socket; remote docker-dash installations are added as
-  // 'agent' rows and reached over HTTP.
+  // to over its own socket; every other daemon is a 'docker' row reached at
+  // its API over ssh:// or tcp://.
   db.exec(`
     CREATE TABLE IF NOT EXISTS hosts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
-      type TEXT NOT NULL DEFAULT 'agent',
+      type TEXT NOT NULL DEFAULT 'docker',
       url TEXT,
-      api_key TEXT,
       hostname TEXT,
       color TEXT,
       position INTEGER DEFAULT 0,
@@ -146,11 +145,6 @@ export function initializeSchema(): void {
       view_mode TEXT DEFAULT 'default',
       mobile_columns INTEGER DEFAULT 2,
       migration_dismissed INTEGER DEFAULT 0,
-      -- This machine's own API key, and whether a hub is allowed to use it.
-      -- Generated on first boot so it can be copied from the dashboard; inert
-      -- until agent_enabled is set.
-      api_key TEXT,
-      agent_enabled INTEGER DEFAULT 0,
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
   `);

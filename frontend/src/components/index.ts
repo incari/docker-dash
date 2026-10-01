@@ -15,7 +15,6 @@ export { ContainerCard } from "./ContainerCard";
 export { DynamicIcon } from "./DynamicIcon";
 export { ShortcutModal } from "./ShortcutModal";
 export { SectionModal } from "./SectionModal";
-export { AgentAccessPanel } from "./AgentAccessPanel";
 export { HostModal } from "./HostModal";
 export { HostsManager } from "./HostsManager";
 export { ViewSelector } from "./ViewSelector";

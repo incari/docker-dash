@@ -130,8 +130,7 @@ describe("how often auto-sync really runs", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name: "NAS",
-        url: "http://127.0.0.1:49517",
-        api_key: "k",
+        url: "tcp://127.0.0.1:49517",
       }),
     });
     expect(created.status).toBe(200);
@@ -149,8 +148,7 @@ describe("how often auto-sync really runs", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: "NAS",
-          url: "http://127.0.0.1:49517",
-          api_key: "k",
+          url: "tcp://127.0.0.1:49517",
         }),
       })
     ).json()) as { id: number };
