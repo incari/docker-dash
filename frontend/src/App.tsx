@@ -24,11 +24,6 @@ const ShortcutModal = lazy(() =>
     default: module.ShortcutModal,
   })),
 );
-const AIChat = lazy(() =>
-  import("./components/AIChat/AIChat").then((module) => ({
-    default: module.AIChat,
-  })),
-);
 import { DashboardView } from "./views/DashboardView";
 import { ManagementView } from "./views/ManagementView";
 import { useTheme } from "./hooks/useTheme";
@@ -332,7 +327,7 @@ function App() {
     // A server that was just added has containers with no shortcuts yet, and
     // waiting for the next page load to notice is a poor first impression. The
     // backend reuses a recent sweep, so calling this after a change that needs
-    // no sweep - the agent toggle, a colour - costs nothing.
+    // no sweep - a new name, a colour - costs nothing.
     try {
       await shortcutsApi.autoSync();
     } catch (err) {
@@ -707,11 +702,6 @@ function App() {
         onConfirm={handleMigrationConfirm}
         onCancel={handleMigrationCancel}
       />
-
-      {/* AI Chat Interface - loaded on its own chunk, it is not needed to paint the dashboard */}
-      <Suspense fallback={null}>
-        <AIChat />
-      </Suspense>
     </div>
   );
 }

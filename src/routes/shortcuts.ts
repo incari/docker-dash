@@ -5,7 +5,7 @@
 import { Router, Request, Response } from "express";
 import type { Router as RouterType } from "express";
 import { db } from "../config/database.js";
-import { upload } from "../config/multer.js";
+import { upload, rejectNonImageUpload } from "../config/multer.js";
 import {
   normalizeUrl,
   isValidUrl,
@@ -532,6 +532,7 @@ router.post(
 router.post(
   "/api/shortcuts",
   upload.single("image"),
+  rejectNonImageUpload,
   async (req: Request, res: Response): Promise<void> => {
     const {
       display_name,
@@ -688,6 +689,7 @@ router.post(
 router.put(
   "/api/shortcuts/:id",
   upload.single("image"),
+  rejectNonImageUpload,
   async (req: Request<{ id: string }>, res: Response): Promise<void> => {
     const { id } = req.params;
     const {

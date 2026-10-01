@@ -38,7 +38,6 @@ const mockProps = {
             color: null,
             position: 0,
             enabled: true,
-            has_api_key: false,
             status: {
                 online: true,
                 checked_at: null,
@@ -123,5 +122,37 @@ describe('ShortcutModal', () => {
         await user.tab(); // Trigger blur
 
         expect(await screen.findByText(/This is not a valid URL/i)).toBeInTheDocument();
+    });
+
+    it('keeps the whole form when hosts revalidate (new array identity)', async () => {
+        const user = userEvent.setup();
+        const { rerender } = render(<ShortcutModal {...mockProps} />);
+
+        const nameInput = screen.getByPlaceholderText('e.g. Plex Media');
+        await user.type(nameInput, 'My App');
+
+        await user.click(screen.getByText('WEB URL'));
+        const urlInput = screen.getByPlaceholderText('example.com or https://example.com');
+        await user.type(urlInput, 'http://');
+
+        // SWR revalidation returns a new array identity with the same content.
+        // This used to wipe the entire form while the user was typing.
+        rerender(<ShortcutModal {...mockProps} hosts={[...mockProps.hosts]} />);
+
+        expect(screen.getByPlaceholderText('e.g. Plex Media')).toHaveValue('My App');
+        expect(screen.getByPlaceholderText('example.com or https://example.com')).toHaveValue('http://');
+    });
+
+    it('keeps an invalid icon URL visible instead of clearing the field', async () => {
+        const user = userEvent.setup();
+        render(<ShortcutModal {...mockProps} />);
+
+        // Open the icon "URL" tab (Icon / URL / Upload)
+        await user.click(screen.getByRole('button', { name: 'URL' }));
+
+        const iconUrlInput = screen.getByPlaceholderText('Enter or paste image URL...');
+        await user.type(iconUrlInput, 'not a valid url');
+
+        expect(iconUrlInput).toHaveValue('not a valid url');
     });
 });

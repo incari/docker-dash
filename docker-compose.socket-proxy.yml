@@ -1,0 +1,42 @@
+# Lets another machine's Docker Dashboard read THIS machine over tcp://.
+#
+# Run it on the machine whose containers you want to see, then add the server
+# in the dashboard as tcp://this-machine:2375. Prefer ssh:// if you can: it
+# needs nothing here at all - see "Several servers, one dashboard" in the
+# README.
+#
+# There is no authentication. The proxy limits which parts of the Docker API
+# answer, not who asks, and POST=1 (needed to start and stop) also allows
+# creating containers - root-equivalent on this machine. Only publish the port
+# on a network you trust.
+#
+# The same proxy can also stand between a dashboard and ITS OWN daemon, so the
+# dashboard container never holds the socket: put both on an internal network,
+# drop the `ports:` below, and give the dashboard
+# DOCKER_HOST=tcp://docker-socket-proxy:2375 instead of the socket mount.
+services:
+  docker-socket-proxy:
+    image: tecnativa/docker-socket-proxy:latest
+    container_name: docker-socket-proxy
+    restart: unless-stopped
+    # The proxy writes nothing but its own runtime state: the haproxy config
+    # its entrypoint renders into /tmp, and its pid under /run.
+    read_only: true
+    tmpfs:
+      - /run
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      # Listing and inspecting containers - and, with POST, everything else
+      # under /containers, which is why ALLOW_START and friends add nothing.
+      - CONTAINERS=1
+      # Start, stop and restart. Leave it out for a read-only server.
+      - POST=1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      # Bound to one address on purpose. Replace it with this machine's
+      # Tailscale (100.x) or LAN address; "2375:2375" alone would answer on
+      # every interface, the internet included if this machine is exposed.
+      - "100.64.0.1:2375:2375"

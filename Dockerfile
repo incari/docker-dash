@@ -46,6 +46,10 @@ LABEL org.opencontainers.image.licenses=MIT
 
 WORKDIR /app
 
+# ssh:// servers are reached through the system ssh client, so ~/.ssh/config
+# and known_hosts work exactly as they do in a terminal.
+RUN apk add --no-cache openssh-client
+
 # Copy pre-built node_modules (with compiled native modules)
 COPY --from=backend-builder /app/node_modules ./node_modules
 COPY package*.json ./
@@ -57,10 +61,11 @@ COPY customIconMappings.json ./
 # Backend files: server.js, config/, routes/, database/, types/, utils/
 COPY --from=backend-builder /app/dist ./dist
 
-# Copy built frontend to the same dist/ folder (files don't conflict)
-# Frontend files: index.html, assets/, manifest.json, sw.js, etc.
-# The server at dist/server.js looks for frontend at path.join(__dirname, "../dist") = /app/dist
-COPY --from=frontend-builder /app/frontend/dist ./dist
+# Copy built frontend to its own folder. It used to share dist/ with the
+# backend, which meant express.static handed out the compiled server code at
+# GET /server.js. The server at dist/server.js looks for the frontend at
+# path.join(__dirname, "../public") = /app/public.
+COPY --from=frontend-builder /app/frontend/dist ./public
 
 # Create data directory
 RUN mkdir -p /app/data
@@ -73,8 +78,10 @@ ENV UPLOAD_DIR=/app/data/images
 
 EXPOSE 3000
 
-# Health check
+# Health check. Follows PORT, which installs with network_mode: host change,
+# and asks 127.0.0.1: busybox resolves localhost to ::1 first, and the server
+# only listens on IPv4.
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1
+  CMD wget --no-verbose --tries=1 --spider "http://127.0.0.1:${PORT:-3000}/health" || exit 1
 
 CMD ["node", "dist/server.js"]

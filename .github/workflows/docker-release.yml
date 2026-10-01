@@ -14,9 +14,8 @@ on:
   workflow_dispatch:
     inputs:
       source:
-        description: "Preview to promote: a digest (sha256:...) or a tag like edge / sha-abc1234"
+        description: "Candidate to promote: a tag like 0.4.0_rc, or a digest (sha256:...)"
         required: true
-        default: edge
       version:
         description: "Release version, without the leading v (e.g. 0.3.0)"
         required: true
@@ -30,7 +29,8 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  PREVIEW_IMAGE: ghcr.io/incari/docker-dash-preview
+  # Candidates live in the same package as releases, under their own rc tag.
+  PREVIEW_IMAGE: ghcr.io/incari/docker-dash
   DOCKERHUB_IMAGE: docker.io/incari/docker-dash
 
 jobs:
@@ -97,7 +97,7 @@ jobs:
           esac
 
           # Pin to the digest so the promotion is reproducible and auditable even
-          # if a moving tag like `edge` advances while this job runs.
+          # if the candidate tag is replaced while this job runs.
           DIGEST=$(docker buildx imagetools inspect "$REF" --format '{{ .Manifest.Digest }}')
           echo "ref=${PREVIEW_IMAGE}@${DIGEST}" >> "$GITHUB_OUTPUT"
           echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
@@ -110,7 +110,9 @@ jobs:
         run: |
           MINOR="${VERSION%.*}"
 
-          IMAGES="ghcr.io/incari/docker-dash ghcr.io/incari/docker-dashboard"
+          # docker-dash only: the old docker-dashboard package doubled every
+          # release into a second set of versions nobody pulls.
+          IMAGES="ghcr.io/incari/docker-dash"
           if [ -n "$DOCKERHUB_TOKEN" ]; then
             IMAGES="$IMAGES $DOCKERHUB_IMAGE"
           else

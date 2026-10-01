@@ -11,6 +11,8 @@ import type { Router as RouterType } from "express";
 import { db } from "../config/database.js";
 import { createBackup } from "../database/backup.js";
 import { LOCAL_HOST_ID } from "../hosts/registry.js";
+import { isValidUrl, normalizeUrl, isValidPort } from "../utils/validators.js";
+import { parseHostUrl } from "../hosts/hostUrl.js";
 
 const router: RouterType = Router();
 
@@ -28,13 +30,12 @@ interface ExportedSection {
 }
 
 /**
- * A server, without its token.
+ * A server, by its address.
  *
- * The token is deliberately left out: an export is a file the user downloads,
- * mails to themselves and keeps in a drive, and a secret that can stop
- * containers on another machine does not belong in it. Imported servers come
- * back disabled, and each one starts being read again as soon as its token is
- * entered.
+ * There is no secret to leave out: an ssh key lives in the container's ~/.ssh
+ * and a socket proxy has none. A server exported before the agent was retired
+ * still carries its http:// address, and comes back disabled until someone
+ * points it at the daemon instead.
  */
 interface ExportedHost {
   id: number;
@@ -67,6 +68,146 @@ interface ExportedShortcut {
   position: number;
   is_favorite: number;
   use_tailscale: number;
+}
+
+/**
+ * Check an export file the way the forms check their input.
+ *
+ * The create and edit routes refuse a shortcut whose URL is not http(s), and
+ * the hosts routes refuse an address that is not one either. An import that
+ * wrote rows straight into the database skipped both, and a shortcut's URL
+ * ends up in an <a href> - so a file with "javascript:" in it was a stored
+ * XSS waiting for a click. Everything is checked before anything is deleted,
+ * and the whole file is refused on the first problem: a half-imported file
+ * is harder to reason about than a rejected one.
+ */
+class ImportValidationError extends Error {}
+
+const MAX_TEXT = 500;
+const LUCIDE_NAME = /^[A-Za-z][A-Za-z0-9]*$/;
+const UPLOADED_ICON = /^uploads\/[A-Za-z0-9._-]+$/;
+
+function text(value: unknown, what: string, required = false): string | null {
+  if (value == null || value === "") {
+    if (required) throw new ImportValidationError(`${what} is required`);
+    return null;
+  }
+  if (typeof value !== "string") {
+    throw new ImportValidationError(`${what} must be text`);
+  }
+  if (value.length > MAX_TEXT) {
+    throw new ImportValidationError(`${what} is longer than ${MAX_TEXT} characters`);
+  }
+  return value;
+}
+
+function integer(value: unknown, what: string, fallback: number): number {
+  if (value == null) return fallback;
+  if (typeof value !== "number" || !Number.isInteger(value)) {
+    throw new ImportValidationError(`${what} must be a whole number`);
+  }
+  return value;
+}
+
+function flag(value: unknown, what: string): number {
+  if (value == null || value === 0 || value === false) return 0;
+  if (value === 1 || value === true) return 1;
+  throw new ImportValidationError(`${what} must be 0 or 1`);
+}
+
+function httpUrl(value: unknown, what: string): string | null {
+  const raw = text(value, what);
+  if (raw == null) return null;
+  if (!isValidUrl(raw)) {
+    throw new ImportValidationError(`${what} is not an http(s) URL: ${raw}`);
+  }
+  return normalizeUrl(raw);
+}
+
+/** A Lucide icon name, an upload on this server, or an http(s) image URL. */
+function icon(value: unknown): string | null {
+  const raw = text(value, "icon");
+  if (raw == null) return null;
+  if (LUCIDE_NAME.test(raw) || UPLOADED_ICON.test(raw)) return raw;
+  // Same rule as the shortcut form: only something that looks like a URL is
+  // tried as one, so a path or a scheme of its own cannot slip through.
+  if (/^https?:\/\//i.test(raw) && isValidUrl(raw)) return normalizeUrl(raw);
+  throw new ImportValidationError(`icon is not an icon name, an upload or an http(s) URL: ${raw}`);
+}
+
+function validateHost(value: unknown, index: number): ExportedHost {
+  if (!value || typeof value !== "object") {
+    throw new ImportValidationError(`hosts[${index}] is not an object`);
+  }
+  const h = value as Record<string, unknown>;
+  const type = h.type === "local" ? "local" : "docker";
+  // The address itself is judged at insert time: one that cannot be parsed is
+  // kept but disabled, because an export from before the agent was retired
+  // still carries http:// addresses and losing them would lose the server.
+  return {
+    id: integer(h.id, `hosts[${index}].id`, index),
+    name: text(h.name, `hosts[${index}].name`, true) as string,
+    type,
+    url: type === "local" ? null : text(h.url, `hosts[${index}].url`),
+    hostname: text(h.hostname, `hosts[${index}].hostname`),
+    color: text(h.color, `hosts[${index}].color`),
+    position: integer(h.position, `hosts[${index}].position`, 0),
+  };
+}
+
+function validateSection(value: unknown, index: number): ExportedSection {
+  if (!value || typeof value !== "object") {
+    throw new ImportValidationError(`sections[${index}] is not an object`);
+  }
+  const s = value as Record<string, unknown>;
+  return {
+    id: integer(s.id, `sections[${index}].id`, index),
+    name: text(s.name, `sections[${index}].name`, true) as string,
+    position: integer(s.position, `sections[${index}].position`, 0),
+    is_collapsed: flag(s.is_collapsed, `sections[${index}].is_collapsed`),
+  };
+}
+
+function validateShortcut(value: unknown, index: number): ExportedShortcut {
+  if (!value || typeof value !== "object") {
+    throw new ImportValidationError(`shortcuts[${index}] is not an object`);
+  }
+  const s = value as Record<string, unknown>;
+  const what = (field: string) => `shortcuts[${index}].${field}`;
+  const port = s.port == null ? null : s.port;
+  if (port != null && !(typeof port === "number" && isValidPort(port))) {
+    throw new ImportValidationError(`${what("port")} must be between 1 and 65535`);
+  }
+  return {
+    host_id: integer(s.host_id, what("host_id"), LOCAL_HOST_ID),
+    display_name: text(s.display_name, what("display_name"), true) as string,
+    description: text(s.description, what("description")),
+    icon: icon(s.icon),
+    icon_type: text(s.icon_type, what("icon_type")),
+    port: port as number | null,
+    url: httpUrl(s.url, what("url")),
+    container_name: text(s.container_name, what("container_name")),
+    container_match_name: text(s.container_match_name, what("container_match_name")),
+    compose_project: text(s.compose_project, what("compose_project")),
+    section_id:
+      s.section_id == null ? null : integer(s.section_id, what("section_id"), 0),
+    position: integer(s.position, what("position"), 0),
+    is_favorite: flag(s.is_favorite, what("is_favorite")),
+    use_tailscale: flag(s.use_tailscale, what("use_tailscale")),
+  };
+}
+
+function validateDismissal(value: unknown, index: number): ExportedDismissal {
+  if (!value || typeof value !== "object") {
+    throw new ImportValidationError(`dismissed_containers[${index}] is not an object`);
+  }
+  const d = value as Record<string, unknown>;
+  const what = (field: string) => `dismissed_containers[${index}].${field}`;
+  return {
+    host_id: integer(d.host_id, what("host_id"), LOCAL_HOST_ID),
+    container_match_name: text(d.container_match_name, what("container_match_name"), true) as string,
+    display_name: text(d.display_name, what("display_name")),
+  };
 }
 
 router.get("/api/export", (_req: Request, res: Response): void => {
@@ -138,6 +279,26 @@ router.post("/api/import", async (req: Request, res: Response): Promise<void> =>
     return;
   }
 
+  // Exports written before dismissals or servers were included carry none.
+  let importedHosts: ExportedHost[];
+  let sections: ExportedSection[];
+  let shortcuts: ExportedShortcut[];
+  let dismissals: ExportedDismissal[];
+  try {
+    importedHosts = (Array.isArray(payload.hosts) ? payload.hosts : []).map(validateHost);
+    sections = (payload.sections as unknown[]).map(validateSection);
+    shortcuts = (payload.shortcuts as unknown[]).map(validateShortcut);
+    dismissals = (
+      Array.isArray(payload.dismissed_containers) ? payload.dismissed_containers : []
+    ).map(validateDismissal);
+  } catch (err) {
+    if (err instanceof ImportValidationError) {
+      res.status(400).json({ error: `Export file rejected: ${err.message}` });
+      return;
+    }
+    throw err;
+  }
+
   try {
     // Import replaces everything, so keep a copy of what is being replaced.
     const backup = await createBackup("preimport");
@@ -148,7 +309,7 @@ router.post("/api/import", async (req: Request, res: Response): Promise<void> =>
     );
     const insertHost = db.prepare(
       `INSERT INTO hosts (name, type, url, hostname, color, position, enabled)
-       VALUES (@name, 'agent', @url, @hostname, @color, @position, 0)`,
+       VALUES (@name, 'docker', @url, @hostname, @color, @position, @enabled)`,
     );
     const insertSection = db.prepare(
       `INSERT INTO sections (name, position, is_collapsed)
@@ -189,9 +350,17 @@ router.post("/api/import", async (req: Request, res: Response): Promise<void> =>
             hostIdMap.set(host.id, LOCAL_HOST_ID);
             continue;
           }
+          let url = host.url ?? null;
+          let usable = true;
+          try {
+            url = parseHostUrl(url).url;
+          } catch {
+            usable = false;
+          }
           const result = insertHost.run({
             name: host.name,
-            url: host.url ?? null,
+            url,
+            enabled: usable ? 1 : 0,
             hostname: host.hostname ?? null,
             color: host.color ?? null,
             position: host.position ?? 0,
@@ -245,19 +414,7 @@ router.post("/api/import", async (req: Request, res: Response): Promise<void> =>
       },
     );
 
-    // Exports written before dismissals or servers were included carry none.
-    const importedHosts: ExportedHost[] = Array.isArray(payload.hosts)
-      ? payload.hosts
-      : [];
-
-    replaceAll(
-      importedHosts,
-      payload.sections,
-      payload.shortcuts,
-      Array.isArray(payload.dismissed_containers)
-        ? payload.dismissed_containers
-        : [],
-    );
+    replaceAll(importedHosts, sections, shortcuts, dismissals);
 
     const remoteHosts = importedHosts.filter((h) => h.type !== "local").length;
     const hostNote = remoteHosts
@@ -266,11 +423,11 @@ router.post("/api/import", async (req: Request, res: Response): Promise<void> =>
 
     res.json({
       success: true,
-      sections: payload.sections.length,
-      shortcuts: payload.shortcuts.length,
+      sections: sections.length,
+      shortcuts: shortcuts.length,
       hosts: remoteHosts,
       backup,
-      message: `Imported ${payload.shortcuts.length} shortcuts and ${payload.sections.length} sections${hostNote}`,
+      message: `Imported ${shortcuts.length} shortcuts and ${sections.length} sections${hostNote}`,
     });
   } catch (err) {
     console.error("[IMPORT] Failed:", err);

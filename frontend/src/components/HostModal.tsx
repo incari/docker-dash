@@ -28,8 +28,8 @@ const PRESET_COLORS = [
 /**
  * Add or edit a server.
  *
- * The key is write-only: it is never sent to the browser, so the field starts
- * empty when editing and an empty field means "keep the one already saved".
+ * A server is a Docker daemon address and nothing else: the credential for
+ * ssh:// is the key in docker-dash's ~/.ssh, and a socket proxy has none.
  */
 export const HostModal: React.FC<HostModalProps> = ({
   isOpen,
@@ -44,7 +44,6 @@ export const HostModal: React.FC<HostModalProps> = ({
 
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
-  const [apiKey, setApiKey] = useState("");
   const [hostname, setHostname] = useState("");
   const [color, setColor] = useState(PRESET_COLORS[0]);
   const [enabled, setEnabled] = useState(true);
@@ -56,7 +55,6 @@ export const HostModal: React.FC<HostModalProps> = ({
     if (!isOpen) return;
     setName(host?.name ?? "");
     setUrl(host?.url ?? "");
-    setApiKey("");
     setHostname(host?.hostname ?? "");
     setColor(host?.color ?? PRESET_COLORS[0]);
     setEnabled(host?.enabled ?? true);
@@ -68,21 +66,18 @@ export const HostModal: React.FC<HostModalProps> = ({
     setTestResult(null);
     try {
       setTestResult(
-        await hostsApi.test({
-          id: host?.id,
-          url: url.trim(),
-          api_key: apiKey.trim(),
-        }),
+        await hostsApi.test({ id: host?.id, url: url.trim() }),
       );
     } catch (err: any) {
       setTestResult({
         ok: false,
         error: err.response?.data?.error || t("hosts.testFailed"),
+        error_code: err.response?.data?.error_code,
       });
     } finally {
       setTesting(false);
     }
-  }, [host?.id, url, apiKey, t]);
+  }, [host?.id, url, t]);
 
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
@@ -94,8 +89,6 @@ export const HostModal: React.FC<HostModalProps> = ({
         const payload = {
           name: name.trim(),
           url: url.trim(),
-          // An empty key leaves the saved one in place.
-          ...(apiKey.trim() ? { api_key: apiKey.trim() } : {}),
           hostname: hostname.trim(),
           color,
           enabled,
@@ -111,13 +104,18 @@ export const HostModal: React.FC<HostModalProps> = ({
       } catch (err: any) {
         onError(
           t("hosts.saveErrorTitle"),
-          err.response?.data?.error || t("hosts.saveError"),
+          hostErrorMessage(
+            t,
+            err.response?.data?.error_code,
+            err.response?.data?.error,
+            "hosts.saveError",
+          ),
         );
       } finally {
         setSaving(false);
       }
     },
-    [name, url, apiKey, hostname, color, enabled, host, onSaved, onClose, onError, t],
+    [name, url, hostname, color, enabled, host, onSaved, onClose, onError, t],
   );
 
   const titleId = useId();
@@ -183,32 +181,11 @@ export const HostModal: React.FC<HostModalProps> = ({
                   type="text"
                   value={url}
                   onChange={(e) => setUrl(e.target.value)}
-                  placeholder="http://192.168.1.10:3080"
+                  placeholder="ssh://user@192.168.1.10"
                   className={inputClasses}
                 />
                 <p className="text-xs text-slate-500 mt-1">
                   {t("hosts.urlHint")}
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
-                  {t("hosts.apiKey")}
-                </label>
-                <input
-                  type="password"
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                  placeholder={
-                    host?.has_api_key
-                      ? t("hosts.apiKeyKeepPlaceholder")
-                      : t("hosts.apiKeyPlaceholder")
-                  }
-                  autoComplete="new-password"
-                  className={inputClasses}
-                />
-                <p className="text-xs text-slate-500 mt-1">
-                  {t("hosts.apiKeyHint")}
                 </p>
               </div>
 
@@ -278,7 +255,12 @@ export const HostModal: React.FC<HostModalProps> = ({
               )}
               <span>
                 {testResult.ok
-                  ? t("hosts.testOk", { count: testResult.containers ?? 0 })
+                  ? testResult.version
+                    ? t("hosts.testOkVersion", {
+                        count: testResult.containers ?? 0,
+                        version: testResult.version,
+                      })
+                    : t("hosts.testOk", { count: testResult.containers ?? 0 })
                   : hostErrorMessage(
                       t,
                       testResult.error_code,

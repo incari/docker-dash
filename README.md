@@ -93,80 +93,138 @@ You can configure the application using environment variables. Create a `.env` f
 | :-------------- | :--------------------------------------------- | :--------------------- |
 | `PORT`          | The port the backend server runs on.           | `3000`                 |
 | `DOCKER_SOCKET` | Path to the Docker socket.                     | `/var/run/docker.sock` |
+| `DOCKER_HOST`   | Reach Docker over TCP instead, e.g. through a socket proxy (`tcp://docker-socket-proxy:2375`). Wins over `DOCKER_SOCKET`. | _(unset)_ |
+| `TRUST_PROXY`   | Number of reverse proxies in front of the app, so rate limits see the real client address. | _(unset)_ |
 | `DB_PATH`       | Path to the SQLite database file.              | `./data/dashboard.db`  |
 | `UPLOAD_DIR`    | Path to store uploaded images.                 | `./data/images`        |
 | `NODE_ENV`      | Environment mode (`development`/`production`). | `production`           |
-| `HOST_NAME`       | Name this machine goes by in the dashboard and when a hub asks. | container/host name |
-| `API_KEY`         | Pins the key another dashboard must present to read this machine, and switches reading on. Leave unset to let the machine generate its own and switch it on from the dashboard. | _(unset)_ |
-| `HOST_TIMEOUT_MS` | Hub only: how long to wait for a remote server before giving up on it. | `6000` |
-| `HOST_CACHE_MS`   | Hub only: how long one read across all servers is reused. | `2000` |
-| `HOST_DEADLINE_MS`  | Hub only: how long a read of all servers may take before answering with what has arrived. | `2000` |
-| `AUTO_SYNC_INTERVAL_MS` | Hub only: the least time between two real auto-syncs. Cleared whenever a server is added, removed or re-pointed. | `60000` |
+| `HOST_NAME`       | Name this machine's own Docker goes by in the dashboard. | container/host name |
+| `HOST_TIMEOUT_MS` | How long to wait for a remote server before giving up on it. | `6000` |
+| `HOST_CACHE_MS`   | How long one read across all servers is reused. | `2000` |
+| `HOST_DEADLINE_MS`  | How long a read of all servers may take before answering with what has arrived. | `2000` |
+| `AUTO_SYNC_INTERVAL_MS` | The least time between two real auto-syncs. Cleared whenever a server is added, removed or re-pointed. | `60000` |
 | `SHUTDOWN_GRACE_MS` | How long in-flight requests get after `SIGTERM` before the process exits anyway. | `8000` |
+| `MCP_TOKEN` | Turns on the `/mcp` endpoint for LLM agents and is the bearer token they must send. Unset, the endpoint is off. See [Letting an agent run the dashboard](#letting-an-agent-run-the-dashboard-mcp). | unset |
 
 ## Several servers, one dashboard
 
-You can run Docker Dashboard on every machine you own and still open a single
-page that lists, searches and controls all of their containers.
-
-One installation is the **hub** - the dashboard you actually open. The others
-just allow the hub to read them. No terminal and no secret to invent: each
-installation generates its own API key and shows it to you.
+One dashboard can list, search and control the containers of every machine you
+own. Nothing of docker-dash is installed on the others: the dashboard talks to
+each machine's Docker API directly, the same way `docker -H` does.
 
 > This is multi-**host**, not multi-tenancy. One dashboard reads many machines;
 > it does not give different people different views of it. There are no user
 > accounts anywhere in Docker Dashboard - see [Security](#security) below.
 
-### 1. On the machine you want to read
+There are two ways to reach a machine:
 
-Install Docker Dashboard as usual (see [docker-compose.agent.yml](docker-compose.agent.yml)),
-open its dashboard, and in **Shortcuts** → **Servers** find the card for that
-machine:
+| Address | What the other machine needs | When |
+| :--- | :--- | :--- |
+| `ssh://user@machine` | Its usual `sshd`, and a user that can run `docker` | **Recommended.** The ssh key is the credential |
+| `tcp://machine:2375` | A [socket proxy](docker-compose.socket-proxy.yml) | Machines already on a private network (Tailscale, WireGuard, an isolated VLAN) |
 
-- Tick **let another dashboard read this server**.
-- Its **API key** appears, with buttons to reveal, copy and replace it. Copy it.
+### The check that settles it
 
-Until you tick that box nothing is exposed: `/api/agent` answers 404 and the
-installation is just a dashboard for its own machine, as before.
+Whatever the dashboard can do, this command can do too, because it is exactly
+what the dashboard runs. From the machine the dashboard runs on:
 
-> Prefer to pin the key from your compose file or a secrets manager? Set
-> `API_KEY` there instead. That switches reading on by itself, and the key can
-> then only be changed there.
+```bash
+ssh user@machine docker version
+```
 
-### 2. On the hub
+If it prints a client and a server version, `ssh://user@machine` will work.
 
-1. Open the hub and go to **Shortcuts**.
-2. In the **Servers** panel, click **Add server**.
-3. Fill in a **name** (`NAS`), its **address** (`http://192.168.1.10:3080`, a
-   Tailscale name, anything the hub can reach) and paste the **API key** you
-   copied.
-4. **Test** checks the address and the key before you save, so a typo is caught
-   while the form is still open.
-5. **Create**. That server's containers appear below, grouped under its name.
+| What you see | What is missing |
+| :--- | :--- |
+| `Permission denied (publickey)` | The key is not authorised there. Run `ssh-copy-id` again |
+| `command not found: docker` | `docker` is not on that user's `PATH` |
+| `permission denied ... docker.sock` | The user is not in the `docker` group on that machine |
+| `Host key verification failed` | The machine is not in `known_hosts` yet |
 
-Each server card then reports whether it answered and how many containers it
-has, so an unreachable machine says so instead of silently showing nothing.
+The same messages appear on the server's card in the dashboard, translated.
+
+### Over ssh (recommended)
+
+The dashboard hands each connection to the system `ssh` client, so
+`known_hosts` and `~/.ssh/config` (host aliases, ports, `IdentityFile`) work
+exactly as they do in your terminal. It never answers a prompt: an unknown host
+key or a key with a passphrase fails instead of hanging.
+
+1. **Give the dashboard a key of its own** *(once)*. A folder just for it keeps
+   your personal keys out of the container, and is owned by root, which is who
+   the dashboard runs as:
+
+   ```bash
+   sudo mkdir -p /opt/docker-dash/ssh
+   sudo ssh-keygen -t ed25519 -N "" -C docker-dash -f /opt/docker-dash/ssh/id_ed25519
+   ```
+
+2. **Authorise it on every machine you want to add** *(per machine)*:
+
+   ```bash
+   sudo ssh-copy-id -i /opt/docker-dash/ssh/id_ed25519.pub user@machine
+   ```
+
+3. **Connect once by hand** *(per machine)*, so the machine lands in
+   `known_hosts`, and run the check while you are there:
+
+   ```bash
+   sudo ssh -i /opt/docker-dash/ssh/id_ed25519 -o UserKnownHostsFile=/opt/docker-dash/ssh/known_hosts user@machine docker version
+   ```
+
+   If it complains about the socket, add that user to the `docker` group on
+   the remote machine (`sudo usermod -aG docker user`, then log in again).
+
+4. **Mount the folder** into the dashboard, read-only - see
+   [docker-compose.yml](docker-compose.yml):
+
+   ```yaml
+   volumes:
+     - /opt/docker-dash/ssh:/root/.ssh:ro
+   ```
+
+5. **Add the server.** In **Shortcuts** → **Servers**, click **Add server**,
+   give it a name and the address `ssh://user@machine`. **Test** checks it
+   before you save.
+
+> Mounting your own `~/.ssh` instead works too, with one catch: ssh refuses a
+> `config` file that is not owned by the user reading it, and inside the
+> container that user is root.
+
+### Through a socket proxy
+
+On the **other** machine, run
+[docker-compose.socket-proxy.yml](docker-compose.socket-proxy.yml), then check
+it from the dashboard's machine:
+
+```bash
+docker -H tcp://machine:2375 version
+```
+
+and add the server as `tcp://machine:2375`.
+
+> **This carries no authentication.** The proxy limits *which* parts of the
+> Docker API are reachable, not *who* reaches them, and starting and stopping
+> containers needs `CONTAINERS=1` and `POST=1` - which also allows creating
+> one, and that is as good as root on that machine. Publish the port only on a
+> network you trust, ideally bound to its Tailscale or WireGuard address, never
+> on the internet. When in doubt, use ssh.
 
 ### Which address to use
 
-The address decides two separate things, which is why it is worth a minute:
-whether the hub can reach the server at all, and where that server's port-based
-shortcuts point. A shortcut for a container on the NAS opens the hostname taken
-from this address, not the machine serving the dashboard.
-
-Two things worth knowing before you pick one:
+The address decides two separate things: whether the dashboard can reach the
+server at all, and where that server's port-based shortcuts point. A shortcut
+for a container on the NAS opens the hostname taken from this address (or the
+**Link hostname** you set on the server), not the machine serving the
+dashboard.
 
 - **A LAN address is not always reachable, even on the same network.** Machines
   on different subnets or VLANs cannot see each other's LAN addresses, and the
   attempt does not fail - it hangs until it times out.
-- **A mesh address works from anywhere.** With Tailscale or WireGuard, the
+- **A mesh address works from anywhere.** With Tailscale or WireGuard the
   address keeps working when you open the dashboard away from home, and so do
-  the links it builds. A LAN address does not.
-
-If the machines are on one flat network and you never open the dashboard from
-outside, the LAN address is fine and marginally faster. Otherwise use the mesh
-address. **Test** in the add-server form tells you which of the two works
-before you commit to it.
+  the links it builds. Inside the container, MagicDNS names may not resolve;
+  the `100.x` address always does.
 
 ### When a server is off
 
@@ -188,26 +246,30 @@ network needs it.
 
 ### What lives where
 
-- The hub holds all the shortcuts, sections and settings in its own database.
-  Every shortcut records which server it belongs to.
-- The other installations keep serving their own local dashboard on their own
-  port; the hub never writes to them. It only lists containers and starts,
-  stops and restarts them.
+- This dashboard holds all the shortcuts, sections and settings in its own
+  database. Every shortcut records which server it belongs to.
+- The other machines only run Docker. The dashboard lists their containers and
+  starts, stops and restarts them; it never writes anything there.
 - Containers are grouped by server in the Shortcuts list, and search covers
   every server at once - typing a server's name narrows the list to that
   machine. Favourites stay ungrouped, with the server named on each card.
-- Removing a server from the hub deletes its shortcuts on the hub. The server
-  itself and its containers are untouched.
-- Export and import carry the servers and each shortcut's server. Keys are
-  never written to an export, so restored servers arrive switched off until you
-  enter their key.
+- Removing a server deletes its shortcuts here. The server itself and its
+  containers are untouched.
+- Export and import carry the servers, by address, and each shortcut's server.
+  There is no secret to leave out: the ssh key lives in the mounted folder.
 
 ### Upgrading an installation that already has shortcuts
 
 Nothing to do beyond pulling the new image. On first start the database is
-migrated and every existing shortcut is filed under the local server, so the
-dashboard looks exactly as it did before - the servers panel simply appears,
-with one entry.
+migrated: every existing shortcut stays filed under its server, so the
+dashboard looks exactly as it did before.
+
+If you had servers added through the old agent (an `http://` address and an
+API key), they are kept - with their shortcuts, names and colours - but
+switched off, because the new address cannot be worked out from the old one.
+Edit each one, give it its `ssh://` or `tcp://` address, and switch it back on.
+The agent's keys are deleted, and the docker-dash on those machines can be
+removed.
 
 A copy of the database as it was is written next to it before anything is
 rewritten (`dashboard.db.backup-premigration-*`), because migrations have no
@@ -216,21 +278,33 @@ undo. If you ever need to go back, stop the container, put that file back as
 
 ### Security
 
-The API key is the only thing standing between a caller and the ability to stop
-containers on that machine, so:
+**This dashboard has no login.** Anyone who can open the page can start and
+stop containers on every server it reads. Run it on a private network, or
+behind a reverse proxy that authenticates (Authelia, Caddy basic auth,
+Tailscale Serve, ...). That is the intended deployment, not an extra.
 
-- Prefer a private network for hub-to-server traffic - a LAN, a VPN or
-  Tailscale - or put the server behind HTTPS. The key is sent as a bearer
-  header, so plain HTTP over the open internet would expose it.
-- If a key does leak, **Replace key** on that machine's own card issues a new
-  one and locks out whoever held the old one.
-- A machine's own key is shown in its own dashboard on purpose: that dashboard
-  has no login and can already start and stop those containers, so displaying
-  the key there gives away nothing new. It is never shown for a *remote*
-  server, and never leaves the hub.
-- The hub's own dashboard has no login either. Keep it on a private network, or
-  behind a reverse proxy that authenticates, exactly as with a single-server
-  install.
+What the app does on its own side:
+
+- No cross-origin access. The API sends no CORS headers and the page cannot be
+  framed, so a web page open in another tab cannot drive the dashboard.
+- A content-security-policy that allows no inline scripts, so nothing that
+  comes in through a URL, an icon or an import file can run as code.
+- Uploaded icons are checked by extension, declared type and the bytes
+  themselves, stored under generated names, and served with `nosniff` and a
+  sandboxing policy. SVG is not accepted.
+- Import files are validated field by field before anything is replaced.
+- Rate limits on uploads, connection tests, imports and `/mcp`.
+
+What is yours to protect:
+
+- The Docker socket. Whoever holds it is root on the host, and the `:ro` on the
+  bind mount does not change that. The dashboard only lists, starts, stops and
+  restarts containers, so it can run behind a socket proxy that allows only
+  those calls: point `DOCKER_HOST` at `tcp://docker-socket-proxy:2375` on a
+  network nothing else is on, with `CONTAINERS=1` and `POST=1` on the proxy.
+- An ssh key that can reach a user in the `docker` group, or a socket proxy
+  with `POST=1`, can do anything on that machine. Keep the key folder
+  read-only and readable only by root, and the proxy port off the internet.
 
 ## Running Locally
 

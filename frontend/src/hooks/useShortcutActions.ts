@@ -3,6 +3,7 @@ import { shortcutsApi } from "../services/api";
 import type { DockerContainer, Shortcut } from "../types";
 import type { OptimisticUpdate } from "./useSWRData";
 import { getContainerIcon } from "../utils/dockerIconVault";
+import { selectBestContainerPort } from "../utils/containerPorts";
 
 interface ShortcutActionsOptions {
   onRefresh: (showLoading?: boolean) => void;
@@ -66,8 +67,9 @@ export function useShortcutActions(
 
   const handleQuickAdd = useCallback(
     async (container: DockerContainer) => {
-      const ports = container.ports.map((p) => p.public).filter(Boolean);
-      const port = ports[0] || "";
+      // Best published port, not ports[0]: Docker reports ports in arbitrary
+      // order and the first entry is often a peer/data port, not the web UI.
+      const port = selectBestContainerPort(container.ports) ?? "";
 
       // Use container base name for stable matching (removes instance number suffix)
       const containerBaseName = getContainerBaseName(container.name);
@@ -119,8 +121,8 @@ export function useShortcutActions(
 
   const handleQuickAddAsFavorite = useCallback(
     async (container: DockerContainer) => {
-      const ports = container.ports.map((p) => p.public).filter(Boolean);
-      const port = ports[0] || "";
+      // Best published port, not ports[0]: see handleQuickAdd above.
+      const port = selectBestContainerPort(container.ports) ?? "";
 
       // Use container base name for stable matching (removes instance number suffix)
       const containerBaseName = getContainerBaseName(container.name);

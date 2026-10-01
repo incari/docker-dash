@@ -1,17 +1,25 @@
-# Runs the private preview image, for trying a build before it is released.
+# Runs a release candidate next to the stable instance, for trying a build
+# before it is released.
 #
-# The preview package is private, so the host must authenticate first:
-#
-#   echo <GITHUB_PAT_WITH_read:packages> | docker login ghcr.io -u incari --password-stdin
-#
-# Pinned by digest on purpose: the `edge` tag moves with every push to main, so
-# pinning is what makes "the build I tested" and "the build that is running" the
-# same thing. Replace the digest to move to a newer preview.
+# Release candidates are published to the same package as releases, under their
+# own tag (e.g. 0.4.0_rc), so no login is needed. Pin a digest instead
+# (ghcr.io/incari/docker-dash@sha256:...) when "the build I tested" and "the
+# build that is running" must stay the same thing.
 services:
   docker-dashboard-preview:
-    image: ghcr.io/incari/docker-dash-preview@sha256:8333f5dff4d2c23213b2140378ec0147c38d15a38224bdf71315aea43a39202e
+    image: ghcr.io/incari/docker-dash:0.4.0_rc
     container_name: docker-dashboard-preview
     restart: unless-stopped
+
+    # The dashboard writes only to /app/data. Everything else is sealed, and
+    # the process cannot gain capabilities it did not start with.
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
 
     # A different host port from the stable instance, so both can run side by side.
     ports:

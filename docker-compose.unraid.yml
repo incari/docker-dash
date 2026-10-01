@@ -8,6 +8,16 @@ services:
     image: ghcr.io/incari/docker-dash:latest
     container_name: docker-dashboard
     restart: unless-stopped
+
+    # The dashboard writes only to /app/data. Everything else is sealed, and
+    # the process cannot gain capabilities it did not start with.
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     ports:
       - "3080:3000"
     volumes:

@@ -15,25 +15,27 @@
     "dev": "concurrently \"pnpm dev:backend\" \"pnpm dev:frontend\"",
     "docker:build": "docker buildx build --load -t docker-dash:local .",
     "docker:run": "docker run --rm --name docker-dash-local -p 3080:3000 -v /var/run/docker.sock:/var/run/docker.sock:ro -v docker-dash-local-data:/app/data docker-dash:local",
-    "docker:push:preview": "docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/incari/docker-dash-preview:edge --push .",
+    "docker:push:rc": "docker buildx build --platform linux/amd64,linux/arm64 --provenance=false --sbom=false -t ghcr.io/incari/docker-dash:${TAG:?set TAG, e.g. TAG=0.4.0_rc} --push .",
     "docker:login": "gh auth token | docker login ghcr.io -u incari --password-stdin",
     "release:patch": "npm version patch && git push && git push --tags",
     "release:minor": "npm version minor && git push && git push --tags",
     "release:major": "npm version major && git push && git push --tags"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.31.0",
     "better-sqlite3": "^9.4.3",
-    "cors": "^2.8.5",
     "dockerode": "^4.0.2",
-    "express": "^4.18.2",
-    "multer": "^2.0.2"
+    "express": "^4.22.3",
+    "express-rate-limit": "^8.7.0",
+    "helmet": "^8.3.0",
+    "multer": "^2.4.0",
+    "zod": "^4.6.5"
   },
   "engines": {
     "node": ">=18.0.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
-    "@types/cors": "^2.8.19",
     "@types/dockerode": "^4.0.1",
     "@types/express": "^5.0.6",
     "@types/multer": "^2.0.0",

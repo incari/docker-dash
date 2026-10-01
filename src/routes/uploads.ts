@@ -6,7 +6,12 @@ import { Router, Request, Response } from "express";
 import type { Router as RouterType } from "express";
 import fs from "fs";
 import path from "path";
-import { uploadDir } from "../config/multer.js";
+import {
+  upload,
+  uploadDir,
+  rejectNonImageUpload,
+  SERVED_UPLOAD_EXTENSIONS,
+} from "../config/multer.js";
 import { db } from "../config/database.js";
 
 const router: RouterType = Router();
@@ -16,6 +21,27 @@ interface UploadedFile {
   url: string;
   uploadedAt: Date;
 }
+
+// Store an image, for use as a shortcut icon. The file's bytes are checked
+// after the write; see config/multer.ts for why the declared type is not enough.
+router.post(
+  "/api/upload",
+  upload.single("image"),
+  rejectNonImageUpload,
+  (req: Request, res: Response): void => {
+    if (!req.file) {
+      res.status(400).json({ error: "No image file provided" });
+      return;
+    }
+
+    const imageUrl = `uploads/${req.file.filename}`;
+    res.json({
+      success: true,
+      url: imageUrl,
+      filename: req.file.filename,
+    });
+  },
+);
 
 // Get list of uploaded images
 router.get("/api/uploads", (_req: Request, res: Response): void => {
@@ -29,15 +55,7 @@ router.get("/api/uploads", (_req: Request, res: Response): void => {
     const imageFiles: UploadedFile[] = files
       .filter((file) => {
         const ext = path.extname(file).toLowerCase();
-        return [
-          ".png",
-          ".jpg",
-          ".jpeg",
-          ".gif",
-          ".svg",
-          ".webp",
-          ".ico",
-        ].includes(ext);
+        return SERVED_UPLOAD_EXTENSIONS.includes(ext);
       })
       .map((file) => ({
         filename: file,

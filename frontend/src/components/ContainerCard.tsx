@@ -8,6 +8,7 @@ import {
   Settings,
 } from "../constants/icons";
 import type { ContainerCardProps } from "../types";
+import { selectBestContainerPort } from "../utils/containerPorts";
 
 /**
  * Container card component displaying a Docker container
@@ -33,6 +34,13 @@ export const ContainerCard: React.FC<ContainerCardProps> = ({
     [container.ports],
   );
 
+  // The port the launch button opens: the best published port, not ports[0].
+  // Docker reports ports in arbitrary order (e.g. a peer port before the UI).
+  const launchPort = useMemo(
+    () => selectBestContainerPort(container.ports),
+    [container.ports],
+  );
+
   const portsDisplay = useMemo(
     () =>
       ports.length === 0 ? "No ports" : ports.map((p) => `:${p}`).join(", "),
@@ -55,10 +63,10 @@ export const ContainerCard: React.FC<ContainerCardProps> = ({
   );
 
   const handleLaunch = useCallback(() => {
-    if (ports.length > 0) {
-      window.open(`http://${window.location.hostname}:${ports[0]}`, "_blank");
+    if (launchPort) {
+      window.open(`http://${window.location.hostname}:${launchPort}`, "_blank");
     }
-  }, [ports]);
+  }, [launchPort]);
 
   const handleStarClick = useCallback(
     (e: React.MouseEvent) => {

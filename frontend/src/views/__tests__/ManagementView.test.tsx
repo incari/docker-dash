@@ -31,17 +31,16 @@ function container(
   };
 }
 
-function host(id: number, name: string, type: Host["type"] = "agent"): Host {
+function host(id: number, name: string, type: Host["type"] = "docker"): Host {
   return {
     id,
     name,
     type,
-    url: type === "local" ? null : `http://${name}:3080`,
+    url: type === "local" ? null : `ssh://me@${name}`,
     hostname: null,
     color: null,
     position: id,
     enabled: true,
-    has_api_key: type === "agent",
     status: {
       online: true,
       checked_at: "2026-09-19T00:00:00.000Z",

@@ -9,7 +9,7 @@
 import { Router, Request, Response } from "express";
 import type { Router as RouterType } from "express";
 import { getTailscaleIP } from "../utils/tailscale.js";
-import { isContainerAction } from "../hosts/localDocker.js";
+import { isContainerAction } from "../hosts/dockerOps.js";
 import { getHost } from "../hosts/registry.js";
 import {
   HostRequestError,

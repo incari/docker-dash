@@ -175,7 +175,7 @@ export const containersApi = {
 export interface HostTestResult {
   ok: boolean;
   containers?: number;
-  name?: string;
+  /** The remote Docker's version, when it says. */
   version?: string;
   error?: string;
   error_code?: string;
@@ -202,23 +202,11 @@ export const hostsApi = {
   },
 
   /**
-   * Check an address and key before saving them, so a typo is caught while the
-   * form is still open. An omitted key means "use the saved one".
+   * Check an address before saving it, so a typo is caught while the form is
+   * still open. `id` alone re-tests the saved address.
    */
-  test: async (data: {
-    id?: number;
-    url?: string;
-    api_key?: string;
-  }): Promise<HostTestResult> => {
+  test: async (data: { id?: number; url?: string }): Promise<HostTestResult> => {
     const response = await axios.post(API_ENDPOINTS.HOSTS_TEST, data);
-    return response.data;
-  },
-
-  /** Let a hub read this installation, or stop it. */
-  setAgentEnabled: async (id: number, enabled: boolean): Promise<Host> => {
-    const response = await axios.put(API_ENDPOINTS.HOST_BY_ID(id), {
-      agent_enabled: enabled,
-    });
     return response.data;
   },
 
@@ -229,12 +217,6 @@ export const hostsApi = {
    */
   retry: async (id: number): Promise<Host> => {
     const response = await axios.post(API_ENDPOINTS.HOST_RETRY(id));
-    return response.data;
-  },
-
-  /** Replace this machine's key, locking out whoever held the old one. */
-  rotateApiKey: async (id: number): Promise<Host> => {
-    const response = await axios.post(API_ENDPOINTS.HOST_API_KEY(id));
     return response.data;
   },
 };

@@ -180,18 +180,23 @@ describe("upgrading from a database without servers", () => {
     ]);
   });
 
-  it("keeps the user's settings and adds the new columns", () => {
+  it("keeps the user's settings", () => {
     const settings = db
-      .prepare("SELECT theme_primary, api_key, agent_enabled FROM settings WHERE id = 1")
-      .get() as {
-      theme_primary: string;
-      api_key: string | null;
-      agent_enabled: number;
-    };
+      .prepare("SELECT theme_primary FROM settings WHERE id = 1")
+      .get() as { theme_primary: string };
 
     expect(settings.theme_primary).toBe("#ff0000");
-    // Not yet generated: that happens at boot, after the migrations.
-    expect(settings.agent_enabled).toBe(0);
+  });
+
+  it("ends without the retired agent's columns", () => {
+    const columns = (table: string) =>
+      (db.pragma(`table_info(${table})`) as Array<{ name: string }>).map(
+        (c) => c.name,
+      );
+
+    expect(columns("settings")).not.toContain("api_key");
+    expect(columns("settings")).not.toContain("agent_enabled");
+    expect(columns("hosts")).not.toContain("api_key");
   });
 
   it("leaves a backup of the database as it was before the upgrade", () => {
