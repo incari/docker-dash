@@ -10,4 +10,5 @@ export { default as sectionsRouter } from './sections.js';
 export { default as shortcutsRouter } from './shortcuts.js';
 export { default as settingsRouter } from './settings.js';
 export { default as dataRouter } from './data.js';
+export { default as mcpRouter } from './mcp.js';
 

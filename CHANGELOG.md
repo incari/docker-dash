@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+#### Agents can run the dashboard (MCP)
+
+- **MCP endpoint** at `/mcp`, so Claude, Cursor or any MCP client can manage
+  shortcuts, set the port that is really a container's web UI, group tiles into
+  sections and order them, find and fix missing or broken icons (including
+  uploading an image), add servers and start, stop or restart containers.
+  Creating or removing containers is deliberately not offered.
+- Off unless `MCP_TOKEN` is set; every request must carry it as a bearer token.
+
 #### Several servers, one dashboard
 
 - **Multi-server support**: one dashboard reads the Docker daemon of every

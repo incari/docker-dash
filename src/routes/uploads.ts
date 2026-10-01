@@ -6,7 +6,7 @@ import { Router, Request, Response } from "express";
 import type { Router as RouterType } from "express";
 import fs from "fs";
 import path from "path";
-import { uploadDir } from "../config/multer.js";
+import { upload, uploadDir } from "../config/multer.js";
 import { db } from "../config/database.js";
 
 const router: RouterType = Router();
@@ -16,6 +16,25 @@ interface UploadedFile {
   url: string;
   uploadedAt: Date;
 }
+
+// Store an image, for use as a shortcut icon
+router.post(
+  "/api/upload",
+  upload.single("image"),
+  (req: Request, res: Response): void => {
+    if (!req.file) {
+      res.status(400).json({ error: "No image file provided" });
+      return;
+    }
+
+    const imageUrl = `uploads/${req.file.filename}`;
+    res.json({
+      success: true,
+      url: imageUrl,
+      filename: req.file.filename,
+    });
+  },
+);
 
 // Get list of uploaded images
 router.get("/api/uploads", (_req: Request, res: Response): void => {

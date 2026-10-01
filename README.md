@@ -102,6 +102,7 @@ You can configure the application using environment variables. Create a `.env` f
 | `HOST_DEADLINE_MS`  | How long a read of all servers may take before answering with what has arrived. | `2000` |
 | `AUTO_SYNC_INTERVAL_MS` | The least time between two real auto-syncs. Cleared whenever a server is added, removed or re-pointed. | `60000` |
 | `SHUTDOWN_GRACE_MS` | How long in-flight requests get after `SIGTERM` before the process exits anyway. | `8000` |
+| `MCP_TOKEN` | Turns on the `/mcp` endpoint for LLM agents and is the bearer token they must send. Unset, the endpoint is off. See [Letting an agent run the dashboard](#letting-an-agent-run-the-dashboard-mcp). | unset |
 
 ## Several servers, one dashboard
 
@@ -282,6 +283,102 @@ undo. If you ever need to go back, stop the container, put that file back as
   reverse proxy that authenticates, exactly as with a single-server install -
   anyone who can open it can start and stop containers on every server it
   reads.
+
+## Letting an agent run the dashboard (MCP)
+
+docker-dash serves an [MCP](https://modelcontextprotocol.io) endpoint at
+`/mcp`, so Claude, Cursor or any other MCP client can do what you would do in
+the UI: tidy shortcuts, set the port that is really a container's web UI, group
+tiles into sections, fill in missing icons, add servers and start, stop or
+restart containers.
+
+It cannot create, remove or reconfigure containers. It reaches exactly what the
+dashboard reaches.
+
+### Turning it on
+
+Pick a long random token and give it to the container as `MCP_TOKEN`:
+
+```bash
+openssl rand -hex 32
+```
+
+```yaml
+    environment:
+      - MCP_TOKEN=paste-the-token-here
+```
+
+Without `MCP_TOKEN` the endpoint answers 404. With it, every request must send
+`Authorization: Bearer <token>`.
+
+### Connecting a client
+
+Claude Code:
+
+```bash
+claude mcp add --transport http docker-dash http://your-server:3080/mcp --header "Authorization: Bearer paste-the-token-here"
+```
+
+Cursor, VS Code and other clients that take a JSON config:
+
+```json
+{
+  "mcpServers": {
+    "docker-dash": {
+      "url": "http://your-server:3080/mcp",
+      "headers": { "Authorization": "Bearer paste-the-token-here" }
+    }
+  }
+}
+```
+
+Claude Desktop, and clients that only speak stdio, through
+[`mcp-remote`](https://www.npmjs.com/package/mcp-remote):
+
+```json
+{
+  "mcpServers": {
+    "docker-dash": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "http://your-server:3080/mcp",
+               "--allow-http", "--header", "Authorization:Bearer paste-the-token-here"]
+    }
+  }
+}
+```
+
+### What it offers
+
+| Tool | Does |
+| :--- | :--- |
+| `get_dashboard` | Sections with their shortcuts, ungrouped shortcuts, servers and their reachability, display settings |
+| `list_containers` | Containers on every server, each published port (best web UI guess first) and which shortcuts point at it |
+| `create_shortcut`, `update_shortcut`, `delete_shortcut` | Tiles: name, description, port or URL, icon, container link, section, favourite, Tailscale |
+| `sync_containers` | Create shortcuts for containers that have none, as the dashboard does on load |
+| `create_section`, `update_section`, `delete_section`, `reorder_sections`, `arrange_shortcuts` | Groups, and the order of tiles inside them |
+| `find_missing_icons`, `suggest_icon`, `upload_icon` | Find tiles with a generic or broken icon, look one up in [dashboard-icons](https://github.com/homarr-labs/dashboard-icons), or store an image on the dashboard |
+| `container_action` | Start, stop or restart |
+| `test_server`, `add_server`, `update_server`, `remove_server` | The servers the dashboard reads |
+| `update_settings` | Theme colours and card layout |
+
+Every tool goes through the same routes as the browser, so the same rules hold:
+a deleted container shortcut stays deleted, and an icon you uploaded or chose is
+not replaced by a bulk fix unless it is broken.
+
+Things to ask for:
+
+- "Sync my containers, put each compose project in its own section and make
+  sure every tile opens the web UI and not the database port."
+- "Find tiles without a proper icon and fix them."
+- "Restart everything in the media section."
+
+### Security
+
+The token gives an agent everything the UI gives a person, including
+starting and stopping containers on every server. Treat it like a password,
+and serve the dashboard over HTTPS (a reverse proxy) if the agent connects from
+outside your network. The token protects `/mcp` only: the rest of the API is
+still as open as described under [Security](#security).
 
 ## Running Locally
 

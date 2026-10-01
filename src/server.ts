@@ -13,7 +13,7 @@ import { fileURLToPath } from "url";
 
 // Configuration
 import { PORT, initializeSchema } from "./config/index.js";
-import { uploadDir, upload } from "./config/multer.js";
+import { uploadDir } from "./config/multer.js";
 
 // Database
 import { runMigrations } from "./database/index.js";
@@ -34,6 +34,7 @@ import {
   shortcutsRouter,
   settingsRouter,
   dataRouter,
+  mcpRouter,
 } from "./routes/index.js";
 
 // ES module equivalents of __dirname and __filename
@@ -66,21 +67,6 @@ await runMigrations();
 // the local server to exist before any shortcut can point at it.
 ensureLocalHost();
 
-// Upload endpoint (needs upload middleware)
-app.post("/api/upload", upload.single("image"), (req, res): void => {
-  if (!req.file) {
-    res.status(400).json({ error: "No image file provided" });
-    return;
-  }
-
-  const imageUrl = `uploads/${req.file.filename}`;
-  res.json({
-    success: true,
-    url: imageUrl,
-    filename: req.file.filename,
-  });
-});
-
 // Mount route modules
 // Health first: whatever else is wrong, something has to be able to answer.
 app.use(healthRouter);
@@ -91,6 +77,8 @@ app.use(sectionsRouter);
 app.use(shortcutsRouter);
 app.use(settingsRouter);
 app.use(dataRouter);
+// For LLM agents; answers nothing unless MCP_TOKEN is set.
+app.use(mcpRouter);
 
 // Catch-all route for SPA (React Router support)
 app.get("*", (req, res): void => {
