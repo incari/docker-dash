@@ -232,6 +232,17 @@ export const hostsApi = {
     return response.data;
   },
 
+  /**
+   * This machine's own key, for copying into a hub. Fetched when the person
+   * asks to see or copy it, not with every host listing.
+   */
+  getApiKey: async (id: number): Promise<string> => {
+    const response = await axios.get<{ api_key: string }>(
+      API_ENDPOINTS.HOST_API_KEY(id),
+    );
+    return response.data.api_key;
+  },
+
   /** Replace this machine's key, locking out whoever held the old one. */
   rotateApiKey: async (id: number): Promise<Host> => {
     const response = await axios.post(API_ENDPOINTS.HOST_API_KEY(id));

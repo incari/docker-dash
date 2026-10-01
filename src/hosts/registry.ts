@@ -166,7 +166,13 @@ export function resolveHostHostname(host: HostRow): string | null {
   }
 }
 
-/** Strips the key and attaches the live status, ready to send to the browser. */
+/** Whether a hub may read this machine, without the key it would present. */
+function agentSummary(): { enabled: boolean; managed_by_env: boolean } {
+  const { enabled, managed_by_env } = getAgentAccess();
+  return { enabled, managed_by_env };
+}
+
+/** Strips the keys and attaches the live status, ready to send to the browser. */
 export function toHostResponse(host: HostRow): HostResponse {
   return {
     id: host.id,
@@ -182,10 +188,9 @@ export function toHostResponse(host: HostRow): HostResponse {
       host.enabled === 1
         ? getHostStatus(host.id)
         : { ...UNKNOWN_STATUS },
-    // Only this machine's own card offers its key: it is the one the person in
-    // front of the screen has to copy into a hub. Showing it here gives away
-    // nothing they could not already do from this page, which has no login and
-    // can already start and stop these containers.
-    ...(host.type === "local" ? { agent: getAgentAccess() } : {}),
+    // Only this machine's own card can be opened up to a hub. The key itself
+    // is not in this listing - every tab polls it, and a proxy may log it -
+    // but is fetched on demand from GET /api/hosts/:id/api-key.
+    ...(host.type === "local" ? { agent: agentSummary() } : {}),
   };
 }

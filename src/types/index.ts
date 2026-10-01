@@ -55,7 +55,6 @@ export interface HostResponse {
   agent?: {
     enabled: boolean;
     managed_by_env: boolean;
-    api_key: string;
   };
 }
 

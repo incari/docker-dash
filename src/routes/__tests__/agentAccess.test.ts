@@ -66,9 +66,15 @@ async function localHost(): Promise<{
 }> {
   const hosts = (await (await fetch(`${baseUrl}/api/hosts`)).json()) as Array<{
     id: number;
-    agent: { enabled: boolean; managed_by_env: boolean; api_key: string };
+    agent: { enabled: boolean; managed_by_env: boolean };
   }>;
-  return hosts.find((h) => h.id === 1)!;
+  const local = hosts.find((h) => h.id === 1)!;
+  // The key is not in the listing - every tab polls that - but on its own
+  // endpoint, fetched when someone asks to see it.
+  const { api_key } = (await (
+    await fetch(`${baseUrl}/api/hosts/1/api-key`)
+  ).json()) as { api_key: string };
+  return { agent: { ...local.agent, api_key } };
 }
 
 describe("this machine's own API key", () => {
@@ -77,6 +83,14 @@ describe("this machine's own API key", () => {
 
     expect(host.agent.api_key).toMatch(/^[0-9a-f]{64}$/);
     expect(host.agent.managed_by_env).toBe(false);
+  });
+
+  it("is not in the host listing, which every open tab polls", async () => {
+    const raw = await (await fetch(`${baseUrl}/api/hosts`)).text();
+    const { api_key } = (await localHost()).agent;
+
+    expect(raw).not.toContain(api_key);
+    expect(raw).toContain('"agent"');
   });
 
   it("does nothing until reading this server is switched on", async () => {
@@ -180,6 +194,11 @@ describe("this machine's own API key", () => {
       method: "POST",
     });
     expect(response.status).toBe(404);
+
+    // Nor read: that key never leaves this process.
+    const read = await fetch(`${baseUrl}/api/hosts/2/api-key`);
+    expect(read.status).toBe(404);
+    expect(await read.text()).not.toContain("their-key");
 
     db.prepare("DELETE FROM hosts WHERE id != 1").run();
   });

@@ -14,11 +14,8 @@ import {
 import { createBackup } from "./backup.js";
 import { getContainerBaseName } from "../utils/containerMatching.js";
 import { hostname } from "os";
-import Docker from "dockerode";
-
-const docker = new Docker({
-  socketPath: process.env.DOCKER_SOCKET || "/var/run/docker.sock",
-});
+import type Docker from "dockerode";
+import { docker } from "../config/docker.js";
 
 /**
  * Run a migration only if it hasn't been run before

@@ -219,14 +219,14 @@ describe("GET /api/containers across servers", () => {
     expect(raw).not.toContain("a-remote-servers-key");
     expect(hosts[1].has_api_key).toBe(true);
 
-    // This machine's own key is a different matter: it is what the person has
-    // to copy into a hub, and this page can already control these containers.
-    expect(hosts[0].agent).toMatchObject({
-      enabled: true,
-      managed_by_env: true,
-      api_key: "s3cret-key",
-    });
+    // This machine's own key is what the person copies into a hub, but it is
+    // not in a listing that every tab polls either: the card asks for it.
+    expect(raw).not.toContain("s3cret-key");
+    expect(hosts[0].agent).toEqual({ enabled: true, managed_by_env: true });
     expect(hosts[1].agent).toBeUndefined();
+
+    const own = await (await fetch(`${hubUrl}/api/hosts/1/api-key`)).json();
+    expect(own).toEqual({ api_key: "s3cret-key" });
   });
 });
 

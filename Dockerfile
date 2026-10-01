@@ -57,10 +57,11 @@ COPY customIconMappings.json ./
 # Backend files: server.js, config/, routes/, database/, types/, utils/
 COPY --from=backend-builder /app/dist ./dist
 
-# Copy built frontend to the same dist/ folder (files don't conflict)
-# Frontend files: index.html, assets/, manifest.json, sw.js, etc.
-# The server at dist/server.js looks for frontend at path.join(__dirname, "../dist") = /app/dist
-COPY --from=frontend-builder /app/frontend/dist ./dist
+# Copy built frontend to its own folder. It used to share dist/ with the
+# backend, which meant express.static handed out the compiled server code at
+# GET /server.js. The server at dist/server.js looks for the frontend at
+# path.join(__dirname, "../public") = /app/public.
+COPY --from=frontend-builder /app/frontend/dist ./public
 
 # Create data directory
 RUN mkdir -p /app/data

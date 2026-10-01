@@ -1,0 +1,70 @@
+# docker-dash behind a Docker socket proxy.
+#
+# Mounting /var/run/docker.sock into a container hands that container the
+# whole daemon, which is root on the host - the :ro on the mount changes
+# nothing, a socket is not a file you read. This dashboard only ever lists
+# containers and starts, stops or restarts them, so it does not need the rest.
+#
+# The proxy below lets exactly those calls through and refuses everything
+# else: no exec, no new containers, no volumes, no images. A dashboard that
+# were somehow taken over could stop your containers; it could not run
+# `docker run --privileged -v /:/host`.
+#
+# The dashboard reaches the proxy over TCP on a network nothing else is on.
+services:
+  docker-socket-proxy:
+    image: tecnativa/docker-socket-proxy:latest
+    container_name: docker-socket-proxy
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /run
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      # What the dashboard needs
+      - CONTAINERS=1 # list and inspect containers
+      - POST=1 # needed for start / stop / restart
+      - ALLOW_START=1
+      - ALLOW_STOP=1
+      - ALLOW_RESTARTS=1
+      # Everything else stays off (the proxy's defaults): EXEC, IMAGES,
+      # VOLUMES, NETWORKS, BUILD, COMMIT, SECRETS, SWARM, SYSTEM...
+    networks:
+      - docker-socket
+
+  docker-dashboard:
+    image: ghcr.io/incari/docker-dash:latest
+    container_name: docker-dashboard
+    restart: unless-stopped
+    depends_on:
+      - docker-socket-proxy
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    ports:
+      - "3080:3000"
+    volumes:
+      # No Docker socket here - only its own data.
+      - ./data:/app/data
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DB_PATH=/app/data/dashboard.db
+      - UPLOAD_DIR=/app/data/images
+      # Reach Docker through the proxy instead of a socket.
+      - DOCKER_HOST=tcp://docker-socket-proxy:2375
+    networks:
+      - docker-socket
+      - default
+
+networks:
+  docker-socket:
+    # No route out: the proxy is reachable from the dashboard and nowhere else.
+    internal: true

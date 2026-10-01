@@ -6,7 +6,7 @@ import { Router, Request, Response } from "express";
 import type { Router as RouterType } from "express";
 import fs from "fs";
 import path from "path";
-import { uploadDir } from "../config/multer.js";
+import { uploadDir, SERVED_UPLOAD_EXTENSIONS } from "../config/multer.js";
 import { db } from "../config/database.js";
 
 const router: RouterType = Router();
@@ -29,15 +29,7 @@ router.get("/api/uploads", (_req: Request, res: Response): void => {
     const imageFiles: UploadedFile[] = files
       .filter((file) => {
         const ext = path.extname(file).toLowerCase();
-        return [
-          ".png",
-          ".jpg",
-          ".jpeg",
-          ".gif",
-          ".svg",
-          ".webp",
-          ".ico",
-        ].includes(ext);
+        return SERVED_UPLOAD_EXTENSIONS.includes(ext);
       })
       .map((file) => ({
         filename: file,

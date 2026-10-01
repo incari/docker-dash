@@ -93,6 +93,8 @@ You can configure the application using environment variables. Create a `.env` f
 | :-------------- | :--------------------------------------------- | :--------------------- |
 | `PORT`          | The port the backend server runs on.           | `3000`                 |
 | `DOCKER_SOCKET` | Path to the Docker socket.                     | `/var/run/docker.sock` |
+| `DOCKER_HOST`   | Reach Docker over TCP instead, e.g. through a socket proxy (`tcp://docker-socket-proxy:2375`). Wins over `DOCKER_SOCKET`. | _(unset)_ |
+| `TRUST_PROXY`   | Number of reverse proxies in front of the app, so rate limits see the real client address. | _(unset)_ |
 | `DB_PATH`       | Path to the SQLite database file.              | `./data/dashboard.db`  |
 | `UPLOAD_DIR`    | Path to store uploaded images.                 | `./data/images`        |
 | `NODE_ENV`      | Environment mode (`development`/`production`). | `production`           |
@@ -216,6 +218,28 @@ undo. If you ever need to go back, stop the container, put that file back as
 
 ### Security
 
+**This dashboard has no login.** Anyone who can open the page can start and
+stop your containers. Run it on a private network, or behind a reverse proxy
+that authenticates (Authelia, Caddy basic auth, Tailscale Serve, ...). That is
+the intended deployment, not an extra.
+
+What the app does on its own side:
+
+- No cross-origin access. The API sends no CORS headers and the page cannot be
+  framed, so a web page open in another tab cannot drive the dashboard.
+- A content-security-policy that allows no inline scripts, so nothing that
+  comes in through a URL, an icon or an import file can run as code.
+- Uploaded icons are checked by extension, declared type and the bytes
+  themselves, stored under generated names, and served with `nosniff` and a
+  sandboxing policy. SVG is not accepted.
+- Import files are validated field by field before anything is replaced.
+- Rate limits on `/api/agent`, uploads, connection tests and imports.
+
+The Docker socket is the asset to protect: whoever holds it is root on the
+host, and the `:ro` on the bind mount does not change that. If you can, run the
+dashboard behind a socket proxy with only the calls it needs -
+[docker-compose.socket-proxy.yml](docker-compose.socket-proxy.yml) shows how.
+
 The API key is the only thing standing between a caller and the ability to stop
 containers on that machine, so:
 
@@ -225,12 +249,11 @@ containers on that machine, so:
 - If a key does leak, **Replace key** on that machine's own card issues a new
   one and locks out whoever held the old one.
 - A machine's own key is shown in its own dashboard on purpose: that dashboard
-  has no login and can already start and stop those containers, so displaying
-  the key there gives away nothing new. It is never shown for a *remote*
-  server, and never leaves the hub.
-- The hub's own dashboard has no login either. Keep it on a private network, or
-  behind a reverse proxy that authenticates, exactly as with a single-server
-  install.
+  has no login and can already start and stop those containers. It is fetched
+  only when you ask to see or copy it, never shown for a *remote* server, and
+  never leaves the hub.
+- A saved key is only ever sent to the address it was saved with. Changing a
+  server's address asks for its key again.
 
 ## Running Locally
 

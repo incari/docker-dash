@@ -21,20 +21,15 @@ interface AgentAccessPanelProps {
   showConfirm: (message: string, onConfirm: () => Promise<void>) => void;
 }
 
-/** Enough of the key to recognise it, without filling the card with hex. */
-function abbreviate(key: string): string {
-  if (key.length <= 16) return key;
-  return `${key.slice(0, 8)}…${key.slice(-4)}`;
-}
-
 /**
  * This machine's own API key, on its own server card.
  *
  * It lives here so setting up a fleet needs no terminal: open this machine's
- * dashboard, allow it to be read, copy the key, paste it into the hub. Showing
- * the key on this page gives away nothing the page does not already offer -
- * there is no login, and anyone looking at it can already start and stop these
- * containers.
+ * dashboard, allow it to be read, copy the key, paste it into the hub.
+ *
+ * The key is fetched when the person asks for it - to see it or to copy it -
+ * rather than arriving with the host list that every tab polls. A secret that
+ * is in every response is a secret in every proxy log and browser extension.
  */
 export const AgentAccessPanel: React.FC<AgentAccessPanelProps> = ({
   hostId,
@@ -47,6 +42,32 @@ export const AgentAccessPanel: React.FC<AgentAccessPanelProps> = ({
   const [revealed, setRevealed] = useState(false);
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [key, setKey] = useState<string | null>(null);
+
+  // Fetched once per card and dropped when the key is replaced, so the copy
+  // button never hands out a key that no longer opens anything.
+  const loadKey = useCallback(async (): Promise<string> => {
+    if (key) return key;
+    const fetched = await hostsApi.getApiKey(hostId);
+    setKey(fetched);
+    return fetched;
+  }, [hostId, key]);
+
+  const handleReveal = useCallback(async () => {
+    if (revealed) {
+      setRevealed(false);
+      return;
+    }
+    try {
+      await loadKey();
+      setRevealed(true);
+    } catch (err: any) {
+      onError(
+        t("hosts.agent.keyErrorTitle"),
+        err.response?.data?.error || t("hosts.agent.keyError"),
+      );
+    }
+  }, [loadKey, onError, revealed, t]);
 
   const handleToggle = useCallback(
     async (enabled: boolean) => {
@@ -67,8 +88,18 @@ export const AgentAccessPanel: React.FC<AgentAccessPanelProps> = ({
   );
 
   const handleCopy = useCallback(async () => {
+    let value: string;
     try {
-      await navigator.clipboard.writeText(access.api_key);
+      value = await loadKey();
+    } catch (err: any) {
+      onError(
+        t("hosts.agent.keyErrorTitle"),
+        err.response?.data?.error || t("hosts.agent.keyError"),
+      );
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(value);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2000);
     } catch {
@@ -78,13 +109,14 @@ export const AgentAccessPanel: React.FC<AgentAccessPanelProps> = ({
       setRevealed(true);
       onError(t("hosts.agent.copyFailedTitle"), t("hosts.agent.copyFailed"));
     }
-  }, [access.api_key, onError, t]);
+  }, [loadKey, onError, t]);
 
   const handleRotate = useCallback(() => {
     showConfirm(t("hosts.agent.rotateConfirm"), async () => {
       setBusy(true);
       try {
         await hostsApi.rotateApiKey(hostId);
+        setKey(null);
         setRevealed(false);
         onChanged();
       } catch (err: any) {
@@ -123,10 +155,10 @@ export const AgentAccessPanel: React.FC<AgentAccessPanelProps> = ({
           <div className="flex items-center gap-1.5">
             <Key className="w-3.5 h-3.5 shrink-0 opacity-50" />
             <code className="text-xs font-mono truncate opacity-80 min-w-0 flex-1">
-              {revealed ? access.api_key : abbreviate(access.api_key)}
+              {revealed && key ? key : t("hosts.agent.keyHidden")}
             </code>
             <button
-              onClick={() => setRevealed((prev) => !prev)}
+              onClick={handleReveal}
               aria-label={
                 revealed ? t("hosts.agent.hide") : t("hosts.agent.reveal")
               }

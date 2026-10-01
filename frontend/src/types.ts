@@ -54,8 +54,8 @@ export interface Host {
   has_api_key: boolean;
   status: HostStatus;
   /**
-   * Only on the local host: whether a hub may read this installation, and the
-   * key it would have to present. This is the key the user copies into a hub.
+   * Only on the local host: whether a hub may read this installation. The key
+   * itself is fetched on demand with hostsApi.getApiKey.
    */
   agent?: AgentAccess;
 }
@@ -64,7 +64,6 @@ export interface AgentAccess {
   enabled: boolean;
   /** True when API_KEY is set, which makes the key read-only in the UI. */
   managed_by_env: boolean;
-  api_key: string;
 }
 
 export interface HostFormData {

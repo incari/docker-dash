@@ -13,6 +13,16 @@ services:
     container_name: docker-dashboard-preview
     restart: unless-stopped
 
+    # The dashboard writes only to /app/data. Everything else is sealed, and
+    # the process cannot gain capabilities it did not start with.
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
     # A different host port from the stable instance, so both can run side by side.
     ports:
       - "3081:3000"

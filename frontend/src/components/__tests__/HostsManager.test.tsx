@@ -120,8 +120,13 @@ describe("what a server card reports", () => {
 describe("this machine's own API key", () => {
   const localWithKey = (enabled: boolean, managedByEnv = false) =>
     host({
-      agent: { enabled, managed_by_env: managedByEnv, api_key: LOCAL_KEY },
+      agent: { enabled, managed_by_env: managedByEnv },
     });
+
+  beforeEach(() => {
+    // The key is not in the host list; the card asks for it when needed.
+    (axios.get as any).mockResolvedValue({ data: { api_key: LOCAL_KEY } });
+  });
 
   it("stays hidden until the machine is opened up to a hub", () => {
     render(<HostsManager hosts={[localWithKey(false)]} {...props} />);
@@ -130,21 +135,23 @@ describe("this machine's own API key", () => {
       screen.getByLabelText(/Let another dashboard read this server/),
     ).not.toBeChecked();
     expect(screen.queryByText(/baf8c0e1/)).toBeNull();
+    expect(axios.get).not.toHaveBeenCalled();
   });
 
-  it("appears abbreviated once it does, and in full on request", async () => {
+  it("is fetched only when asked for, and then shown in full", async () => {
     const user = userEvent.setup();
     render(<HostsManager hosts={[localWithKey(true)]} {...props} />);
 
-    // Long enough to recognise, short enough not to fill the card.
-    expect(screen.getByText("baf8c0e1…0d5c")).toBeInTheDocument();
-    expect(screen.queryByText(LOCAL_KEY)).toBeNull();
+    // Nothing of the key is on the page, and nothing has been asked for yet.
+    expect(screen.queryByText(/baf8c0e1/)).toBeNull();
+    expect(axios.get).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole("button", { name: "Show key" }));
 
+    expect(axios.get).toHaveBeenCalledWith("/api/hosts/1/api-key");
     // In full, because a machine with no clipboard access still has to be able
     // to copy it by hand.
-    expect(screen.getByText(LOCAL_KEY)).toBeInTheDocument();
+    expect(await screen.findByText(LOCAL_KEY)).toBeInTheDocument();
   });
 
   it("saves the switch as soon as it is flipped", async () => {

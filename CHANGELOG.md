@@ -7,6 +7,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+A review of the whole surface - API, uploads, fleet, container image - and the
+fixes that came out of it. None of these change how the dashboard is used.
+
+- **No more CORS.** The API used to answer any origin, so a web page open in
+  another tab on the same network could read this machine's API key, stop
+  containers or replace the database through the import endpoint. The frontend
+  is same-origin and never needed it.
+- **Security headers** via helmet: a content-security-policy that allows no
+  inline scripts, `frame-ancestors 'none'` against clickjacking, `nosniff`. The
+  service worker is registered from the bundle instead of an inline script so
+  the policy can be strict. HSTS is deliberately left off: the usual install is
+  plain HTTP on a LAN.
+- **A saved server's key only travels to the saved address.** Testing or editing
+  a server with a new address and a blank key used to send the stored key to the
+  new address. Both now ask for the key again.
+- **This machine's own API key is fetched on request** (`GET /api/hosts/1/api-key`)
+  rather than included in the host listing every tab polls.
+- **Uploads are checked three times**: extension and declared type must agree
+  and be on the allow-list, the stored name is generated, and the file's own
+  bytes are sniffed after the write. SVG is no longer accepted. `/uploads` is
+  served with `nosniff` and a sandboxing policy, so a file from before these
+  checks cannot run as code on this origin either.
+- **Import files are validated** with the same rules as the forms before
+  anything is deleted: a `javascript:` URL or an unparseable server address is
+  refused with a message naming the field.
+- **Server addresses** may not point at link-local or wildcard addresses.
+  `ftp://` and other schemes are refused instead of prefixed.
+- **Rate limits** on `/api/agent`, `/api/upload`, `/api/hosts/test` and
+  `/api/import`. `TRUST_PROXY` makes them see the real client behind a proxy.
+- **The frontend build lives in its own folder** (`/app/public`); it used to
+  share `dist/` with the backend, which `express.static` then served too.
+- **Compose files** run the container read-only with all capabilities dropped
+  and `no-new-privileges`. New `docker-compose.socket-proxy.yml` reaches Docker
+  through a socket proxy that allows only list/start/stop/restart; `DOCKER_HOST`
+  configures it.
+- **Dependencies**: `multer` 2.4, `express` 4.22.3, `axios` 1.20; `cors`
+  removed.
+
+### Removed
+
+- The experimental in-browser AI chat (`@xenova/transformers`). It accounted for
+  most of the frontend's known-vulnerable dependencies and downloaded models
+  from HuggingFace at runtime; it was never wired to anything the dashboard
+  does.
+
 ### Added
 
 #### Several servers, one dashboard
