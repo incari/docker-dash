@@ -15,7 +15,7 @@
     "dev": "concurrently \"pnpm dev:backend\" \"pnpm dev:frontend\"",
     "docker:build": "docker buildx build --load -t docker-dash:local .",
     "docker:run": "docker run --rm --name docker-dash-local -p 3080:3000 -v /var/run/docker.sock:/var/run/docker.sock:ro -v docker-dash-local-data:/app/data docker-dash:local",
-    "docker:push:preview": "docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/incari/docker-dash:edge --push .",
+    "docker:push:rc": "docker buildx build --platform linux/amd64,linux/arm64 --provenance=false --sbom=false -t ghcr.io/incari/docker-dash:${TAG:?set TAG, e.g. TAG=0.4.0_rc} --push .",
     "docker:login": "gh auth token | docker login ghcr.io -u incari --password-stdin",
     "release:patch": "npm version patch && git push && git push --tags",
     "release:minor": "npm version minor && git push && git push --tags",
