@@ -77,8 +77,10 @@ ENV UPLOAD_DIR=/app/data/images
 
 EXPOSE 3000
 
-# Health check
+# Health check. Follows PORT, which installs with network_mode: host change,
+# and asks 127.0.0.1: busybox resolves localhost to ::1 first, and the server
+# only listens on IPv4.
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1
+  CMD wget --no-verbose --tries=1 --spider "http://127.0.0.1:${PORT:-3000}/health" || exit 1
 
 CMD ["node", "dist/server.js"]
