@@ -13,7 +13,6 @@ import {
 } from "../constants/icons";
 import { hostsApi } from "../services/api";
 import { hostErrorMessage } from "../utils/hostErrors";
-import { AgentAccessPanel } from "./AgentAccessPanel";
 import { HostModal } from "./HostModal";
 import type { Host } from "../types";
 
@@ -176,7 +175,13 @@ export const HostsManager: React.FC<HostsManagerProps> = ({
               </div>
 
               {!host.enabled ? (
-                <p className="text-xs opacity-60">{t("hosts.disabled")}</p>
+                <p className="text-xs opacity-60">
+                  {/* Switched off by the upgrade that retired the agent: it
+                      needs a new address before it can be read again. */}
+                  {/^https?:\/\//i.test(host.url ?? "")
+                    ? t("hosts.legacyAgentDisabled")
+                    : t("hosts.disabled")}
+                </p>
               ) : online ? (
                 <p className="text-xs text-green-400 flex items-center gap-1.5">
                   <CheckCircle className="w-3.5 h-3.5 shrink-0" />
@@ -217,16 +222,6 @@ export const HostsManager: React.FC<HostsManagerProps> = ({
                 <p className="text-xs opacity-60">{t("hosts.notCheckedYet")}</p>
               )}
 
-              {/* Only this machine can hand out its own key. */}
-              {host.agent && (
-                <AgentAccessPanel
-                  hostId={host.id}
-                  access={host.agent}
-                  onChanged={onChanged}
-                  onError={onError}
-                  showConfirm={showConfirm}
-                />
-              )}
             </div>
           );
         })}

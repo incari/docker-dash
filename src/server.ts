@@ -23,11 +23,9 @@ import { installLifecycleHandlers } from "./lifecycle.js";
 
 // Hosts
 import { ensureLocalHost } from "./hosts/registry.js";
-import { ensureApiKey } from "./hosts/agentAccess.js";
 
 // Routes
 import {
-  agentRouter,
   containersRouter,
   healthRouter,
   hostsRouter,
@@ -68,10 +66,6 @@ await runMigrations();
 // the local server to exist before any shortcut can point at it.
 ensureLocalHost();
 
-// Give this installation a key of its own, ready to be copied into a hub. It
-// does nothing until reading this server is switched on.
-ensureApiKey();
-
 // Upload endpoint (needs upload middleware)
 app.post("/api/upload", upload.single("image"), (req, res): void => {
   if (!req.file) {
@@ -90,8 +84,6 @@ app.post("/api/upload", upload.single("image"), (req, res): void => {
 // Mount route modules
 // Health first: whatever else is wrong, something has to be able to answer.
 app.use(healthRouter);
-// Agent next: it owns /api/agent and refuses anything without the key.
-app.use(agentRouter);
 app.use(hostsRouter);
 app.use(containersRouter);
 app.use(uploadsRouter);

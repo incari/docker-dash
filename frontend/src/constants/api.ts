@@ -28,7 +28,6 @@ export const API_ENDPOINTS = {
   HOSTS: `${API_BASE}/hosts`,
   HOST_BY_ID: (id: number) => `${API_BASE}/hosts/${id}`,
   HOSTS_TEST: `${API_BASE}/hosts/test`,
-  HOST_API_KEY: (id: number) => `${API_BASE}/hosts/${id}/api-key`,
   HOST_RETRY: (id: number) => `${API_BASE}/hosts/${id}/retry`,
 
   // Tailscale

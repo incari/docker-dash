@@ -38,7 +38,6 @@ const mockProps = {
             color: null,
             position: 0,
             enabled: true,
-            has_api_key: false,
             status: {
                 online: true,
                 checked_at: null,

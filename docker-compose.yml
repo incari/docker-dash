@@ -26,6 +26,9 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       # Persistent data storage
       - /mnt/user/appdata/docker-dashboard/config:/app/data
+      # Only to read other machines over ssh:// - a key, known_hosts and an
+      # optional config, owned by root. See "Over ssh" in the README.
+      # - /opt/docker-dash/ssh:/root/.ssh:ro
     environment:
       - NODE_ENV=production
       - PORT=3000

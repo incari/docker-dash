@@ -11,16 +11,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 #### Several servers, one dashboard
 
-- **Multi-server support**: one installation (the hub) can now read every other
-  installation and show the whole fleet on one page.
-  - Each installation generates its own API key on first boot and shows it in
-    its own **Servers** card, with reveal, copy and replace buttons, so setting
-    up a fleet needs no terminal and no invented secret. Reading stays off until
-    "let another dashboard read this server" is ticked, and `/api/agent` answers
-    404 until then. `API_KEY` pins the key from the environment instead, for a
-    compose file or a secrets manager.
+- **Multi-server support**: one dashboard reads the Docker daemon of every
+  machine you add and shows the whole fleet on one page. Nothing of docker-dash
+  is installed on the other machines.
+  - Servers are added as `ssh://user@machine` (through the system ssh client,
+    so `known_hosts` and `~/.ssh/config` work as in a terminal) or
+    `tcp://machine:2375` (a socket proxy on a trusted network).
+    [docker-compose.socket-proxy.yml](docker-compose.socket-proxy.yml) is a
+    starting point for the latter.
   - **Servers** panel in the Shortcuts view: add, edit, remove and test a
-    server, with its reachability and container count on the card.
+    server, with its reachability, Docker version and container count. ssh's
+    own complaints - key not accepted, unknown host key, no `docker` on the
+    PATH, no access to the socket - are shown on the card in the dashboard's
+    language.
   - Containers in the Shortcuts list are grouped by server, with compose
     projects nested inside each server; favourites stay ungrouped and name their
     server on the card.
@@ -28,23 +31,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - A port-based shortcut opens the machine the container runs on, not the
     machine serving the dashboard.
   - A server that cannot be reached costs only its own containers: the rest of
-    the fleet stays on screen and the reason is shown on that server's card, in
-    the dashboard's language.
-  - Shortcuts, sections and settings all live on the hub. Every shortcut records
-    its server, so the same container name on two machines gets a tile each and
-    dismissing one does not dismiss the other.
-  - Export/import carries the servers and each shortcut's server (export
-    version 2; version 1 files still import, filed under the local server).
-    Keys are never written to an export, so restored servers arrive switched
-    off until their key is entered.
+    the fleet stays on screen, a read answers within about two seconds, and a
+    failing server is backed off with a **Try again now** button.
+  - Every shortcut records its server, so the same container name on two
+    machines gets a tile each and dismissing one does not dismiss the other.
+  - Export/import carries the servers, by address, and each shortcut's server
+    (export version 2; version 1 files still import, filed under the local
+    server).
   - The offline cache keys containers by server as well as by ID, and a failed
     cache write no longer counts as a failed fetch - it used to make the
     dashboard quietly fall back to stale data even though the server had just
     answered.
-  - New env vars: `HOST_NAME`, `API_KEY`, `HOST_TIMEOUT_MS`, `HOST_CACHE_MS`.
-    Migrations `013_add_hosts` and `014_add_agent_access` file every existing
-    shortcut under the local server, so an upgrade looks exactly as it did
-    before.
+  - New env vars: `HOST_NAME`, `HOST_TIMEOUT_MS`, `HOST_CACHE_MS`,
+    `HOST_DEADLINE_MS`. Migration `013_add_hosts` files every existing shortcut
+    under the local server, so an upgrade looks exactly as it did before.
+  - The image now ships `openssh-client`.
 
 #### Toast Notifications (2026-02-13)
 
@@ -66,6 +67,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Smart Selection**: Only shortcuts that need updating are pre-selected
   - Shortcuts already using the correct icon show "Already set" but remain unchecked
   - You can still select them if you want to update anyway
+
+### Removed
+
+- **The agent.** Development builds read other servers through another
+  docker-dash installation's `/api/agent` endpoints and an API key. Migration
+  `015_retire_agents` keeps those servers and their shortcuts but switches them
+  off until they are given an `ssh://` or `tcp://` address, and deletes the
+  keys. `API_KEY` and `docker-compose.agent.yml` are gone.
 
 ### Fixed
 

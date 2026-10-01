@@ -1,13 +1,12 @@
 /**
- * The Docker daemon this process talks to over its own socket.
+ * What the dashboard does with a Docker daemon, whichever one it is.
  *
- * Everything here used to live in routes/containers.ts. It moved because the
- * same code now has two callers: the hub, which reads its own daemon as host 1,
- * and the agent endpoints, which serve this daemon to a remote hub.
+ * Every function takes the client to use, so the local socket and a server
+ * reached over ssh or a socket proxy run exactly the same code - see
+ * dockerClients.ts for how each one is built.
  */
 
 import Docker from "dockerode";
-import { docker } from "../config/docker.js";
 import {
   getContainerBaseName,
   orderPortsForDisplay,
@@ -30,9 +29,8 @@ export function isContainerAction(value: string): value is ContainerAction {
 /**
  * Turn Docker's listing into the shape the dashboard uses everywhere.
  *
- * `hostId`/`hostName` are filled in by the caller: the local daemon does not
- * know which row in the hosts table it is, and an agent does not know what the
- * hub decided to call it.
+ * `hostId`/`hostName` are filled in by the caller: a daemon does not know which
+ * row in the hosts table it is.
  */
 export function normalizeContainer(
   c: Docker.ContainerInfo,
@@ -72,8 +70,10 @@ export function normalizeContainer(
   };
 }
 
-/** Every container on the local daemon, running or not. */
-export async function listLocalContainers(): Promise<
+/** Every container on a daemon, running or not. */
+export async function listContainers(
+  docker: Docker,
+): Promise<
   Array<Omit<NormalizedContainer, "hostId" | "hostName">>
 > {
   const containers = (await docker.listContainers({ all: true })) || [];
@@ -81,11 +81,12 @@ export async function listLocalContainers(): Promise<
 }
 
 /**
- * Find a container on the local daemon by ID or by name.
+ * Find a container on a daemon by ID or by name.
  * Uses getContainerBaseName so a shortcut's stored name still matches after the
  * container is recreated with a replica suffix.
  */
-export async function findLocalContainer(
+export async function findContainer(
+  docker: Docker,
   nameOrId: string,
 ): Promise<Docker.Container | null> {
   try {
@@ -111,14 +112,15 @@ export async function findLocalContainer(
 }
 
 /**
- * Run start/stop/restart against the local daemon.
+ * Run start/stop/restart against a daemon.
  * Returns false when no container matches, so the caller can answer 404.
  */
-export async function runLocalContainerAction(
+export async function runContainerAction(
+  docker: Docker,
   nameOrId: string,
   action: ContainerAction,
 ): Promise<boolean> {
-  const container = await findLocalContainer(nameOrId);
+  const container = await findContainer(docker, nameOrId);
   if (!container) return false;
 
   if (action === "start") await container.start();

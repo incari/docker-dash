@@ -46,6 +46,10 @@ LABEL org.opencontainers.image.licenses=MIT
 
 WORKDIR /app
 
+# ssh:// servers are reached through the system ssh client, so ~/.ssh/config
+# and known_hosts work exactly as they do in a terminal.
+RUN apk add --no-cache openssh-client
+
 # Copy pre-built node_modules (with compiled native modules)
 COPY --from=backend-builder /app/node_modules ./node_modules
 COPY package*.json ./

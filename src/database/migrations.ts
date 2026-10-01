@@ -78,6 +78,7 @@ const MIGRATION_NAMES = [
   "012_merge_duplicate_shortcuts",
   "013_add_hosts",
   "014_add_agent_access",
+  "015_retire_agents",
 ];
 
 export async function runMigrations(): Promise<void> {
@@ -147,6 +148,9 @@ export async function runMigrations(): Promise<void> {
 
   // NEW: This installation can be read by a hub, once switched on
   runOnce("014_add_agent_access", addAgentAccessColumns);
+
+  // NEW: Remote servers are Docker daemons now, not other dashboards
+  runOnce("015_retire_agents", retireAgents);
 
   console.log("[MIGRATIONS] All migrations complete");
 }
@@ -722,6 +726,46 @@ function addDismissedContainersTable(): void {
 function addAgentAccessColumns(): void {
   addColumnIfMissing("settings", "api_key", "TEXT");
   addColumnIfMissing("settings", "agent_enabled", "INTEGER DEFAULT 0");
+}
+
+/**
+ * Migration 015: Stop reading other dashboards.
+ *
+ * A remote server used to be another docker-dash, read over its /api/agent
+ * endpoints with a key. Now the dashboard talks to each Docker daemon itself,
+ * over ssh:// or through a socket proxy, so those rows point at something that
+ * no longer answers the way it is asked.
+ *
+ * They are kept - with their shortcuts, colours and names - but switched off,
+ * because the new address cannot be worked out from the old one: the daemon
+ * is reached on a different port, or over ssh with a user nobody recorded.
+ * Editing the address and switching them back on is all that is left to do.
+ *
+ * The keys go with the agent. Nothing reads them any more, and a secret
+ * nobody uses is still a secret sitting in a file.
+ */
+function retireAgents(): void {
+  const retired = db
+    .prepare(
+      `UPDATE hosts SET type = 'docker', enabled = 0, updated_at = CURRENT_TIMESTAMP
+       WHERE type = 'agent'`,
+    )
+    .run().changes;
+  if (retired > 0) {
+    console.log(
+      `[MIGRATION] Switched off ${retired} server(s) read through the old agent; give each one an ssh:// or tcp:// address`,
+    );
+  }
+
+  for (const [table, column] of [
+    ["hosts", "api_key"],
+    ["settings", "api_key"],
+    ["settings", "agent_enabled"],
+  ] as const) {
+    if (columnExists(table, column)) {
+      db.exec(`ALTER TABLE ${table} DROP COLUMN ${column}`);
+    }
+  }
 }
 
 /**

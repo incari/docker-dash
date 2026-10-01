@@ -205,12 +205,12 @@ describe("export / import", () => {
 });
 
 describe("export / import across servers", () => {
-  it("keeps every shortcut on its own server, and leaves the keys behind", async () => {
+  it("keeps every shortcut on its own server, and switches back on the ones it can reach", async () => {
     seed();
     const nas = db
       .prepare(
-        `INSERT INTO hosts (name, type, url, api_key, hostname, color, position, enabled)
-         VALUES ('NAS', 'agent', 'http://nas.local:3080', 'super-secret', 'nas.local', '#22c55e', 1, 1)`,
+        `INSERT INTO hosts (name, type, url, hostname, color, position, enabled)
+         VALUES ('NAS', 'docker', 'ssh://me@nas.local', 'nas.local', '#22c55e', 1, 1)`,
       )
       .run();
     const nasId = Number(nas.lastInsertRowid);
@@ -220,13 +220,19 @@ describe("export / import across servers", () => {
     db.prepare(
       "INSERT INTO dismissed_containers (host_id, container_match_name, display_name) VALUES (?, 'watchtower', 'Watchtower')",
     ).run(nasId);
+    // Exported before the agent was retired: an address that is a dashboard,
+    // not a daemon.
+    const old = db
+      .prepare(
+        `INSERT INTO hosts (name, type, url, position, enabled)
+         VALUES ('Pi', 'docker', 'http://pi.local:3080', 2, 0)`,
+      )
+      .run();
+    db.prepare(
+      "INSERT INTO shortcuts (host_id, display_name, port) VALUES (?, 'Pihole', 8080)",
+    ).run(Number(old.lastInsertRowid));
 
-    const raw = await (await fetch(`${baseUrl}/api/export`)).text();
-    // A file the user downloads and keeps is no place for a key that can stop
-    // containers on another machine.
-    expect(raw).not.toContain("super-secret");
-
-    const exported = JSON.parse(raw);
+    const exported = await (await fetch(`${baseUrl}/api/export`)).json();
     expect(exported.hosts.map((h: { name: string }) => h.name)).toContain("NAS");
 
     // Import into a database where the remote server does not exist, so its id
@@ -241,20 +247,21 @@ describe("export / import across servers", () => {
         body: JSON.stringify(exported),
       })
     ).json();
-    expect(body).toMatchObject({ success: true, hosts: 1 });
+    expect(body).toMatchObject({ success: true, hosts: 2 });
 
     const rows = db
       .prepare(
-        `SELECT s.display_name, h.name AS host, h.enabled, h.api_key
+        `SELECT s.display_name, h.name AS host, h.type, h.url, h.enabled
          FROM shortcuts s JOIN hosts h ON h.id = s.host_id
          ORDER BY s.display_name`,
       )
       .all();
 
     expect(rows).toEqual([
-      { display_name: "Docs", host: "Local", enabled: 1, api_key: null },
-      { display_name: "Immich", host: "NAS", enabled: 0, api_key: null },
-      { display_name: "Jellyfin", host: "Local", enabled: 1, api_key: null },
+      { display_name: "Docs", host: "Local", type: "local", url: null, enabled: 1 },
+      { display_name: "Immich", host: "NAS", type: "docker", url: "ssh://me@nas.local", enabled: 1 },
+      { display_name: "Jellyfin", host: "Local", type: "local", url: null, enabled: 1 },
+      { display_name: "Pihole", host: "Pi", type: "docker", url: "http://pi.local:3080", enabled: 0 },
     ]);
 
     // The dismissal came back on the same server it was made on.

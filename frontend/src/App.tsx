@@ -327,7 +327,7 @@ function App() {
     // A server that was just added has containers with no shortcuts yet, and
     // waiting for the next page load to notice is a poor first impression. The
     // backend reuses a recent sweep, so calling this after a change that needs
-    // no sweep - the agent toggle, a colour - costs nothing.
+    // no sweep - a new name, a colour - costs nothing.
     try {
       await shortcutsApi.autoSync();
     } catch (err) {

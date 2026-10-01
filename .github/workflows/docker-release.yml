@@ -30,7 +30,8 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  PREVIEW_IMAGE: ghcr.io/incari/docker-dash-preview
+  # Previews live in the same package as releases, under edge or an rc tag.
+  PREVIEW_IMAGE: ghcr.io/incari/docker-dash
   DOCKERHUB_IMAGE: docker.io/incari/docker-dash
 
 jobs:

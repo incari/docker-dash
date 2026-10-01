@@ -11,7 +11,7 @@ import { hostname } from "os";
 import { db } from "../config/database.js";
 import type { HostResponse, HostRow, HostStatus } from "../types/index.js";
 import type { HostErrorCode } from "./client.js";
-import { getAgentAccess } from "./agentAccess.js";
+import { hostnameOf } from "./hostUrl.js";
 
 /** Row 1 is always the daemon this process reaches over its own socket. */
 export const LOCAL_HOST_ID = 1;
@@ -158,15 +158,19 @@ export function forgetHostStatus(id: number): void {
 export function resolveHostHostname(host: HostRow): string | null {
   if (host.type === "local") return null;
   if (host.hostname && host.hostname.trim()) return host.hostname.trim();
-  if (!host.url) return null;
+  const fromAddress = hostnameOf(host.url);
+  if (fromAddress) return fromAddress;
+  // A server migrated from the old agent still has its http:// address until
+  // someone edits it, and its shortcuts should keep opening the right machine
+  // in the meantime.
   try {
-    return new URL(host.url).hostname;
+    return host.url ? new URL(host.url).hostname || null : null;
   } catch {
     return null;
   }
 }
 
-/** Strips the key and attaches the live status, ready to send to the browser. */
+/** Attaches the live status, ready to send to the browser. */
 export function toHostResponse(host: HostRow): HostResponse {
   return {
     id: host.id,
@@ -177,15 +181,9 @@ export function toHostResponse(host: HostRow): HostResponse {
     color: host.color,
     position: host.position,
     enabled: host.enabled === 1,
-    has_api_key: Boolean(host.api_key),
     status:
       host.enabled === 1
         ? getHostStatus(host.id)
         : { ...UNKNOWN_STATUS },
-    // Only this machine's own card offers its key: it is the one the person in
-    // front of the screen has to copy into a hub. Showing it here gives away
-    // nothing they could not already do from this page, which has no login and
-    // can already start and stop these containers.
-    ...(host.type === "local" ? { agent: getAgentAccess() } : {}),
   };
 }

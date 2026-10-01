@@ -11,6 +11,7 @@ import type { Router as RouterType } from "express";
 import { db } from "../config/database.js";
 import { createBackup } from "../database/backup.js";
 import { LOCAL_HOST_ID } from "../hosts/registry.js";
+import { parseHostUrl } from "../hosts/hostUrl.js";
 
 const router: RouterType = Router();
 
@@ -28,13 +29,12 @@ interface ExportedSection {
 }
 
 /**
- * A server, without its token.
+ * A server, by its address.
  *
- * The token is deliberately left out: an export is a file the user downloads,
- * mails to themselves and keeps in a drive, and a secret that can stop
- * containers on another machine does not belong in it. Imported servers come
- * back disabled, and each one starts being read again as soon as its token is
- * entered.
+ * There is no secret to leave out: an ssh key lives in the container's ~/.ssh
+ * and a socket proxy has none. A server exported before the agent was retired
+ * still carries its http:// address, and comes back disabled until someone
+ * points it at the daemon instead.
  */
 interface ExportedHost {
   id: number;
@@ -148,7 +148,7 @@ router.post("/api/import", async (req: Request, res: Response): Promise<void> =>
     );
     const insertHost = db.prepare(
       `INSERT INTO hosts (name, type, url, hostname, color, position, enabled)
-       VALUES (@name, 'agent', @url, @hostname, @color, @position, 0)`,
+       VALUES (@name, 'docker', @url, @hostname, @color, @position, @enabled)`,
     );
     const insertSection = db.prepare(
       `INSERT INTO sections (name, position, is_collapsed)
@@ -189,9 +189,17 @@ router.post("/api/import", async (req: Request, res: Response): Promise<void> =>
             hostIdMap.set(host.id, LOCAL_HOST_ID);
             continue;
           }
+          let url = host.url ?? null;
+          let usable = true;
+          try {
+            url = parseHostUrl(url).url;
+          } catch {
+            usable = false;
+          }
           const result = insertHost.run({
             name: host.name,
-            url: host.url ?? null,
+            url,
+            enabled: usable ? 1 : 0,
             hostname: host.hostname ?? null,
             color: host.color ?? null,
             position: host.position ?? 0,

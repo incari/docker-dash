@@ -5,7 +5,6 @@
 export { default as healthRouter } from './health.js';
 export { default as containersRouter } from './containers.js';
 export { default as hostsRouter } from './hosts.js';
-export { default as agentRouter } from './agent.js';
 export { default as uploadsRouter } from './uploads.js';
 export { default as sectionsRouter } from './sections.js';
 export { default as shortcutsRouter } from './shortcuts.js';

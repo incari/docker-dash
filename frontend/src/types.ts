@@ -25,7 +25,7 @@ export interface DockerContainer {
 }
 
 // Host (server) Types
-export type HostType = "local" | "agent";
+export type HostType = "local" | "docker";
 
 export interface HostStatus {
   online: boolean;
@@ -51,26 +51,12 @@ export interface Host {
   color: string | null;
   position: number;
   enabled: boolean;
-  has_api_key: boolean;
   status: HostStatus;
-  /**
-   * Only on the local host: whether a hub may read this installation, and the
-   * key it would have to present. This is the key the user copies into a hub.
-   */
-  agent?: AgentAccess;
-}
-
-export interface AgentAccess {
-  enabled: boolean;
-  /** True when API_KEY is set, which makes the key read-only in the UI. */
-  managed_by_env: boolean;
-  api_key: string;
 }
 
 export interface HostFormData {
   name: string;
   url: string;
-  api_key: string;
   hostname: string;
   color: string;
   enabled: boolean;
