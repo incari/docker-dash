@@ -124,7 +124,10 @@
       "rotateError": "No se pudo reemplazar la clave",
       "rotateErrorTitle": "Error al reemplazar la clave",
       "toggleError": "No se pudo cambiar esta opción",
-      "toggleErrorTitle": "Error al guardar"
+      "toggleErrorTitle": "Error al guardar",
+      "keyHidden": "••••••••  (oculta hasta mostrarla)",
+      "keyErrorTitle": "No se pudo leer la clave",
+      "keyError": "No se pudo obtener la clave de este servidor."
     },
     "errors": {
       "no_url": "Este servidor no tiene una dirección configurada.",
@@ -268,110 +271,6 @@
     "mobileColumns": "Columnas Móvil",
     "oneCol": "1 Col",
     "twoCol": "2 Col"
-  },
-  "ai": {
-    "title": "Asistente IA",
-    "chat": {
-      "title": "Asistente IA",
-      "placeholder": "Pregúntame sobre tus contenedores...",
-      "welcomeMessage": "👋 ¡Hola! Soy tu asistente IA del Panel Docker. Puedo ayudarte a gestionar tus contenedores y accesos directos.",
-      "thinking": "Pensando...",
-      "clearChat": "Limpiar Chat",
-      "close": "Cerrar",
-      "send": "Enviar",
-      "tryAsking": "Prueba preguntando:",
-      "exampleQueries": "Consultas de Ejemplo",
-      "modelLoading": "Cargando modelo IA...",
-      "modelLoadingProgress": "Cargando: {{progress}}%",
-      "modelReady": "IA Lista",
-      "modelError": "Error al cargar el modelo IA",
-      "initializeModel": "Inicializar IA",
-      "errorProcessing": "❌ Encontré un error al procesar tu solicitud. Por favor, inténtalo de nuevo.",
-      "actionCancelled": "Acción cancelada."
-    },
-    "confirmation": {
-      "title": "Confirmar Acción",
-      "message": "Esta acción requiere tu confirmación antes de continuar.",
-      "action": "Acción",
-      "description": "Descripción",
-      "affectedResources": "Recursos Afectados",
-      "confirm": "Confirmar",
-      "cancel": "Cancelar",
-      "warning": "⚠️ Esta acción modificará tu sistema. Por favor, revisa cuidadosamente antes de confirmar.",
-      "safetyWarning": "Advertencia de Seguridad"
-    },
-    "tools": {
-      "findContainersByName": "Buscar contenedores por nombre",
-      "getContainerHealth": "Obtener estado de salud del contenedor",
-      "listAllContainers": "Listar todos los contenedores",
-      "getContainerLogs": "Obtener registros del contenedor",
-      "listShortcuts": "Listar accesos directos",
-      "startContainer": "Iniciar contenedor",
-      "stopContainer": "Detener contenedor",
-      "restartContainer": "Reiniciar contenedor",
-      "openContainerUrl": "Abrir URL del contenedor"
-    },
-    "examples": {
-      "categories": {
-        "containers": "Contenedores",
-        "search": "Búsqueda",
-        "shortcuts": "Accesos Directos",
-        "control": "Control"
-      },
-      "showAllContainers": "Muéstrame todos mis contenedores",
-      "whichRunning": "¿Qué contenedores están ejecutándose?",
-      "howManyContainers": "¿Cuántos contenedores tengo?",
-      "containerStatus": "¿Cuál es el estado de mis contenedores?",
-      "findPostgres": "Encuentra mi base de datos postgres",
-      "findNginx": "Encuentra contenedores nginx",
-      "searchByName": "Buscar contenedores llamados {{name}}",
-      "listShortcuts": "Lista todos mis accesos directos",
-      "showFavorites": "Muestra mis accesos directos favoritos",
-      "startNginx": "Inicia el contenedor nginx",
-      "stopContainer": "Detén el contenedor {{name}}",
-      "restartPostgres": "Reinicia postgres"
-    },
-    "responses": {
-      "containersFound": "Encontré {{count}} contenedor(es):",
-      "noContainersFound": "No encontré ningún contenedor que coincida con tus criterios.",
-      "containerStarted": "✅ Contenedor iniciado exitosamente.",
-      "containerStopped": "El contenedor está detenido",
-      "containerRestarted": "✅ Contenedor reiniciado exitosamente.",
-      "shortcutsFound": "Encontré {{count}} acceso(s) directo(s):",
-      "noShortcutsFound": "Aún no tienes ningún acceso directo.",
-      "containerRunning": "El contenedor está ejecutándose",
-      "containerHealthy": "El contenedor está saludable",
-      "containerUnhealthy": "El contenedor no está saludable"
-    },
-    "errors": {
-      "general": "Ocurrió un error al procesar tu solicitud.",
-      "containerNotFound": "Contenedor no encontrado: {{name}}",
-      "invalidParameters": "Parámetros inválidos proporcionados.",
-      "operationFailed": "Operación fallida: {{error}}",
-      "blockedOperation": "Esta operación está bloqueada por razones de seguridad: {{reason}}",
-      "confirmationRequired": "Esta acción requiere confirmación.",
-      "modelNotLoaded": "El modelo IA no está cargado. Por favor, inicializa el modelo primero.",
-      "noContainerId": "No se proporcionó ID de contenedor.",
-      "invalidUrl": "URL inválida proporcionada.",
-      "executionError": "Error al ejecutar la función: {{error}}"
-    },
-    "safety": {
-      "blocked": "Bloqueado",
-      "requiresConfirmation": "Requiere Confirmación",
-      "safe": "Seguro",
-      "dangerousOperation": "Esta es una operación potencialmente peligrosa.",
-      "reviewCarefully": "Por favor, revisa los detalles cuidadosamente antes de continuar.",
-      "cannotExecute": "Esta operación no puede ejecutarse por razones de seguridad.",
-      "blockedReason": "Razón: {{reason}}"
-    },
-    "status": {
-      "processing": "Procesando...",
-      "executing": "Ejecutando acción...",
-      "completed": "Completado",
-      "failed": "Fallido",
-      "cancelled": "Cancelado",
-      "waiting": "Esperando confirmación..."
-    }
   },
   "search": {
     "label": "Buscar accesos directos y contenedores",

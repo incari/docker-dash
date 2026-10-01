@@ -24,11 +24,6 @@ const ShortcutModal = lazy(() =>
     default: module.ShortcutModal,
   })),
 );
-const AIChat = lazy(() =>
-  import("./components/AIChat/AIChat").then((module) => ({
-    default: module.AIChat,
-  })),
-);
 import { DashboardView } from "./views/DashboardView";
 import { ManagementView } from "./views/ManagementView";
 import { useTheme } from "./hooks/useTheme";
@@ -708,10 +703,6 @@ function App() {
         onCancel={handleMigrationCancel}
       />
 
-      {/* AI Chat Interface - loaded on its own chunk, it is not needed to paint the dashboard */}
-      <Suspense fallback={null}>
-        <AIChat />
-      </Suspense>
     </div>
   );
 }
